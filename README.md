@@ -15,7 +15,9 @@ Ministério **Flag** · Juventude **O2** — Igreja Batista Capital, Brasília
 ![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Storage-3ecf8e?logo=supabase&logoColor=white)
 ![Vercel](https://img.shields.io/badge/deploy-Vercel-000?logo=vercel)
 
-[**▶ Abrir o app**]({{URL}}/checkin) · [Guia de instalação](docs/SETUP.md)
+[**▶ Abrir o app**](https://flag-checkin.vercel.app/checkin) · [Guia de instalação](docs/SETUP.md)
+
+<img src="docs/qrcode-checkin.png" width="140" alt="QR code do check-in" /><br/><sub>Aponte a câmera do celular · em modo teste (sem exigir estar na igreja)</sub>
 
 </div>
 
