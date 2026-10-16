@@ -1,8 +1,16 @@
 import type { Metadata, Viewport } from "next";
-import { Montserrat } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const font = Montserrat({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800", "900"] });
+// Montserrat variável (400–900) hospedada no próprio app: sem depender do Google Fonts no build nem no runtime.
+const font = localFont({
+  src: [
+    { path: "./fonts/montserrat-latin.woff2", weight: "100 900", style: "normal" },
+    { path: "./fonts/montserrat-latin-ext.woff2", weight: "100 900", style: "normal" },
+  ],
+  display: "swap",
+  fallback: ["system-ui", "Segoe UI", "Roboto", "sans-serif"],
+});
 
 export const metadata: Metadata = {
   title: "Check-in Flag · Juventude O2",
