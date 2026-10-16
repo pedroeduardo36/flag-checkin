@@ -82,6 +82,9 @@ em `http://` fora do localhost).
 
 ### 5. QR code e NFC
 **QR code**
+
+Já gerado pelo próprio app: abra **https://flag-checkin.vercel.app/qrcode** para imprimir ou baixar em PNG/SVG
+(imagem direta: `/api/qrcode` · `/api/qrcode?format=svg`). Para gerar localmente:
 ```bash
 npm run qrcode -- https://SEU-APP.vercel.app
 ```

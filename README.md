@@ -15,9 +15,9 @@ Ministério **Flag** · Juventude **O2** — Igreja Batista Capital, Brasília
 ![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Storage-3ecf8e?logo=supabase&logoColor=white)
 ![Vercel](https://img.shields.io/badge/deploy-Vercel-000?logo=vercel)
 
-[**▶ Abrir o app**](https://flag-checkin.vercel.app/checkin) · [Guia de instalação](docs/SETUP.md)
+[**▶ Abrir o app**](https://flag-checkin.vercel.app/checkin) · [QR code para imprimir](https://flag-checkin.vercel.app/qrcode) · [Guia de instalação](docs/SETUP.md)
 
-<img src="docs/qrcode-checkin.png" width="140" alt="QR code do check-in" /><br/><sub>Aponte a câmera do celular · em modo teste (sem exigir estar na igreja)</sub>
+<a href="https://flag-checkin.vercel.app/qrcode"><img src="https://flag-checkin.vercel.app/api/qrcode" width="140" alt="QR code do check-in" /></a><br/><sub>Aponte a câmera do celular · em modo teste (sem exigir estar na igreja)</sub>
 
 </div>
 
@@ -151,7 +151,7 @@ tentativas por IP; o próximo passo seria o Upstash Ratelimit nas rotas de ident
 ## Testes
 
 ```bash
-npm test             # 19 testes unitários (Vitest): CPF, máscaras, datas, Haversine, token HMAC, geofence, upload
+npm test             # 21 testes unitários (Vitest): CPF, máscaras, datas, Haversine, token HMAC, geofence, upload
 npm run typecheck    # TypeScript em modo strict
 npm run test:fluxo   # 14 verificações ponta a ponta contra o Supabase real, com limpeza dos dados no final
 ```
@@ -167,7 +167,7 @@ A esteira de **CI no GitHub Actions** roda tipos, testes e build a cada push e P
 **Front:** Next.js 15 (App Router) · React 19 · TypeScript strict · CSS puro com design tokens (sem framework de UI)
 **Back:** Route Handlers serverless · `node:crypto` (HMAC e comparação em tempo constante) · Supabase JS
 **Dados:** Postgres 17 (Supabase) · migrations versionadas com o Supabase CLI · Storage privado
-**Infra:** Vercel · GitHub Actions · QR code gerado por script (`npm run qrcode`) · tags NFC NTAG213
+**Infra:** Vercel · GitHub Actions · QR code gerado no servidor (`/api/qrcode`) · tags NFC NTAG213
 
 ## Estrutura
 
@@ -180,6 +180,7 @@ app/
   api/checkin/confirmar       selfie → Storage + insert
   api/cadastro                novo adolescente
   api/health                  diagnóstico (variáveis, tabelas, view e bucket)
+  api/qrcode · qrcode/        QR code gerado no servidor (PNG/SVG) e página para imprimir
 components/                   Brand (marca), Camera (getUserMedia + fallback)
 lib/format.ts                 validações compartilhadas cliente/servidor
 lib/server/                   env, cliente Supabase, segurança, tratamento de erros

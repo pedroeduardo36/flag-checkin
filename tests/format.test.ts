@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { distanceMeters, firstName, isValidBirthDate, isValidCpf, isValidPhone, maskCpf, maskPhone } from "@/lib/format";
+import { brDateToIso, maskDate, distanceMeters, firstName, isValidBirthDate, isValidCpf, isValidPhone, maskCpf, maskPhone } from "@/lib/format";
 
 describe("CPF", () => {
   it("aceita CPFs válidos, com ou sem máscara", () => {
@@ -35,6 +35,19 @@ describe("Data de nascimento", () => {
     expect(isValidBirthDate("2010-02-30")).toBe(false);
     expect(isValidBirthDate("2999-01-01")).toBe(false);
     expect(isValidBirthDate("20/05/2010")).toBe(false);
+  });
+});
+
+describe("Campo de data (DD/MM/AAAA)", () => {
+  it("aplica a máscara enquanto digita só números", () => {
+    expect(maskDate("2")).toBe("2");
+    expect(maskDate("2005")).toBe("20/05");
+    expect(maskDate("20052010")).toBe("20/05/2010");
+    expect(maskDate("20/05/20109")).toBe("20/05/2010");
+  });
+  it("converte para o formato do banco só quando completa", () => {
+    expect(brDateToIso("20/05/2010")).toBe("2010-05-20");
+    expect(brDateToIso("20/05/201")).toBe("");
   });
 });
 

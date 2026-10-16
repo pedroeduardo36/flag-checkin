@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Shell } from "@/components/Brand";
 import { Camera } from "@/components/Camera";
-import { isValidBirthDate, isValidCpf, maskCpf } from "@/lib/format";
+import { brDateToIso, isValidBirthDate, isValidCpf, maskCpf, maskDate } from "@/lib/format";
 
 type Coords = { lat: number; lng: number; accuracy: number };
 type Step =
@@ -85,10 +85,11 @@ export default function CheckinPage() {
   async function identify(e: React.FormEvent) {
     e.preventDefault();
     if (!isValidCpf(cpf)) return setError({ msg: "CPF inválido. Confira os números." });
-    if (!isValidBirthDate(birth)) return setError({ msg: "Informe sua data de nascimento." });
+    const birthIso = brDateToIso(birth);
+    if (!isValidBirthDate(birthIso)) return setError({ msg: "Data de nascimento inválida. Use DD/MM/AAAA." });
     setBusy(true);
     setError(null);
-    const r = await post("/api/checkin/identificar", { cpf, birthDate: birth, ...coords });
+    const r = await post("/api/checkin/identificar", { cpf, birthDate: birthIso, ...coords });
     setBusy(false);
     if (!r.ok) {
       if (r.data.code === "FORA_DO_LOCAL") return locate();
@@ -210,8 +211,8 @@ export default function CheckinPage() {
           </label>
           <label className="field">
             <span>Data de nascimento</span>
-            <input type="date" value={birth} max={new Date().toISOString().slice(0, 10)}
-              onChange={(e) => setBirth(e.target.value)} required />
+            <input inputMode="numeric" autoComplete="bday" placeholder="DD/MM/AAAA" maxLength={10} value={birth}
+              onChange={(e) => setBirth(maskDate(e.target.value))} required />
           </label>
           {errorBox}
           <button className="btn" disabled={busy}>{busy ? "Conferindo…" : "Continuar"}</button>

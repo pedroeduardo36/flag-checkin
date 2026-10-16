@@ -4,7 +4,7 @@ node_modules
 .env.local
 next-env.d.ts
 *.tsbuildinfo
-qrcode-checkin.*
+/qrcode-checkin.*
 supabase/.temp
 supabase/.branches
 .vercel

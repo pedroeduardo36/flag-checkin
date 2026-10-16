@@ -145,3 +145,13 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .spinner { width: 54px; height: 54px; border-radius: 50%; border: 5px solid var(--flag-soft); border-top-color: var(--flag); animation: spin 0.9s linear infinite; margin: 16px 0 4px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+
+/* ---------- Página do QR code ---------- */
+.qr__img { width: 100%; max-width: 320px; height: auto; border-radius: 16px; border: 1.5px solid var(--line); margin: 4px 0 10px; }
+.qr__url { font-weight: 700; color: var(--flag-dark); margin: 0 0 20px; word-break: break-all; }
+.qr__actions { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+@media print {
+  .shell::before, .qr__actions, .foot { display: none; }
+  .brand { color: var(--ink); }
+  .card { box-shadow: none; }
+}

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Shell } from "@/components/Brand";
 import { Camera } from "@/components/Camera";
-import { isValidBirthDate, isValidCpf, isValidPhone, maskCpf, maskPhone } from "@/lib/format";
+import { brDateToIso, isValidBirthDate, isValidCpf, isValidPhone, maskCpf, maskDate, maskPhone } from "@/lib/format";
 
 type Form = {
   name: string;
@@ -24,7 +24,7 @@ function validate(f: Form, photo: string | null) {
   if (f.name.trim().split(/\s+/).length < 2) e.name = "Informe nome e sobrenome.";
   if (!isValidCpf(f.cpf)) e.cpf = "CPF inválido.";
   if (!isValidPhone(f.phone)) e.phone = "Telefone inválido.";
-  if (!isValidBirthDate(f.birthDate)) e.birthDate = "Informe a data de nascimento.";
+  if (!isValidBirthDate(brDateToIso(f.birthDate))) e.birthDate = "Data inválida. Use DD/MM/AAAA.";
   if (!photo) e.photo = "Tire uma foto do rosto.";
   if (f.guardianName.trim().split(/\s+/).length < 2) e.guardianName = "Informe nome e sobrenome do responsável.";
   if (!isValidPhone(f.guardianPhone)) e.guardianPhone = "Telefone do responsável inválido.";
@@ -60,7 +60,7 @@ export default function CadastroPage() {
     const res = await fetch("/api/cadastro", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...f, photo }),
+      body: JSON.stringify({ ...f, birthDate: brDateToIso(f.birthDate), photo }),
     });
     const data = await res.json().catch(() => ({}));
     setBusy(false);
@@ -113,7 +113,7 @@ export default function CadastroPage() {
             <input type="tel" inputMode="tel" placeholder="(00) 00000-0000" value={f.phone} onChange={(e) => set("phone", maskPhone(e.target.value))} />
           ))}
           {field("birthDate", "Data de nascimento", (
-            <input type="date" max={new Date().toISOString().slice(0, 10)} value={f.birthDate} onChange={(e) => set("birthDate", e.target.value)} />
+            <input inputMode="numeric" autoComplete="bday" placeholder="DD/MM/AAAA" maxLength={10} value={f.birthDate} onChange={(e) => set("birthDate", maskDate(e.target.value))} />
           ))}
           <div className={`field ${errors.photo ? "field--error" : ""}`} data-field="photo">
             <span>Foto do rosto</span>

@@ -35,6 +35,20 @@ export const isValidPhone = (v: string) => {
   return d.length === 10 || d.length === 11;
 };
 
+/** Máscara DD/MM/AAAA enquanto a pessoa digita só números. */
+export function maskDate(value: string): string {
+  const d = onlyDigits(value).slice(0, 8);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
+  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+}
+
+/** "20/05/2010" → "2010-05-20" (formato do banco). Data incompleta vira "". */
+export function brDateToIso(value: string): string {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value ?? "");
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : "";
+}
+
 /** Aceita "AAAA-MM-DD" e confere se é uma data real no passado. */
 export function isValidBirthDate(v: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
