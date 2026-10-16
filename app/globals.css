@@ -1,0 +1,147 @@
+:root {
+  --flag: #008ec3;        /* azul do logo Flag */
+  --flag-dark: #006a93;
+  --flag-soft: #e6f5fb;
+  --ink: #0d2230;
+  --muted: #5b6b77;
+  --line: #d9e3ea;
+  --bg: #f3f8fb;
+  --card: #ffffff;
+  --ok: #12a150;
+  --danger: #c62828;
+  --danger-soft: #fdecec;
+  --radius: 18px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+a { color: var(--flag-dark); }
+img { max-width: 100%; display: block; }
+
+/* ---------- Estrutura ---------- */
+.shell {
+  min-height: 100dvh;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 16px 24px;
+  display: flex;
+  flex-direction: column;
+}
+.shell::before {
+  /* faixa azul atrás da marca, lembrando as listras da bandeira do logo */
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 210px;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 22px, rgba(255,255,255,.08) 22px 30px),
+    linear-gradient(160deg, var(--flag) 0%, var(--flag-dark) 100%);
+  z-index: -1;
+}
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 24px 20px;
+  box-shadow: 0 10px 30px rgba(13, 34, 48, .10);
+}
+.foot { text-align: center; color: var(--muted); font-size: 12px; margin-top: 20px; }
+
+/* ---------- Marca: FLAG em destaque, O2 como apoio ---------- */
+.brand { display: flex; align-items: center; gap: 14px; padding: 28px 4px 22px; color: #fff; }
+.brand__logo { width: 72px; height: 72px; border-radius: 16px; background: #fff; object-fit: cover; box-shadow: 0 4px 14px rgba(0,0,0,.15); }
+.brand__text { display: flex; flex-direction: column; line-height: 1; }
+.brand__ministry { font-size: 44px; font-weight: 900; letter-spacing: .06em; }
+.brand__youth { font-size: 14px; font-weight: 500; opacity: .9; margin-top: 6px; letter-spacing: .04em; }
+.brand__youth strong { font-weight: 800; }
+.brand--compact { padding: 18px 4px 16px; }
+.brand--compact .brand__logo { width: 52px; height: 52px; border-radius: 12px; }
+.brand--compact .brand__ministry { font-size: 32px; }
+
+/* ---------- Tipografia ---------- */
+h1 { font-size: 24px; font-weight: 800; margin: 0 0 8px; }
+h2 { font-size: 18px; font-weight: 700; margin: 16px 0 4px; }
+.lead { color: var(--muted); margin: 0 0 18px; line-height: 1.5; }
+.hint { color: var(--muted); font-size: 14px; line-height: 1.5; }
+.center { text-align: center; display: flex; flex-direction: column; align-items: center; }
+
+/* ---------- Progresso ---------- */
+.progress { list-style: none; display: flex; gap: 6px; padding: 0; margin: 0 0 20px; }
+.progress li { flex: 1; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.progress li::before { content: ""; display: block; height: 4px; border-radius: 4px; background: var(--line); margin-bottom: 6px; }
+.progress li.done::before { background: var(--flag); }
+.progress li.active { color: var(--flag-dark); }
+.progress li.active::before { background: linear-gradient(90deg, var(--flag) 50%, var(--line) 50%); }
+
+/* ---------- Formulário ---------- */
+form { display: flex; flex-direction: column; }
+fieldset { border: 0; padding: 0; margin: 0 0 20px; }
+legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--flag-dark); margin-bottom: 10px; }
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.field > span { font-size: 14px; font-weight: 600; }
+.field input {
+  font: inherit;
+  font-size: 17px; /* >=16px evita zoom automático no iOS */
+  padding: 13px 14px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  width: 100%;
+  min-height: 50px;
+}
+.field input:focus { outline: none; border-color: var(--flag); box-shadow: 0 0 0 4px var(--flag-soft); }
+.field small, .err { color: var(--danger); font-size: 13px; }
+.field--error input { border-color: var(--danger); }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--muted); line-height: 1.45; margin-bottom: 6px; }
+.check input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--flag); flex-shrink: 0; }
+.check.field--error { color: var(--danger); }
+.fiscal { background: var(--flag-soft); border-radius: 14px; padding: 14px 14px 2px; }
+
+/* ---------- Botões e avisos ---------- */
+.btn {
+  font: inherit; font-size: 17px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; min-height: 54px; padding: 14px 18px;
+  border: 0; border-radius: 14px;
+  background: var(--flag); color: #fff; text-decoration: none;
+  cursor: pointer; transition: background .15s, transform .05s;
+}
+.btn:hover { background: var(--flag-dark); }
+.btn:active { transform: scale(.98); }
+.btn:disabled { opacity: .6; cursor: progress; }
+.btn--ghost { background: transparent; color: var(--flag-dark); border: 1.5px solid var(--line); }
+.btn--ghost:hover { background: var(--flag-soft); }
+.link-center { display: block; text-align: center; margin-top: 16px; font-weight: 600; font-size: 15px; }
+.alert { background: var(--danger-soft); color: var(--danger); border-radius: 12px; padding: 12px 14px; font-size: 14px; margin-bottom: 14px; line-height: 1.45; }
+.alert a { color: inherit; font-weight: 700; }
+.info { display: flex; gap: 10px; align-items: flex-start; background: var(--flag-soft); color: var(--ink); border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.45; margin-bottom: 18px; }
+.info svg { color: var(--flag); flex-shrink: 0; }
+.ok-chip { align-self: flex-start; background: #e7f7ee; color: var(--ok); font-weight: 700; font-size: 13px; padding: 6px 10px; border-radius: 999px; margin-bottom: 12px; }
+.test-chip { align-self: flex-start; background: #fff4d6; color: #8a5a00; font-weight: 700; font-size: 13px; padding: 6px 10px; border-radius: 999px; margin-bottom: 12px; }
+.steps { padding-left: 18px; color: var(--ink); line-height: 1.55; font-size: 14px; margin: 0 0 20px; }
+.steps li { margin-bottom: 8px; }
+
+/* ---------- Câmera ---------- */
+.camera { display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; }
+.camera__frame { width: 100%; aspect-ratio: 3 / 4; border-radius: 16px; object-fit: cover; background: #0d2230; overflow: hidden; position: relative; }
+.camera__placeholder { display: flex; align-items: center; justify-content: center; color: #8fb3c6; background: var(--flag-soft); border: 2px dashed #b5d9e9; }
+.camera__video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.camera__oval { position: absolute; inset: 12% 18% 18%; border: 3px solid rgba(255,255,255,.75); border-radius: 50%; box-shadow: 0 0 0 999px rgba(0,0,0,.25); }
+
+/* ---------- Sucesso ---------- */
+.success__photo { position: relative; width: 180px; height: 180px; margin: 8px 0 18px; }
+.success__photo img, .success__noimg { width: 180px; height: 180px; border-radius: 50%; object-fit: cover; border: 5px solid var(--ok); background: var(--flag-soft); }
+.success__badge { position: absolute; right: 6px; bottom: 6px; width: 44px; height: 44px; border-radius: 50%; background: var(--ok); color: #fff; font-size: 24px; font-weight: 900; display: grid; place-items: center; border: 4px solid #fff; }
+.success__name { font-size: 20px; font-weight: 700; margin: 0 0 6px; }
+.success .btn { margin-top: 18px; }
+
+/* ---------- Carregando ---------- */
+.spinner { width: 54px; height: 54px; border-radius: 50%; border: 5px solid var(--flag-soft); border-top-color: var(--flag); animation: spin 0.9s linear infinite; margin: 16px 0 4px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
