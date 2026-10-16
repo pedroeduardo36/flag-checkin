@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/server/supabase";
 import { env, PHOTO_BUCKET } from "@/lib/server/env";
 import { decodePhoto, safeEqual } from "@/lib/server/security";
+import { analyzeFace } from "@/lib/server/face";
+
+export const maxDuration = 30;
 import { isValidBirthDate, isValidCpf, isValidPhone, onlyDigits } from "@/lib/format";
 
 const clean = (v: unknown, max = 120) => String(v ?? "").trim().replace(/\s+/g, " ").slice(0, max);
@@ -40,6 +43,14 @@ export const POST = withErrors(async (req: Request) => {
   if (dup)
     return NextResponse.json({ error: "Este CPF já está cadastrado. Faça o check-in.", code: "CPF_EXISTE" }, { status: 409 });
 
+  // A foto do cadastro precisa ter exatamente um rosto: ela é a referência dos check-ins.
+  const face = await analyzeFace(photo!.buffer);
+  if (!face.ok)
+    return NextResponse.json(
+      { error: face.message, code: face.code, errors: { photo: face.message } },
+      { status: 422 },
+    );
+
   const path = `membros/${data.cpf}-${Date.now()}.jpg`;
   const up = await db().storage.from(PHOTO_BUCKET).upload(path, photo!.buffer, { contentType: photo!.contentType });
   if (up.error) {
@@ -49,7 +60,7 @@ export const POST = withErrors(async (req: Request) => {
 
   const { error } = await db()
     .from("members")
-    .insert({ ...data, photo_path: path, guardian_consent_at: new Date().toISOString() });
+    .insert({ ...data, photo_path: path, face_descriptor: face.descriptor, guardian_consent_at: new Date().toISOString() });
   if (error) {
     await db().storage.from(PHOTO_BUCKET).remove([path]);
     if (error.code === "23505")

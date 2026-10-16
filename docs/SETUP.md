@@ -56,6 +56,7 @@ Copie `.env.example` para `.env.local` e preencha:
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | do passo anterior (a service_role **só** no servidor) |
 | `CHURCH_LAT` / `CHURCH_LNG` | coordenadas da igreja — no Google Maps, clique com o botão direito no prédio e copie |
 | `CHURCH_RADIUS_METERS` | raio aceito; comece com **150** (GPS dentro de prédio erra 20–60 m) |
+| `FACE_MATCH_THRESHOLD` | opcional, padrão `0.55`. Distância máxima entre a selfie e a foto do cadastro. Menor = mais rígido; se pessoas reais forem recusadas, teste `0.6` |
 | `GEOFENCE_DISABLED` | `true` = **modo teste**: pula a localização (check-in de qualquer lugar, aviso amarelo na tela). Deixe `false` no culto |
 | `REGISTRATION_PASSWORD` | senha que o fiscal digita para liberar cada cadastro |
 | `CHECKIN_SECRET` | gere com `openssl rand -hex 32` |

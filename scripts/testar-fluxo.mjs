@@ -33,7 +33,9 @@ const check = (nome, cond, extra) => {
 };
 
 const sb = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
-const photo = "data:image/jpeg;base64," + readFileSync("public/brand/flag-logo.jpg").toString("base64");
+// Rostos sintéticos (StyleGAN2): nenhuma pessoa real.
+const foto = (nome) => "data:image/jpeg;base64," + readFileSync(`tests/fixtures/${nome}.jpg`).toString("base64");
+const photo = foto("pessoa-a-cadastro");
 const cpf = cpfAleatorio();
 const nasc = "2010-05-20";
 const dentro = { lat: Number(env.CHURCH_LAT), lng: Number(env.CHURCH_LNG), accuracy: 15 };
@@ -52,6 +54,10 @@ try {
   };
   let r = await post("/api/cadastro", { ...cad, password: "senha-errada" });
   check("cadastro com senha errada é recusado (401)", r.status === 401, r);
+  r = await post("/api/cadastro", { ...cad, photo: foto("sem-rosto"), password: env.REGISTRATION_PASSWORD });
+  check("cadastro com foto sem rosto é recusado (422 SEM_ROSTO)", r.status === 422 && r.data.code === "SEM_ROSTO", r);
+  r = await post("/api/cadastro", { ...cad, photo: foto("duas-pessoas"), password: env.REGISTRATION_PASSWORD });
+  check("cadastro com duas pessoas é recusado (422 VARIOS_ROSTOS)", r.status === 422 && r.data.code === "VARIOS_ROSTOS", r);
   r = await post("/api/cadastro", { ...cad, password: env.REGISTRATION_PASSWORD });
   check("cadastro válido (200)", r.status === 200, r);
   r = await post("/api/cadastro", { ...cad, password: env.REGISTRATION_PASSWORD });
@@ -76,9 +82,14 @@ try {
   r = await post("/api/checkin/identificar", geoOff ? { cpf, birthDate: nasc } : { ...dentro, cpf, birthDate: nasc });
   check("identificar com dados certos → token", r.status === 200 && !!r.data.token, r);
 
-  const conf = await post("/api/checkin/confirmar", { token: r.data.token, photo });
-  check("confirmar check-in com selfie (200)", conf.status === 200 && conf.data.ok, conf);
-  const dup = await post("/api/checkin/confirmar", { token: r.data.token, photo });
+  const token = r.data.token;
+  let f = await post("/api/checkin/confirmar", { token, photo: foto("sem-rosto") });
+  check("selfie sem rosto é recusada (422 SEM_ROSTO)", f.status === 422 && f.data.code === "SEM_ROSTO", f);
+  f = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-b") });
+  check("selfie de OUTRA pessoa é recusada (403 ROSTO_NAO_CONFERE)", f.status === 403 && f.data.code === "ROSTO_NAO_CONFERE", f);
+  const conf = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-a-selfie") });
+  check("selfie da MESMA pessoa (outro ângulo/luz) é aceita (200)", conf.status === 200 && conf.data.ok, conf);
+  const dup = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-a-selfie") });
   check("segundo check-in no mesmo dia é recusado (409)", dup.status === 409, dup);
 
   r = await post("/api/checkin/identificar", { ...dentro, cpf, birthDate: nasc });
@@ -86,8 +97,8 @@ try {
   const img = r.data.photoUrl ? await fetch(r.data.photoUrl) : null;
   check("selfie acessível por URL assinada", img?.status === 200, img?.status);
 
-  const { data: pres } = await sb.from("presencas").select("nome").eq("nome", cad.name);
-  check("aparece na view presencas", pres?.length === 1, pres);
+  const { data: pres } = await sb.from("presencas").select("nome, distancia_rosto").eq("nome", cad.name);
+  check("aparece na view presencas com a distância do rosto", pres?.length === 1 && pres[0].distancia_rosto > 0, pres);
 } catch (e) {
   console.error("⚠️ ", e.message);
   falhas++;

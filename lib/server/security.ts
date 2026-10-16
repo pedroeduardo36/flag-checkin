@@ -56,9 +56,9 @@ export function serviceDate(d = new Date()): string {
 
 const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 
-/** Converte o dataURL JPEG/PNG enviado pelo navegador em Buffer, com validação. */
+/** Converte o dataURL JPEG enviado pelo navegador (a câmera do app sempre gera JPEG) em Buffer, com validação. */
 export function decodePhoto(dataUrl: unknown): { buffer: Buffer; contentType: string } | null {
-  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl ?? ""));
+  const m = /^data:(image\/jpeg);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl ?? ""));
   if (!m) return null;
   const buffer = Buffer.from(m[2], "base64");
   if (buffer.length < 2000 || buffer.length > MAX_PHOTO_BYTES) return null;

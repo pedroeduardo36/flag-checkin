@@ -112,6 +112,9 @@ export default function CheckinPage() {
         setError({ msg: r.data.error });
         return setStep({ name: "identify" });
       }
+      // Rosto não encontrado / não confere: limpa a foto para tirar outra (o token continua valendo).
+      if (["ROSTO_NAO_CONFERE", "SEM_ROSTO", "VARIOS_ROSTOS", "ROSTO_PEQUENO", "IMAGEM_INVALIDA"].includes(r.data.code))
+        setPhoto(null);
       return setError({ msg: r.data.error ?? "Erro inesperado." });
     }
     setStep({ name: "success", name_: r.data.name, photo, at: r.data.checkedInAt, repeat: false });
@@ -224,11 +227,11 @@ export default function CheckinPage() {
         <>
           <h1>Oi, {step.firstName}! 👋</h1>
           <p className="lead">Tire uma selfie agora para confirmar que é você mesmo.</p>
-          <Camera value={photo} onChange={setPhoto} label="Abrir câmera" />
+          <Camera value={photo} onChange={(p) => { setPhoto(p); if (p) setError(null); }} label="Abrir câmera" />
           {errorBox}
           {photo && (
             <button className="btn" onClick={confirm} disabled={busy}>
-              {busy ? "Enviando…" : "Confirmar check-in"}
+              {busy ? "Verificando rosto…" : "Confirmar check-in"}
             </button>
           )}
         </>

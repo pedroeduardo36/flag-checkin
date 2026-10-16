@@ -148,7 +148,7 @@ export default function CadastroPage() {
         </fieldset>
 
         {msg && <div className="alert" role="alert">{msg}</div>}
-        <button className="btn" disabled={busy}>{busy ? "Salvando…" : "Concluir cadastro"}</button>
+        <button className="btn" disabled={busy}>{busy ? "Verificando foto…" : "Concluir cadastro"}</button>
         <Link href="/checkin" className="link-center">Já tenho cadastro</Link>
       </form>
     </Shell>

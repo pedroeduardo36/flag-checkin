@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/server/supabase";
 import { PHOTO_BUCKET } from "@/lib/server/env";
+import { analyzeFace } from "@/lib/server/face";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
+export const maxDuration = 30;
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +26,10 @@ export async function GET() {
     checks.presencas = view.error ? view.error.message : true;
     const bucket = await db().storage.getBucket(PHOTO_BUCKET);
     checks.bucket = bucket.error ? bucket.error.message : bucket.data.public ? "bucket está PÚBLICO — deixe privado" : true;
+    // Carrega os modelos de reconhecimento facial e confere que um logo (sem rosto) é recusado.
+    const logo = readFileSync(path.join(process.cwd(), "public/brand/flag-logo.jpg"));
+    const face = await analyzeFace(logo);
+    checks.reconhecimento_facial = !face.ok && face.code === "SEM_ROSTO" ? true : `resultado inesperado: ${JSON.stringify(face).slice(0, 80)}`;
   } catch (err) {
     checks.conexao = err instanceof Error ? err.message : String(err);
   }

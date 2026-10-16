@@ -15,6 +15,10 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
+    "@tensorflow/tfjs": "^4.22.0",
+    "@tensorflow/tfjs-backend-wasm": "^4.22.0",
+    "@vladmandic/face-api": "^1.7.15",
+    "jpeg-js": "^0.4.4",
     "next": "^15.5.28",
     "qrcode": "^1.5.4",
     "react": "^19.3.1",

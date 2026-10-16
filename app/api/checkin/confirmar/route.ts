@@ -3,6 +3,24 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/server/supabase";
 import { PHOTO_BUCKET } from "@/lib/server/env";
 import { decodePhoto, readCheckinToken, serviceDate } from "@/lib/server/security";
+import { analyzeFace, faceDistance, matchThreshold, parseDescriptor } from "@/lib/server/face";
+
+export const maxDuration = 30;
+
+/** Descritor do rosto do cadastro. Cadastros antigos (sem descritor) são calculados agora e salvos. */
+async function referenceDescriptor(memberId: string) {
+  const { data: m, error } = await db().from("members").select("face_descriptor, photo_path").eq("id", memberId).single();
+  if (error || !m) throw error ?? new Error("Membro não encontrado");
+  const saved = parseDescriptor(m.face_descriptor);
+  if (saved) return saved;
+
+  const file = await db().storage.from(PHOTO_BUCKET).download(m.photo_path);
+  if (file.error) throw file.error;
+  const face = await analyzeFace(Buffer.from(await file.data.arrayBuffer()));
+  if (!face.ok) return null;
+  await db().from("members").update({ face_descriptor: face.descriptor }).eq("id", memberId);
+  return face.descriptor;
+}
 
 // Etapa 3: recebe a selfie antifraude e grava o check-in.
 export const POST = withErrors(async (req: Request) => {
@@ -12,6 +30,25 @@ export const POST = withErrors(async (req: Request) => {
 
   const photo = decodePhoto(body?.photo);
   if (!photo) return NextResponse.json({ error: "Foto inválida. Tire a foto novamente." }, { status: 400 });
+
+  // Antifraude: a selfie precisa ter um rosto e ser da mesma pessoa da foto do cadastro.
+  const [selfie, reference] = await Promise.all([analyzeFace(photo.buffer), referenceDescriptor(t.mid)]);
+  if (!reference)
+    return NextResponse.json(
+      { error: "A foto do seu cadastro não mostra um rosto válido. Procure um líder para atualizar seu cadastro.", code: "CADASTRO_SEM_ROSTO" },
+      { status: 409 },
+    );
+  if (!selfie.ok) return NextResponse.json({ error: selfie.message, code: selfie.code }, { status: 422 });
+
+  const distance = faceDistance(selfie.descriptor, reference);
+  if (distance > matchThreshold())
+    return NextResponse.json(
+      {
+        error: "O rosto da selfie não confere com a foto do cadastro. Tire outra foto olhando de frente, em um lugar iluminado.",
+        code: "ROSTO_NAO_CONFERE",
+      },
+      { status: 403 },
+    );
 
   const date = serviceDate();
   const path = `checkins/${date}/${t.mid}-${Date.now()}.jpg`;
@@ -31,6 +68,7 @@ export const POST = withErrors(async (req: Request) => {
       accuracy_m: t.acc,
       distance_m: t.dist,
       photo_path: path,
+      face_distance: Number(distance.toFixed(4)),
       user_agent: req.headers.get("user-agent")?.slice(0, 300) ?? null,
     })
     .select("checked_in_at, members(name)")

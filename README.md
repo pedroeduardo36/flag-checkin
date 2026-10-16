@@ -42,8 +42,8 @@ Três fatores tornam a fraude cara:
 
 1. **Onde você está:** cerca geográfica (*geofence*) de 150 m ao redor da igreja, validada **no servidor**.
 2. **Quem você é:** CPF e data de nascimento conferidos com o cadastro.
-3. **Que é você mesmo:** selfie tirada **ao vivo** pela câmera frontal (não aceita foto da galeria) e guardada junto
-   com o check-in, para o líder comparar com a foto do cadastro.
+3. **Que é você mesmo:** selfie tirada **ao vivo** pela câmera frontal e comparada por **reconhecimento facial** com a
+   foto do cadastro. Se não for a mesma pessoa, o check-in é recusado.
 
 ---
 
@@ -68,6 +68,7 @@ flowchart LR
   UI -- "JSON / HTTPS" --> API
   API -- "service_role (só no servidor)" --> PG
   API -- "upload + URL assinada (10 min)" --> ST
+  API -. "reconhecimento facial<br/>TensorFlow.js + WASM" .-> API
   Lideres["👥 Líderes"] -- "Painel Supabase<br/>view presencas" --> PG
 ```
 
@@ -81,6 +82,8 @@ flowchart LR
 | **Supabase em vez de Firebase/Neon** | Postgres de verdade (constraints, views, migrations SQL) **e** armazenamento de arquivos no mesmo plano grátis. Região `sa-east-1`, perto dos usuários e alinhada à LGPD. |
 | **Token HMAC sem estado entre as etapas** | A etapa "CPF ok" emite um token assinado de 5 minutos que a etapa "selfie" exige. Assim não há sessão, cookie nem tabela extra, e cabe bem num ambiente serverless. |
 | **Unicidade no banco, não no código** | `unique (member_id, service_date)` garante um check-in por dia mesmo com dois cliques simultâneos (corrida tratada pelo código `23505`). |
+| **Reconhecimento facial no servidor** | face-api (TensorFlow.js) com backend **WebAssembly**: roda dentro da função serverless, sem GPU, binário nativo nem API paga. No navegador seria fácil de burlar; no servidor, a decisão é da API. |
+| **Descritor guardado, não comparado na foto** | No cadastro é salvo um vetor de 128 números do rosto. No check-in só a selfie é analisada (cerca de 250 ms). Cadastros antigos ganham o descritor na primeira vez. |
 | **Data do culto em `America/Sao_Paulo`** | Um culto às 22h em Brasília já é o "dia seguinte" em UTC. O fuso é explícito e coberto por teste. |
 
 ## Fluxo do check-in
@@ -104,12 +107,31 @@ sequenceDiagram
   S-->>W: token HMAC (5 min) ou "já fez check-in hoje"
   A->>W: selfie ao vivo (getUserMedia → canvas → JPEG 720px)
   W->>S: POST /api/checkin/confirmar {token, foto}
-  S->>D: upload no bucket privado + insert em checkins
+  S->>S: detecta 1 rosto → descritor 128-d → distância até o descritor do cadastro
+  alt distância > 0,55 (outra pessoa) ou sem rosto
+    S-->>W: recusa · tirar outra foto
+  end
+  S->>D: upload no bucket privado + insert em checkins (com a distância)
   S-->>W: nome + horário → tela de sucesso
 ```
 
 O cadastro (`/cadastro`) segue o mesmo padrão: validação no cliente para dar resposta rápida, **a mesma validação
-repetida no servidor**, e liberação só com a **senha do fiscal** do ministério.
+repetida no servidor**, liberação só com a **senha do fiscal** e a foto precisa ter **exatamente um rosto**.
+
+### Reconhecimento facial
+
+| Etapa | Modelo | O que faz |
+| --- | --- | --- |
+| Detecção | SSD MobileNet v1 | encontra os rostos e devolve a caixa e a confiança |
+| Alinhamento | 68 landmarks | posiciona olhos, nariz e boca para normalizar o rosto |
+| Descritor | FaceRecognitionNet (ResNet-34) | gera um vetor de 128 números por rosto |
+| Comparação | distância euclidiana | mesma pessoa se ≤ **0,55** (configurável em `FACE_MATCH_THRESHOLD`) |
+
+Regras: sem rosto → recusa; um segundo rosto com mais de 50% do tamanho do principal → "mais de uma pessoa" (rostos
+pequenos ao fundo são tolerados); rosto com menos de 15% da largura da foto → "aproxime o celular".
+
+Calibração com rostos sintéticos: **0,35** para a mesma pessoa (espelhada, girada e mais escura) contra **0,76 a 0,82**
+para pessoas diferentes.
 
 ---
 
@@ -132,33 +154,40 @@ repetida no servidor**, e liberação só com a **senha do fiscal** do ministér
 | Ameaça | Mitigação |
 | --- | --- |
 | Check-in de casa | Cerca geográfica validada **no servidor**, duas vezes. A selfie fica como prova para auditoria. |
-| "Faz o check-in por mim" | Selfie ao vivo exigida e guardada junto com o check-in. |
+| "Faz o check-in por mim" | Selfie comparada por reconhecimento facial com o cadastro (403 se for outra pessoa). A distância fica gravada para auditoria. |
+| Cadastro com foto de qualquer coisa | A foto do cadastro precisa ter exatamente um rosto, verificado no servidor. |
 | Descobrir quem está cadastrado | CPF inexistente e data errada recebem **a mesma** resposta (sem *user enumeration*). |
 | Pular a etapa de identificação | A selfie só é aceita com um token HMAC-SHA256 válido, de 5 minutos e comparado em tempo constante. |
 | Cadastro por terceiros | Senha do fiscal conferida no servidor com `timingSafeEqual`. |
 | Vazamento de chave pública | RLS sem políticas: a chave `anon` não lê nem grava nada (teste: `[]` e `401`). |
 | Fotos expostas | Bucket **privado**, com limite de 2 MB e só MIME de imagem. Acesso por URL assinada de 10 minutos. |
-| Upload malicioso | `decodePhoto` aceita apenas `data:image/(jpeg|png|webp);base64` entre 2 KB e 2 MB. |
+| Upload malicioso | `decodePhoto` aceita apenas `data:image/jpeg;base64` entre 2 KB e 2 MB, decodificado por um leitor JPEG em JavaScript puro. |
 | Segredo no cliente | `import "server-only"` em `lib/server/*`: o build falha se algo do servidor for importado no navegador. |
 | LGPD (art. 14, menores) | Consentimento do responsável obrigatório e gravado com data (`guardian_consent_at`), e coleta mínima. |
 
 Também foram adicionados os cabeçalhos `Permissions-Policy` (câmera e GPS só na própria origem),
 `X-Content-Type-Options` e `Referrer-Policy`.
 
-**Limitações assumidas:** apps de GPS falso existem, e por isso a selfie é a segunda camada. Ainda não há limite de
+**Limitações assumidas:** apps de GPS falso existem, e por isso a selfie é a segunda camada. O reconhecimento facial não
+tem prova de vida (*liveness*): mostrar uma foto impressa da pessoa para a câmera ainda passaria. O próximo passo seria
+pedir um movimento, como piscar ou virar o rosto. Ainda não há limite de
 tentativas por IP; o próximo passo seria o Upstash Ratelimit nas rotas de identificação.
 
 ## Testes
 
 ```bash
-npm test             # 21 testes unitários (Vitest): CPF, máscaras, datas, Haversine, token HMAC, geofence, upload
+npm test             # 30 testes unitários (Vitest): CPF, máscaras, datas, Haversine, token HMAC, geofence, upload, rostos
 npm run typecheck    # TypeScript em modo strict
-npm run test:fluxo   # 14 verificações ponta a ponta contra o Supabase real, com limpeza dos dados no final
+npm run test:fluxo   # 18 verificações ponta a ponta contra o Supabase real, com limpeza dos dados no final
 ```
 
 O **teste ponta a ponta** cobre o caminho feliz **e** os ataques: senha de fiscal errada (401), CPF duplicado (409),
 posição fora do raio (403), data de nascimento errada (404), segundo check-in no mesmo dia (409), acesso à selfie por
-URL assinada e o registro aparecendo na view de presença.
+URL assinada e o registro aparecendo na view de presença. Também cobre o reconhecimento facial: cadastro sem rosto e
+com duas pessoas (422), selfie de **outra pessoa** (403) e selfie da **mesma pessoa** em outro ângulo e luz (200).
+
+As imagens de teste em `tests/fixtures/` são **rostos sintéticos** gerados por StyleGAN2 (thispersondoesnotexist.com):
+nenhuma pessoa real aparece no repositório.
 
 A esteira de **CI no GitHub Actions** roda tipos, testes e build a cada push e PR.
 
@@ -166,6 +195,7 @@ A esteira de **CI no GitHub Actions** roda tipos, testes e build a cada push e P
 
 **Front:** Next.js 15 (App Router) · React 19 · TypeScript strict · CSS puro com design tokens (sem framework de UI)
 **Back:** Route Handlers serverless · `node:crypto` (HMAC e comparação em tempo constante) · Supabase JS
+**Visão computacional:** face-api (TensorFlow.js 4, backend WebAssembly) · SSD MobileNet v1 · FaceRecognitionNet · jpeg-js
 **Dados:** Postgres 17 (Supabase) · migrations versionadas com o Supabase CLI · Storage privado
 **Infra:** Vercel · GitHub Actions · QR code gerado no servidor (`/api/qrcode`) · tags NFC NTAG213
 
@@ -183,10 +213,10 @@ app/
   api/qrcode · qrcode/        QR code gerado no servidor (PNG/SVG) e página para imprimir
 components/                   Brand (marca), Camera (getUserMedia + fallback)
 lib/format.ts                 validações compartilhadas cliente/servidor
-lib/server/                   env, cliente Supabase, segurança, tratamento de erros
+lib/server/                   env, cliente Supabase, segurança, reconhecimento facial, tratamento de erros
 supabase/migrations/          schema, RLS, view de presença e bucket
 scripts/                      gerador de QR code e teste ponta a ponta
-tests/                        testes unitários (Vitest)
+tests/                        testes unitários (Vitest) e rostos sintéticos de teste
 ```
 
 ## Rodando localmente
