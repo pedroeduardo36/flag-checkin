@@ -4,12 +4,11 @@ import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
 const BASE = (process.argv[2] || "http://localhost:3000").replace(/\/$/, "");
-const env = Object.fromEntries(
+const env = { ...Object.fromEntries(
   readFileSync(".env.local", "utf8").split("\n").filter((l) => /^[A-Z_]+=/.test(l)).map((l) => {
     const i = l.indexOf("=");
     return [l.slice(0, i), l.slice(i + 1).trim()];
-  }),
-);
+  })), ...(process.env.E2E_EMAIL ? { E2E_EMAIL: process.env.E2E_EMAIL } : {}) };
 
 function cpfAleatorio() {
   const n = Array.from({ length: 9 }, () => Math.floor(Math.random() * 10));
