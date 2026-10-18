@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { brDateToIso, maskDate, distanceMeters, firstName, isValidBirthDate, isValidCpf, isValidPhone, maskCpf, maskPhone } from "@/lib/format";
+import { brDateToIso, isValidEmail, maskDate, distanceMeters, firstName, isValidBirthDate, isValidCpf, isValidPhone, maskCpf, maskPhone } from "@/lib/format";
 
 describe("CPF", () => {
   it("aceita CPFs válidos, com ou sem máscara", () => {
@@ -48,6 +48,16 @@ describe("Campo de data (DD/MM/AAAA)", () => {
   it("converte para o formato do banco só quando completa", () => {
     expect(brDateToIso("20/05/2010")).toBe("2010-05-20");
     expect(brDateToIso("20/05/201")).toBe("");
+  });
+});
+
+describe("E-mail do responsável", () => {
+  it("aceita e-mails comuns e recusa formatos inválidos", () => {
+    expect(isValidEmail("mae.souza@gmail.com")).toBe(true);
+    expect(isValidEmail(" pai@igreja.org.br ")).toBe(true);
+    expect(isValidEmail("mae@gmail")).toBe(false);
+    expect(isValidEmail("mae souza@gmail.com")).toBe(false);
+    expect(isValidEmail("")).toBe(false);
   });
 });
 

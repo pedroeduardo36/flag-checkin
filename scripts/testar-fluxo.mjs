@@ -50,10 +50,12 @@ try {
 
   const cad = {
     name: "Teste Automático Flag", cpf, phone: "61999990000", birthDate: nasc,
-    guardianName: "Responsável Teste", guardianPhone: "61988880000", consent: true, photo,
+    guardianName: "Responsável Teste", guardianPhone: "61988880000", guardianEmail: env.E2E_EMAIL || "responsavel.teste@example.com", consent: true, photo,
   };
   let r = await post("/api/cadastro", { ...cad, password: "senha-errada" });
   check("cadastro com senha errada é recusado (401)", r.status === 401, r);
+  r = await post("/api/cadastro", { ...cad, guardianEmail: "email-invalido", password: env.REGISTRATION_PASSWORD });
+  check("cadastro com e-mail do responsável inválido é recusado (400)", r.status === 400 && !!r.data.errors?.guardianEmail, r);
   r = await post("/api/cadastro", { ...cad, photo: foto("sem-rosto"), password: env.REGISTRATION_PASSWORD });
   check("cadastro com foto sem rosto é recusado (422 SEM_ROSTO)", r.status === 422 && r.data.code === "SEM_ROSTO", r);
   r = await post("/api/cadastro", { ...cad, photo: foto("duas-pessoas"), password: env.REGISTRATION_PASSWORD });
@@ -89,6 +91,16 @@ try {
   check("selfie de OUTRA pessoa é recusada (403 ROSTO_NAO_CONFERE)", f.status === 403 && f.data.code === "ROSTO_NAO_CONFERE", f);
   const conf = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-a-selfie") });
   check("selfie da MESMA pessoa (outro ângulo/luz) é aceita (200)", conf.status === 200 && conf.data.ok, conf);
+  // O e-mail é enviado depois da resposta (after): espera o status ser gravado.
+  let aviso = null;
+  for (let i = 0; i < 20 && !aviso; i++) {
+    await new Promise((res) => setTimeout(res, 1000));
+    const { data: ck } = await sb.from("checkins").select("guardian_email_status, members!inner(cpf)").eq("members.cpf", cpf).maybeSingle();
+    aviso = ck?.guardian_email_status ?? null;
+  }
+  const esperado = env.E2E_EMAIL ? ["enviado"] : ["enviado", "falhou", "sem_config"];
+  check(`aviso ao responsável registrado (${aviso})`, esperado.includes(aviso), aviso);
+
   const dup = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-a-selfie") });
   check("segundo check-in no mesmo dia é recusado (409)", dup.status === 409, dup);
 

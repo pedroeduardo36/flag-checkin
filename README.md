@@ -38,6 +38,12 @@ celular e o check-in leva cerca de 15 segundos:
 | :-: | :-: | :-: | :-: | :-: |
 | <img src="docs/screenshots/01-localizacao.jpg" width="160" /> | <img src="docs/screenshots/02-identificacao.jpg" width="160" /> | <img src="docs/screenshots/03-sucesso.jpg" width="160" /> | <img src="docs/screenshots/04-fora-do-local.jpg" width="160" /> | <img src="docs/screenshots/05-cadastro.jpg" width="160" /> |
 
+| E-mail para o responsável |
+| :-: |
+| <img src="docs/screenshots/06-email-responsavel.jpg" width="220" /> |
+
+E o responsável recebe na hora um **e-mail com o horário e a foto do check-in**.
+
 Três fatores tornam a fraude cara:
 
 1. **Onde você está:** cerca geográfica (*geofence*) de 150 m ao redor da igreja, validada **no servidor**.
@@ -84,6 +90,9 @@ flowchart LR
 | **Unicidade no banco, não no código** | `unique (member_id, service_date)` garante um check-in por dia mesmo com dois cliques simultâneos (corrida tratada pelo código `23505`). |
 | **Reconhecimento facial no servidor** | face-api (TensorFlow.js) com backend **WebAssembly**: roda dentro da função serverless, sem GPU, binário nativo nem API paga. No navegador seria fácil de burlar; no servidor, a decisão é da API. |
 | **Descritor guardado, não comparado na foto** | No cadastro é salvo um vetor de 128 números do rosto. No check-in só a selfie é analisada (cerca de 250 ms). Cadastros antigos ganham o descritor na primeira vez. |
+| **E-mail ao responsável com `after()`** | O envio SMTP roda **depois** da resposta (`next/server` `after`). O adolescente vê a tela de sucesso na hora, e uma falha no e-mail não desfaz o check-in. O resultado fica gravado (`enviado`, `falhou`, `sem_email`, `sem_config`) e aparece na lista de presença. |
+| **Foto embutida (CID), não link** | A selfie vai como anexo *inline*. Não depende de URL assinada (que expira) nem de bucket público, e aparece direto no Gmail ou Outlook. |
+| **SMTP, não SDK de um fornecedor** | Nodemailer funciona com Gmail, Brevo ou Resend só trocando variáveis de ambiente. |
 | **Data do culto em `America/Sao_Paulo`** | Um culto às 22h em Brasília já é o "dia seguinte" em UTC. O fuso é explícito e coberto por teste. |
 
 ## Fluxo do check-in
@@ -95,6 +104,7 @@ sequenceDiagram
   participant W as Web app
   participant S as API (Vercel)
   participant D as Supabase
+  participant R as Responsável (e-mail)
 
   A->>W: escaneia QR / encosta no NFC
   W->>A: pede permissão de localização (alta precisão)
@@ -113,6 +123,9 @@ sequenceDiagram
   end
   S->>D: upload no bucket privado + insert em checkins (com a distância)
   S-->>W: nome + horário → tela de sucesso
+  Note over S: after() — depois da resposta
+  S-)R: e-mail SMTP com horário + selfie embutida (cid)
+  S->>D: grava o status do aviso (enviado / falhou / sem_config)
 ```
 
 O cadastro (`/cadastro`) segue o mesmo padrão: validação no cliente para dar resposta rápida, **a mesma validação
@@ -155,6 +168,7 @@ para pessoas diferentes.
 | --- | --- |
 | Check-in de casa | Cerca geográfica validada **no servidor**, duas vezes. A selfie fica como prova para auditoria. |
 | "Faz o check-in por mim" | Selfie comparada por reconhecimento facial com o cadastro (403 se for outra pessoa). A distância fica gravada para auditoria. |
+| Injeção de HTML no e-mail | Nome e responsável vêm do cadastro e são escapados antes de entrar no HTML (teste cobre `<b>`). |
 | Cadastro com foto de qualquer coisa | A foto do cadastro precisa ter exatamente um rosto, verificado no servidor. |
 | Descobrir quem está cadastrado | CPF inexistente e data errada recebem **a mesma** resposta (sem *user enumeration*). |
 | Pular a etapa de identificação | A selfie só é aceita com um token HMAC-SHA256 válido, de 5 minutos e comparado em tempo constante. |
@@ -176,9 +190,9 @@ tentativas por IP; o próximo passo seria o Upstash Ratelimit nas rotas de ident
 ## Testes
 
 ```bash
-npm test             # 30 testes unitários (Vitest): CPF, máscaras, datas, Haversine, token HMAC, geofence, upload, rostos
+npm test             # 37 testes unitários (Vitest): CPF, máscaras, datas, Haversine, token HMAC, geofence, upload, rostos, e-mail
 npm run typecheck    # TypeScript em modo strict
-npm run test:fluxo   # 18 verificações ponta a ponta contra o Supabase real, com limpeza dos dados no final
+npm run test:fluxo   # 20 verificações ponta a ponta contra o Supabase real, com limpeza dos dados no final
 ```
 
 O **teste ponta a ponta** cobre o caminho feliz **e** os ataques: senha de fiscal errada (401), CPF duplicado (409),
@@ -195,6 +209,7 @@ A esteira de **CI no GitHub Actions** roda tipos, testes e build a cada push e P
 
 **Front:** Next.js 15 (App Router) · React 19 · TypeScript strict · CSS puro com design tokens (sem framework de UI)
 **Back:** Route Handlers serverless · `node:crypto` (HMAC e comparação em tempo constante) · Supabase JS
+**E-mail:** Nodemailer (SMTP) · HTML responsivo em tabelas (compatível com Gmail e Outlook) · imagem inline via CID
 **Visão computacional:** face-api (TensorFlow.js 4, backend WebAssembly) · SSD MobileNet v1 · FaceRecognitionNet · jpeg-js
 **Dados:** Postgres 17 (Supabase) · migrations versionadas com o Supabase CLI · Storage privado
 **Infra:** Vercel · GitHub Actions · QR code gerado no servidor (`/api/qrcode`) · tags NFC NTAG213

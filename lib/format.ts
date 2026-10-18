@@ -30,6 +30,9 @@ export function maskPhone(value: string): string {
   return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
 }
 
+/** Formato básico de e-mail (a entrega real é confirmada pelo servidor de e-mail). */
+export const isValidEmail = (v: string) => /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test((v ?? "").trim()) && v.trim().length <= 254;
+
 export const isValidPhone = (v: string) => {
   const d = onlyDigits(v);
   return d.length === 10 || d.length === 11;

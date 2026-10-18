@@ -57,6 +57,7 @@ Copie `.env.example` para `.env.local` e preencha:
 | `CHURCH_LAT` / `CHURCH_LNG` | coordenadas da igreja — no Google Maps, clique com o botão direito no prédio e copie |
 | `CHURCH_RADIUS_METERS` | raio aceito; comece com **150** (GPS dentro de prédio erra 20–60 m) |
 | `FACE_MATCH_THRESHOLD` | opcional, padrão `0.55`. Distância máxima entre a selfie e a foto do cadastro. Menor = mais rígido; se pessoas reais forem recusadas, teste `0.6` |
+| `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `EMAIL_FROM` | envio do e-mail ao responsável a cada check-in (veja "E-mail para o responsável" abaixo). Sem elas, o check-in funciona e o aviso fica como `sem_config` |
 | `GEOFENCE_DISABLED` | `true` = **modo teste**: pula a localização (check-in de qualquer lugar, aviso amarelo na tela). Deixe `false` no culto |
 | `REGISTRATION_PASSWORD` | senha que o fiscal digita para liberar cada cadastro |
 | `CHECKIN_SECRET` | gere com `openssl rand -hex 32` |
@@ -96,6 +97,27 @@ Gera `qrcode-checkin.png` (impressão) e `qrcode-checkin.svg` (gráfica/banner),
 2. *Escrever → Adicionar registro → URL/URI* → `https://SEU-APP.vercel.app/checkin`.
 3. *Escrever* e encoste a tag no celular. Opcional: *Outros → Bloquear tag* para ninguém regravar.
 4. O adolescente encosta o celular na tag (no iPhone, a parte de cima do aparelho) e o link abre sozinho.
+
+## E-mail para o responsável
+
+A cada check-in, o responsável recebe um e-mail com o **horário** e a **foto do check-in** (veja
+[a prévia](previa-email-checkin.html)). Escolha **um** provedor SMTP gratuito:
+
+| Provedor | Limite grátis | Precisa de domínio próprio? | Configuração |
+| --- | --- | --- | --- |
+| **Gmail** (recomendado para começar) | ~500 e-mails/dia | não | `smtp.gmail.com` · porta `465` · usuário = o Gmail · senha = **senha de app** |
+| Brevo | 300/dia | não (verifica o remetente) | `smtp-relay.brevo.com` · `587` · login e chave SMTP do painel |
+| Resend | 3.000/mês | **sim**, para enviar a qualquer pessoa | `smtp.resend.com` · `465` · usuário `resend` · senha = API key |
+
+**Gmail passo a passo** (de preferência numa conta do ministério, por exemplo `checkin.o2flag@gmail.com`):
+1. Ative a **verificação em duas etapas** na conta Google.
+2. Abra <https://myaccount.google.com/apppasswords>, crie uma senha de app chamada "Check-in O2" e copie as 16 letras.
+3. Preencha no `.env.local` **e** na Vercel (Settings › Environment Variables):
+   `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER=<o gmail>`, `SMTP_PASS=<senha de app>`,
+   `EMAIL_FROM="Check-in O2 Flag <o gmail>"`.
+4. Publique de novo (Deployments › Redeploy).
+
+O status de cada aviso aparece na coluna `aviso_responsavel` da view `presencas`.
 
 ## Ver as presenças
 No Supabase: **Table Editor → `presencas`** (lista por culto, com horário, responsável e distância). Para ver uma foto,

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Shell } from "@/components/Brand";
 import { Camera } from "@/components/Camera";
-import { brDateToIso, isValidBirthDate, isValidCpf, isValidPhone, maskCpf, maskDate, maskPhone } from "@/lib/format";
+import { brDateToIso, isValidBirthDate, isValidCpf, isValidEmail, isValidPhone, maskCpf, maskDate, maskPhone } from "@/lib/format";
 
 type Form = {
   name: string;
@@ -13,11 +13,12 @@ type Form = {
   birthDate: string;
   guardianName: string;
   guardianPhone: string;
+  guardianEmail: string;
   password: string;
   consent: boolean;
 };
 
-const empty: Form = { name: "", cpf: "", phone: "", birthDate: "", guardianName: "", guardianPhone: "", password: "", consent: false };
+const empty: Form = { name: "", cpf: "", phone: "", birthDate: "", guardianName: "", guardianPhone: "", guardianEmail: "", password: "", consent: false };
 
 function validate(f: Form, photo: string | null) {
   const e: Record<string, string> = {};
@@ -28,6 +29,7 @@ function validate(f: Form, photo: string | null) {
   if (!photo) e.photo = "Tire uma foto do rosto.";
   if (f.guardianName.trim().split(/\s+/).length < 2) e.guardianName = "Informe nome e sobrenome do responsável.";
   if (!isValidPhone(f.guardianPhone)) e.guardianPhone = "Telefone do responsável inválido.";
+  if (!isValidEmail(f.guardianEmail)) e.guardianEmail = "E-mail do responsável inválido.";
   if (!f.consent) e.consent = "É preciso a autorização do responsável.";
   if (!f.password) e.password = "O fiscal precisa digitar a senha.";
   return e;
@@ -130,11 +132,16 @@ export default function CadastroPage() {
           {field("guardianPhone", "Telefone do responsável", (
             <input type="tel" inputMode="tel" placeholder="(00) 00000-0000" value={f.guardianPhone} onChange={(e) => set("guardianPhone", maskPhone(e.target.value))} />
           ))}
+          {field("guardianEmail", "E-mail do responsável", (
+            <input type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false}
+              placeholder="nome@email.com" value={f.guardianEmail} onChange={(e) => set("guardianEmail", e.target.value.trim())} />
+          ))}
+          <p className="hint field-hint">O responsável recebe um e-mail com o horário e a foto a cada check-in.</p>
           <label className={`check ${errors.consent ? "field--error" : ""}`} data-field="consent">
             <input type="checkbox" checked={f.consent} onChange={(e) => set("consent", e.target.checked)} />
             <span>
               O responsável autoriza o Ministério Flag a guardar estes dados e as fotos do adolescente, usados só para o
-              controle de presença nos cultos (LGPD, art. 14).
+              controle de presença nos cultos, e a enviar avisos de check-in para o e-mail informado (LGPD, art. 14).
             </span>
           </label>
           {errors.consent && <small className="err">{errors.consent}</small>}

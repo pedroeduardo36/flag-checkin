@@ -1,9 +1,10 @@
 import { withErrors } from "@/lib/server/http";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { db } from "@/lib/server/supabase";
 import { PHOTO_BUCKET } from "@/lib/server/env";
 import { decodePhoto, readCheckinToken, serviceDate } from "@/lib/server/security";
 import { analyzeFace, faceDistance, matchThreshold, parseDescriptor } from "@/lib/server/face";
+import { sendCheckinEmail } from "@/lib/server/email";
 
 export const maxDuration = 30;
 
@@ -71,7 +72,7 @@ export const POST = withErrors(async (req: Request) => {
       face_distance: Number(distance.toFixed(4)),
       user_agent: req.headers.get("user-agent")?.slice(0, 300) ?? null,
     })
-    .select("checked_in_at, members(name)")
+    .select("id, checked_in_at, members(name, guardian_name, guardian_email)")
     .single();
 
   if (error) {
@@ -82,6 +83,23 @@ export const POST = withErrors(async (req: Request) => {
     return NextResponse.json({ error: "Erro ao registrar o check-in. Tente de novo." }, { status: 500 });
   }
 
-  const member = Array.isArray(data.members) ? data.members[0] : data.members;
-  return NextResponse.json({ ok: true, name: (member as any)?.name ?? "", checkedInAt: data.checked_in_at });
+  const member = (Array.isArray(data.members) ? data.members[0] : data.members) as
+    | { name: string; guardian_name: string; guardian_email: string | null }
+    | null;
+
+  // Aviso ao responsável depois da resposta: o adolescente não espera o servidor de e-mail.
+  after(async () => {
+    const status = await sendCheckinEmail(member?.guardian_email, {
+      guardianName: member?.guardian_name ?? "",
+      teenName: member?.name ?? "",
+      checkedInAt: data.checked_in_at,
+      photo: photo.buffer,
+    });
+    await db()
+      .from("checkins")
+      .update({ guardian_email_status: status, guardian_email_at: new Date().toISOString() })
+      .eq("id", data.id);
+  });
+
+  return NextResponse.json({ ok: true, name: member?.name ?? "", checkedInAt: data.checked_in_at });
 });

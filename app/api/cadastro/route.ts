@@ -6,7 +6,7 @@ import { decodePhoto, safeEqual } from "@/lib/server/security";
 import { analyzeFace } from "@/lib/server/face";
 
 export const maxDuration = 30;
-import { isValidBirthDate, isValidCpf, isValidPhone, onlyDigits } from "@/lib/format";
+import { isValidBirthDate, isValidCpf, isValidEmail, isValidPhone, onlyDigits } from "@/lib/format";
 
 const clean = (v: unknown, max = 120) => String(v ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
@@ -24,6 +24,7 @@ export const POST = withErrors(async (req: Request) => {
     birth_date: String(b.birthDate ?? ""),
     guardian_name: clean(b.guardianName),
     guardian_phone: onlyDigits(b.guardianPhone),
+    guardian_email: String(b.guardianEmail ?? "").trim().toLowerCase(),
   };
 
   const errors: Record<string, string> = {};
@@ -33,6 +34,7 @@ export const POST = withErrors(async (req: Request) => {
   if (!isValidBirthDate(data.birth_date)) errors.birthDate = "Data de nascimento inválida.";
   if (data.guardian_name.split(" ").length < 2) errors.guardianName = "Informe nome e sobrenome do responsável.";
   if (!isValidPhone(data.guardian_phone)) errors.guardianPhone = "Telefone do responsável inválido.";
+  if (!isValidEmail(data.guardian_email)) errors.guardianEmail = "E-mail do responsável inválido.";
   if (b.consent !== true) errors.consent = "É preciso a autorização do responsável.";
   const photo = decodePhoto(b.photo);
   if (!photo) errors.photo = "Tire uma foto do rosto.";

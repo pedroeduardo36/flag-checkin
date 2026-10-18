@@ -98,6 +98,7 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .field input:focus { outline: none; border-color: var(--flag); box-shadow: 0 0 0 4px var(--flag-soft); }
 .field small, .err { color: var(--danger); font-size: 13px; }
 .field--error input { border-color: var(--danger); }
+.field-hint { margin: -6px 0 14px; font-size: 13px; }
 .check { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--muted); line-height: 1.45; margin-bottom: 6px; }
 .check input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--flag); flex-shrink: 0; }
 .check.field--error { color: var(--danger); }
