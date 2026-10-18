@@ -49,7 +49,7 @@ try {
 
   const cad = {
     name: "Teste Automático Flag", cpf, phone: "61999990000", birthDate: nasc,
-    guardianName: "Responsável Teste", guardianPhone: "61988880000", guardianEmail: env.E2E_EMAIL || "responsavel.teste@example.com", consent: true, photo,
+    guardianName: "Responsável Teste", guardianPhone: "61988880000", guardianEmail: env.E2E_EMAIL || env.SMTP_USER || "responsavel.teste@example.com", consent: true, photo,
   };
   let r = await post("/api/cadastro", { ...cad, password: "senha-errada" });
   check("cadastro com senha errada é recusado (401)", r.status === 401, r);
