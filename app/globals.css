@@ -201,3 +201,8 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .tag--ok { background: #e7f7ee; color: var(--ok); }
 .tag--warn { background: #fff4d6; color: #8a5a00; }
 @media (prefers-reduced-motion: reduce) { .post--new, .live-dot { animation: none; } }
+
+.feed-divider { display: flex; align-items: center; gap: 10px; margin: 22px 0 12px; color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.feed-divider::before, .feed-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.post--example { outline: 2px dashed #f0b429; outline-offset: -2px; }
+.tag--example { background: #fff4d6; color: #8a5a00; }

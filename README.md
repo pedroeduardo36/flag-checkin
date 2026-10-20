@@ -48,6 +48,8 @@ Protegida por senha, com duas abas:
 - **Ao vivo:** feed no estilo Instagram com quem acabou de chegar (foto do cadastro, nome, horário e selfie do
   check-in), contador de presentes do dia e selos "rosto confere" e "responsável avisado". Novos check-ins aparecem
   sozinhos, em cerca de 4 segundos, com destaque de entrada.
+- **Exemplo para teste:** check-ins marcados com `is_example` aparecem sempre no fim do feed, com a etiqueta "Exemplo"
+  e a data do culto. Não entram no contador do dia e as rotinas de limpeza dos testes não os apagam.
 - **Cadastrar:** o mesmo formulário do fiscal, **sem pedir a senha do fiscal**, com o botão "Cadastrar outro" para
   cadastrar em sequência.
 

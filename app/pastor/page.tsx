@@ -6,6 +6,7 @@ import { CadastroForm } from "@/components/CadastroForm";
 
 type Item = {
   id: string;
+  serviceDate: string;
   name: string;
   firstName: string;
   checkedInAt: string;
@@ -134,6 +135,7 @@ function Login({ onOk }: { onOk: () => void }) {
 
 function Feed({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [items, setItems] = useState<Item[]>([]);
+  const [examples, setExamples] = useState<Item[]>([]);
   const [total, setTotal] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [online, setOnline] = useState(true);
@@ -152,12 +154,13 @@ function Feed({ onUnauthorized }: { onUnauthorized: () => void }) {
       const r = await fetch(`/api/pastor/feed${qs}`, { cache: "no-store" });
       if (r.status === 401) return onUnauthorized();
       if (!r.ok) throw new Error(String(r.status));
-      const d: { total: number; items: Item[] } = await r.json();
+      const d: { total: number; items: Item[]; examples?: Item[] } = await r.json();
       setOnline(true);
       setTotal(d.total);
       if (full) {
         lastFull.current = Date.now();
         setItems(d.items);
+        setExamples(d.examples ?? []);
       } else if (d.items.length) {
         setItems((prev) => {
           const known = new Set(prev.map((i) => i.id));
@@ -218,14 +221,41 @@ function Feed({ onUnauthorized }: { onUnauthorized: () => void }) {
 
       <ol className="feed" aria-live="polite">
         {items.map((it) => (
-          <li key={it.id} className={`post ${fresh.has(it.id) ? "post--new" : ""}`}>
+          <Post key={it.id} it={it} now={now} isNew={fresh.has(it.id)} />
+        ))}
+      </ol>
+
+      {examples.length > 0 && (
+        <>
+          <div className="feed-divider"><span>Exemplo para teste</span></div>
+          <ol className="feed">
+            {examples.map((it) => (
+              <Post key={it.id} it={it} now={now} example />
+            ))}
+          </ol>
+        </>
+      )}
+    </section>
+  );
+}
+
+const fmtDay = (d: string) =>
+  new Date(`${d}T12:00:00Z`).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", timeZone: "UTC" });
+
+function Post({ it, now, isNew = false, example = false }: { it: Item; now: number; isNew?: boolean; example?: boolean }) {
+  return (
+          <li className={`post ${isNew ? "post--new" : ""} ${example ? "post--example" : ""}`}>
             <header className="post__head">
               {it.avatarUrl ? <img className="post__avatar" src={it.avatarUrl} alt="" /> : <span className="post__avatar post__avatar--empty" />}
               <div className="post__who">
                 <strong>{it.name}</strong>
-                <span>chegou ao culto · {fmtTime(it.checkedInAt)}</span>
+                <span>{example ? `culto de ${fmtDay(it.serviceDate)}` : "chegou ao culto"} · {fmtTime(it.checkedInAt)}</span>
               </div>
-              <time className="post__ago" dateTime={it.checkedInAt}>{ago(it.checkedInAt, now)}</time>
+              {example ? (
+                <span className="tag tag--example">Exemplo</span>
+              ) : (
+                <time className="post__ago" dateTime={it.checkedInAt}>{ago(it.checkedInAt, now)}</time>
+              )}
             </header>
             {it.selfieUrl ? (
               <img className="post__img" src={it.selfieUrl} alt={`Selfie do check-in de ${it.firstName}`} loading="lazy" />
@@ -239,8 +269,5 @@ function Feed({ onUnauthorized }: { onUnauthorized: () => void }) {
               {it.guardianEmailStatus === "falhou" && <span className="tag tag--warn">✉️ E-mail falhou</span>}
             </footer>
           </li>
-        ))}
-      </ol>
-    </section>
   );
 }

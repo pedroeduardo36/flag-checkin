@@ -9,9 +9,11 @@ import { firstName } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 const PHOTO_URL_TTL = 60 * 60; // 1 h
+const COLUMNS = "id, service_date, checked_in_at, photo_path, face_distance, guardian_email_status, members(name, photo_path)";
 
 type Row = {
   id: string;
+  service_date: string;
   checked_in_at: string;
   photo_path: string;
   face_distance: number | null;
@@ -33,42 +35,54 @@ export const GET = withErrors(async (req: Request) => {
 
   let q = db()
     .from("checkins")
-    .select("id, checked_in_at, photo_path, face_distance, guardian_email_status, members(name, photo_path)")
+    .select(COLUMNS)
     .eq("service_date", date)
     .order("checked_in_at", { ascending: false })
     .limit(300);
   if (since && !Number.isNaN(Date.parse(since))) q = q.gt("checked_in_at", since);
 
-  const [{ data, error }, total] = await Promise.all([
+  // Check-ins de exemplo (is_example): vêm só na carga completa, fora do contador do dia.
+  const examplesQuery = since
+    ? Promise.resolve({ data: [], error: null })
+    : db().from("checkins").select(COLUMNS).eq("is_example", true).neq("service_date", date).order("checked_in_at", { ascending: false }).limit(5);
+
+  const [{ data, error }, total, ex] = await Promise.all([
     q,
-    db().from("checkins").select("id", { count: "exact", head: true }).eq("service_date", date),
+    db().from("checkins").select("id", { count: "exact", head: true }).eq("service_date", date).eq("is_example", false),
+    examplesQuery,
   ]);
   if (error) throw error;
+  if (ex.error) throw ex.error;
 
   const rows = (data ?? []) as Row[];
+  const exampleRows = (ex.data ?? []) as Row[];
   const member = (r: Row) => (Array.isArray(r.members) ? r.members[0] : r.members);
 
   // Uma chamada só para assinar todas as fotos (selfie + foto do cadastro).
-  const paths = [...new Set(rows.flatMap((r) => [r.photo_path, member(r)?.photo_path].filter(Boolean) as string[]))];
+  const paths = [...new Set([...rows, ...exampleRows].flatMap((r) => [r.photo_path, member(r)?.photo_path].filter(Boolean) as string[]))];
   const signed = paths.length ? (await db().storage.from(PHOTO_BUCKET).createSignedUrls(paths, PHOTO_URL_TTL)).data ?? [] : [];
   const urlOf = new Map(signed.map((s) => [s.path, s.signedUrl]));
+
+  const toItem = (r: Row) => {
+    const m = member(r);
+    return {
+      id: r.id,
+      serviceDate: r.service_date,
+      name: m?.name ?? "",
+      firstName: firstName(m?.name ?? ""),
+      checkedInAt: r.checked_in_at,
+      selfieUrl: urlOf.get(r.photo_path) ?? null,
+      avatarUrl: m?.photo_path ? urlOf.get(m.photo_path) ?? null : null,
+      faceDistance: r.face_distance,
+      guardianEmailStatus: r.guardian_email_status,
+    };
+  };
 
   return NextResponse.json({
     date,
     total: total.count ?? rows.length,
     serverTime: new Date().toISOString(),
-    items: rows.map((r) => {
-      const m = member(r);
-      return {
-        id: r.id,
-        name: m?.name ?? "",
-        firstName: firstName(m?.name ?? ""),
-        checkedInAt: r.checked_in_at,
-        selfieUrl: urlOf.get(r.photo_path) ?? null,
-        avatarUrl: m?.photo_path ? urlOf.get(m.photo_path) ?? null : null,
-        faceDistance: r.face_distance,
-        guardianEmailStatus: r.guardian_email_status,
-      };
-    }),
+    items: rows.map(toItem),
+    examples: exampleRows.map(toItem),
   });
 });

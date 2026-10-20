@@ -14,7 +14,8 @@ const PREFIXO = "Simulação";
 if (args.includes("--limpar")) {
   const { data } = await sb.from("members").select("id, photo_path").like("name", `${PREFIXO}%`);
   for (const m of data ?? []) {
-    const { data: cks } = await sb.from("checkins").select("photo_path").eq("member_id", m.id);
+    const { data: cks } = await sb.from("checkins").select("photo_path, is_example").eq("member_id", m.id);
+    if (cks?.some((c) => c.is_example)) continue; // nunca apaga o check-in de exemplo
     await sb.storage.from("fotos").remove([m.photo_path, ...(cks ?? []).map((c) => c.photo_path)]);
     await sb.from("members").delete().eq("id", m.id);
   }
