@@ -156,3 +156,48 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
   .brand { color: var(--ink); }
   .card { box-shadow: none; }
 }
+
+/* ---------- Área do pastor ---------- */
+.pastor__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pastor__logout { font: inherit; font-weight: 700; font-size: 14px; color: #fff; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35); border-radius: 999px; padding: 8px 14px; cursor: pointer; }
+.pastor__logout:hover { background: rgba(255,255,255,.28); }
+.lock { font-size: 34px; margin-bottom: 6px; }
+
+.tabs { display: flex; gap: 6px; background: var(--card); padding: 6px; border-radius: 14px; box-shadow: 0 6px 18px rgba(13,34,48,.08); margin-bottom: 14px; position: sticky; top: 8px; z-index: 5; }
+.tabs button { flex: 1; font: inherit; font-weight: 700; font-size: 15px; min-height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.tabs button.on { background: var(--flag); color: #fff; }
+
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: #e53935; display: inline-block; box-shadow: 0 0 0 0 rgba(229,57,53,.6); animation: pulse 1.6s infinite; }
+.tabs button.on .live-dot { background: #fff; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(229,57,53,.55); } 70% { box-shadow: 0 0 0 8px rgba(229,57,53,0); } 100% { box-shadow: 0 0 0 0 rgba(229,57,53,0); } }
+
+.feed-stats { display: flex; justify-content: space-between; align-items: flex-end; background: var(--card); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 14px; box-shadow: 0 10px 30px rgba(13,34,48,.10); }
+.feed-stats__n { font-size: 40px; font-weight: 900; line-height: 1; color: var(--flag-dark); }
+.feed-stats__l { font-size: 13px; color: var(--muted); font-weight: 600; margin-top: 4px; }
+.feed-stats__r { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; text-align: right; }
+.feed-stats__d { font-size: 12px; color: var(--muted); }
+.live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: #e53935; }
+.live--off { color: var(--muted); }
+.live--off .live-dot { background: var(--muted); animation: none; }
+
+.empty { padding: 36px 20px; }
+.empty__icon { font-size: 40px; }
+
+.feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
+.post { background: var(--card); border-radius: var(--radius); overflow: hidden; box-shadow: 0 10px 30px rgba(13,34,48,.10); }
+.post--new { animation: arrive .6s ease-out; box-shadow: 0 0 0 3px var(--ok), 0 10px 30px rgba(13,34,48,.10); }
+@keyframes arrive { from { opacity: 0; transform: translateY(-14px) scale(.98); } to { opacity: 1; transform: none; } }
+.post__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
+.post__avatar { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex-shrink: 0; padding: 2px; background: linear-gradient(135deg, var(--flag), #6fd0f2); }
+.post__avatar--empty { display: inline-block; }
+.post__who { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.post__who strong { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.post__who span { font-size: 12px; color: var(--muted); }
+.post__ago { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.post__img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; background: var(--flag-soft); display: block; }
+.post__img--empty { display: grid; place-items: center; color: var(--muted); font-size: 14px; }
+.post__foot { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 14px 14px; }
+.tag { font-size: 12px; font-weight: 700; padding: 5px 9px; border-radius: 999px; background: var(--flag-soft); color: var(--flag-dark); }
+.tag--ok { background: #e7f7ee; color: var(--ok); }
+.tag--warn { background: #fff4d6; color: #8a5a00; }
+@media (prefers-reduced-motion: reduce) { .post--new, .live-dot { animation: none; } }

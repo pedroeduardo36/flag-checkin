@@ -11,7 +11,8 @@
     "test:fluxo": "node scripts/testar-fluxo.mjs",
     "db:push": "supabase db push",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "simular": "node scripts/simular-checkins.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

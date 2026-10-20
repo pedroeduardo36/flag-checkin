@@ -38,9 +38,18 @@ celular e o check-in leva cerca de 15 segundos:
 | :-: | :-: | :-: | :-: | :-: |
 | <img src="docs/screenshots/01-localizacao.jpg" width="160" /> | <img src="docs/screenshots/02-identificacao.jpg" width="160" /> | <img src="docs/screenshots/03-sucesso.jpg" width="160" /> | <img src="docs/screenshots/04-fora-do-local.jpg" width="160" /> | <img src="docs/screenshots/05-cadastro.jpg" width="160" /> |
 
-| E-mail para o responsável |
-| :-: |
-| <img src="docs/screenshots/06-email-responsavel.jpg" width="220" /> |
+| E-mail para o responsável | Área do pastor (ao vivo) |
+| :-: | :-: |
+| <img src="docs/screenshots/06-email-responsavel.jpg" width="220" /> | <img src="docs/screenshots/07-pastor-feed.jpg" width="220" /> |
+
+### Área do pastor — [`/pastor`](https://flag-checkin.vercel.app/pastor)
+
+Protegida por senha, com duas abas:
+- **Ao vivo:** feed no estilo Instagram com quem acabou de chegar (foto do cadastro, nome, horário e selfie do
+  check-in), contador de presentes do dia e selos "rosto confere" e "responsável avisado". Novos check-ins aparecem
+  sozinhos, em cerca de 4 segundos, com destaque de entrada.
+- **Cadastrar:** o mesmo formulário do fiscal, **sem pedir a senha do fiscal**, com o botão "Cadastrar outro" para
+  cadastrar em sequência.
 
 E o responsável recebe na hora um **e-mail com o horário e a foto do check-in**.
 
@@ -93,6 +102,8 @@ flowchart LR
 | **E-mail ao responsável com `after()`** | O envio SMTP roda **depois** da resposta (`next/server` `after`). O adolescente vê a tela de sucesso na hora, e uma falha no e-mail não desfaz o check-in. O resultado fica gravado (`enviado`, `falhou`, `sem_email`, `sem_config`) e aparece na lista de presença. |
 | **Foto embutida (CID), não link** | A selfie vai como anexo *inline*. Não depende de URL assinada (que expira) nem de bucket público, e aparece direto no Gmail ou Outlook. |
 | **SMTP, não SDK de um fornecedor** | Nodemailer funciona com Gmail, Brevo ou Resend só trocando variáveis de ambiente. |
+| **Feed "ao vivo" por *polling* incremental** | A cada 4 s a página pergunta só pelo que chegou depois do último check-in visto (`?since=`). Não precisa de WebSocket nem de Realtime, que exigiria abrir o banco para a chave pública. Pausa com a aba escondida e renova as URLs das fotos a cada 30 min. |
+| **Sessão do pastor sem tabela** | O cookie `httpOnly` + `SameSite=strict` guarda `validade.assinatura` (HMAC). O servidor só confere a assinatura e o prazo de 12 h. A mesma sessão libera o cadastro sem a senha do fiscal. |
 | **Data do culto em `America/Sao_Paulo`** | Um culto às 22h em Brasília já é o "dia seguinte" em UTC. O fuso é explícito e coberto por teste. |
 
 ## Fluxo do check-in
@@ -169,6 +180,8 @@ para pessoas diferentes.
 | Check-in de casa | Cerca geográfica validada **no servidor**, duas vezes. A selfie fica como prova para auditoria. |
 | "Faz o check-in por mim" | Selfie comparada por reconhecimento facial com o cadastro (403 se for outra pessoa). A distância fica gravada para auditoria. |
 | Injeção de HTML no e-mail | Nome e responsável vêm do cadastro e são escapados antes de entrar no HTML (teste cobre `<b>`). |
+| Acesso ao feed (fotos de menores) | Senha do pastor conferida no servidor. O cookie de sessão é `httpOnly`, `SameSite=strict` e assinado; cookie forjado ou vencido recebe 401. A página não é indexada (`robots: noindex`). |
+| Força bruta na senha do pastor | Comparação em tempo constante e atraso de 0,8 s a cada senha errada. |
 | Cadastro com foto de qualquer coisa | A foto do cadastro precisa ter exatamente um rosto, verificado no servidor. |
 | Descobrir quem está cadastrado | CPF inexistente e data errada recebem **a mesma** resposta (sem *user enumeration*). |
 | Pular a etapa de identificação | A selfie só é aceita com um token HMAC-SHA256 válido, de 5 minutos e comparado em tempo constante. |
@@ -190,9 +203,10 @@ tentativas por IP; o próximo passo seria o Upstash Ratelimit nas rotas de ident
 ## Testes
 
 ```bash
-npm test             # 37 testes unitários (Vitest): CPF, máscaras, datas, Haversine, token HMAC, geofence, upload, rostos, e-mail
+npm test             # 42 testes unitários (Vitest): CPF, máscaras, datas, Haversine, HMAC, geofence, upload, rostos, e-mail, sessão do pastor
 npm run typecheck    # TypeScript em modo strict
-npm run test:fluxo   # 20 verificações ponta a ponta contra o Supabase real, com limpeza dos dados no final
+npm run test:fluxo   # 26 verificações ponta a ponta contra o Supabase real, com limpeza dos dados no final
+npm run simular      # dois adolescentes sintéticos fazem check-in com 8 s de intervalo (para ver o feed ao vivo)
 ```
 
 O **teste ponta a ponta** cobre o caminho feliz **e** os ataques: senha de fiscal errada (401), CPF duplicado (409),
@@ -220,13 +234,16 @@ A esteira de **CI no GitHub Actions** roda tipos, testes e build a cada push e P
 app/
   checkin/page.tsx            máquina de estados do check-in (boot → local → dados → selfie → sucesso)
   cadastro/page.tsx           cadastro com consentimento LGPD e senha do fiscal
+  pastor/page.tsx             área do pastor: login, feed ao vivo estilo Instagram e cadastro sem senha do fiscal
   api/checkin/local           GET: modo teste? · POST: confere a cerca
   api/checkin/identificar     CPF + nascimento → token HMAC
   api/checkin/confirmar       selfie → Storage + insert
   api/cadastro                novo adolescente
+  api/pastor/sessao           login (POST), sessão (GET) e saída (DELETE) do pastor
+  api/pastor/feed             check-ins do dia com URLs assinadas das fotos (?since= para o incremental)
   api/health                  diagnóstico (variáveis, tabelas, view e bucket)
   api/qrcode · qrcode/        QR code gerado no servidor (PNG/SVG) e página para imprimir
-components/                   Brand (marca), Camera (getUserMedia + fallback)
+components/                   Brand (marca), Camera (getUserMedia + fallback), CadastroForm (fiscal | pastor)
 lib/format.ts                 validações compartilhadas cliente/servidor
 lib/server/                   env, cliente Supabase, segurança, reconhecimento facial, tratamento de erros
 supabase/migrations/          schema, RLS, view de presença e bucket

@@ -60,6 +60,7 @@ Copie `.env.example` para `.env.local` e preencha:
 | `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `EMAIL_FROM` | envio do e-mail ao responsável a cada check-in (veja "E-mail para o responsável" abaixo). Sem elas, o check-in funciona e o aviso fica como `sem_config` |
 | `GEOFENCE_DISABLED` | `true` = **modo teste**: pula a localização (check-in de qualquer lugar, aviso amarelo na tela). Deixe `false` no culto |
 | `REGISTRATION_PASSWORD` | senha que o fiscal digita para liberar cada cadastro |
+| `PASTOR_PASSWORD` | senha da área do pastor (`/pastor`): feed ao vivo dos check-ins e cadastro sem a senha do fiscal |
 | `CHECKIN_SECRET` | gere com `openssl rand -hex 32` |
 | `PUBLIC_APP_URL` | endereço final do app (usado no QR code) |
 
@@ -118,6 +119,15 @@ A cada check-in, o responsável recebe um e-mail com o **horário** e a **foto d
 4. Publique de novo (Deployments › Redeploy).
 
 O status de cada aviso aparece na coluna `aviso_responsavel` da view `presencas`.
+
+## Área do pastor
+
+Abra **https://flag-checkin.vercel.app/pastor** e entre com a senha `PASTOR_PASSWORD`. A sessão dura 12 h no aparelho.
+- **Ao vivo:** quem fez check-in hoje, do mais recente para o mais antigo, atualizando sozinho a cada 4 s.
+- **Cadastrar:** cadastra adolescentes sem precisar da senha do fiscal.
+
+Para ver o feed funcionando sem ninguém na igreja: `npm run simular` (e `node scripts/simular-checkins.mjs --limpar`
+para apagar os cadastros de simulação depois).
 
 ## Ver as presenças
 No Supabase: **Table Editor → `presencas`** (lista por culto, com horário, responsável e distância). Para ver uma foto,

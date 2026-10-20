@@ -36,6 +36,7 @@ const sb = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth:
 const foto = (nome) => "data:image/jpeg;base64," + readFileSync(`tests/fixtures/${nome}.jpg`).toString("base64");
 const photo = foto("pessoa-a-cadastro");
 const cpf = cpfAleatorio();
+const extrasCpf = [];
 const nasc = "2010-05-20";
 const dentro = { lat: Number(env.CHURCH_LAT), lng: Number(env.CHURCH_LNG), accuracy: 15 };
 const geoOff = env.GEOFENCE_DISABLED === "true";
@@ -108,19 +109,39 @@ try {
   const img = r.data.photoUrl ? await fetch(r.data.photoUrl) : null;
   check("selfie acessível por URL assinada", img?.status === 200, img?.status);
 
+  // Área do pastor: senha, feed ao vivo e cadastro sem a senha do fiscal.
+  const semSessao = await fetch(`${BASE}/api/pastor/feed`);
+  check("feed do pastor sem sessão é bloqueado (401)", semSessao.status === 401, semSessao.status);
+  const loginErrado = await post("/api/pastor/sessao", { password: "errada" });
+  check("senha do pastor errada é recusada (401)", loginErrado.status === 401, loginErrado);
+  const login = await fetch(`${BASE}/api/pastor/sessao`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: env.PASTOR_PASSWORD }) });
+  const pastorCookie = (login.headers.get("set-cookie") ?? "").split(";")[0];
+  check("login do pastor define cookie httpOnly", login.status === 200 && /httponly/i.test(login.headers.get("set-cookie") ?? ""), login.status);
+  const feed = await fetch(`${BASE}/api/pastor/feed`, { headers: { cookie: pastorCookie } }).then((x) => x.json());
+  const meu = feed.items?.find((i) => i.name === cad.name);
+  check("check-in aparece no feed do pastor com selfie e foto do cadastro", !!meu?.selfieUrl && !!meu?.avatarUrl, meu);
+  const desde = await fetch(`${BASE}/api/pastor/feed?since=${encodeURIComponent(meu?.checkedInAt ?? "")}`, { headers: { cookie: pastorCookie } }).then((x) => x.json());
+  check("feed incremental (since) não repete o que já foi visto", Array.isArray(desde.items) && !desde.items.some((i) => i.id === meu?.id), desde.items?.length);
+  const cpf2 = cpfAleatorio();
+  const r2 = await fetch(`${BASE}/api/cadastro`, { method: "POST", headers: { "Content-Type": "application/json", cookie: pastorCookie }, body: JSON.stringify({ ...cad, cpf: cpf2, name: "Teste Automático Pastor" }) });
+  check("pastor cadastra sem a senha do fiscal (200)", r2.status === 200, r2.status);
+  extrasCpf.push(cpf2);
+
   const { data: pres } = await sb.from("presencas").select("nome, distancia_rosto").eq("nome", cad.name);
   check("aparece na view presencas com a distância do rosto", pres?.length === 1 && pres[0].distancia_rosto > 0, pres);
 } catch (e) {
   console.error("⚠️ ", e.message);
   falhas++;
 } finally {
-  // Limpeza: apaga o adolescente de teste (check-ins caem em cascata) e as fotos.
-  const { data: m } = await sb.from("members").select("id, photo_path").eq("cpf", cpf).maybeSingle();
+  // Limpeza: apaga os adolescentes de teste (check-ins caem em cascata) e as fotos.
+  for (const doc of [cpf, ...extrasCpf]) {
+  const { data: m } = await sb.from("members").select("id, photo_path").eq("cpf", doc).maybeSingle();
   if (m) {
     const { data: cks } = await sb.from("checkins").select("photo_path").eq("member_id", m.id);
     await sb.storage.from("fotos").remove([m.photo_path, ...(cks ?? []).map((c) => c.photo_path)]);
     await sb.from("members").delete().eq("id", m.id);
     console.log("🧹 dados de teste removidos");
+  }
   }
 }
 console.log(falhas ? `\n${falhas} falha(s).` : "\nTudo funcionando! 🎉");

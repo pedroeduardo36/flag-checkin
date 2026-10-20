@@ -4,6 +4,7 @@ import { db } from "@/lib/server/supabase";
 import { env, PHOTO_BUCKET } from "@/lib/server/env";
 import { decodePhoto, safeEqual } from "@/lib/server/security";
 import { analyzeFace } from "@/lib/server/face";
+import { isPastorRequest } from "@/lib/server/pastor";
 
 export const maxDuration = 30;
 import { isValidBirthDate, isValidCpf, isValidEmail, isValidPhone, onlyDigits } from "@/lib/format";
@@ -14,7 +15,8 @@ export const POST = withErrors(async (req: Request) => {
   const b = await req.json().catch(() => null);
   if (!b) return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
 
-  if (!safeEqual(String(b.password ?? ""), env.registrationPassword))
+  // Libera com a senha do fiscal OU com a sessão da área do pastor.
+  if (!isPastorRequest(req) && !safeEqual(String(b.password ?? ""), env.registrationPassword))
     return NextResponse.json({ error: "Senha do fiscal incorreta.", field: "password" }, { status: 401 });
 
   const data = {

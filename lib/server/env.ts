@@ -15,6 +15,8 @@ export const env = {
   /** Modo teste: GEOFENCE_DISABLED=true libera o check-in fora da igreja. Nunca deixe ligado em produção. */
   get geofenceDisabled() { return process.env.GEOFENCE_DISABLED === "true"; },
   get registrationPassword() { return required("REGISTRATION_PASSWORD"); },
+  /** Senha da área do pastor (/pastor): feed ao vivo e cadastro sem senha do fiscal. */
+  get pastorPassword() { return required("PASTOR_PASSWORD"); },
   get checkinSecret() {
     const s = required("CHECKIN_SECRET");
     if (s.length < 32) throw new Error("CHECKIN_SECRET precisa ter pelo menos 32 caracteres");
