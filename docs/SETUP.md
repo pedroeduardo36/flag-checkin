@@ -1,17 +1,22 @@
 # Guia de instalação e operação
 
+> **Fluxo atual:** o responsável cadastra o adolescente em `/cadastro`, sem foto nem senha. Na igreja, o adolescente faz o
+> check-in com nome completo e data de nascimento. No 1º check-in tira a foto de registro, que precisa ter um rosto só;
+> nos seguintes, a foto criativa dentro do culto. Visitantes entram só com nome e telefone.
+
 App web (abre no navegador do celular, sem instalar nada) para o check-in dos adolescentes na chegada ao culto.
 
 ```
+Antes do culto ──► /cadastro (o RESPONSÁVEL preenche)
+   Dados do adolescente (nome, nascimento, CPF, celular opcional) +
+   dados do responsável (nome, telefone, e-mail) + autorização LGPD. Sem foto, sem senha.
+
 QR code / tag NFC ──► /checkin
    1. Localização  → confere se o celular está dentro do raio da igreja
-   2. CPF + nascimento → confere com o cadastro
-   3. Selfie ao vivo (antifraude) → grava o check-in + foto
-   4. Tela de sucesso com a foto e o horário
-
-Não tem cadastro? ──► /cadastro
-   Nome, CPF, telefone, nascimento, foto, responsável + telefone,
-   autorização do responsável (LGPD) e SENHA DO FISCAL para liberar.
+   2. "Tenho cadastro": nome completo + nascimento   |   "Sou visitante": nome + telefone (+ foto opcional)
+   3. 1º check-in: foto de REGISTRO (1 rosto, vira a foto do cadastro)
+      Demais: foto CRIATIVA dentro do culto (pode ter amigos; um rosto precisa ser o dele)
+   4. Tela de sucesso + e-mail ao responsável com horário e foto
 ```
 
 ## Stack
@@ -56,11 +61,10 @@ Copie `.env.example` para `.env.local` e preencha:
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | do passo anterior (a service_role **só** no servidor) |
 | `CHURCH_LAT` / `CHURCH_LNG` | coordenadas da igreja — no Google Maps, clique com o botão direito no prédio e copie |
 | `CHURCH_RADIUS_METERS` | raio aceito; comece com **150** (GPS dentro de prédio erra 20–60 m) |
-| `FACE_MATCH_THRESHOLD` | opcional, padrão `0.55`. Distância máxima entre a selfie e a foto do cadastro. Menor = mais rígido; se pessoas reais forem recusadas, teste `0.6` |
+| `FACE_MATCH_THRESHOLD` | opcional, padrão `0.65`. Distância máxima entre um rosto da foto criativa e a foto de registro. Menor = mais rígido; se adolescentes forem recusados, teste `0.7` |
 | `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `EMAIL_FROM` | envio do e-mail ao responsável a cada check-in (veja "E-mail para o responsável" abaixo). Sem elas, o check-in funciona e o aviso fica como `sem_config` |
 | `GEOFENCE_DISABLED` | `true` = **modo teste**: pula a localização (check-in de qualquer lugar, aviso amarelo na tela). Deixe `false` no culto |
-| `REGISTRATION_PASSWORD` | senha que o fiscal digita para liberar cada cadastro |
-| `PASTOR_PASSWORD` | senha da área do pastor (`/pastor`): feed ao vivo dos check-ins e cadastro sem a senha do fiscal |
+| `PASTOR_PASSWORD` | senha da área do pastor (`/pastor`): feed ao vivo dos check-ins e cadastro |
 | `CHECKIN_SECRET` | gere com `openssl rand -hex 32` |
 | `PUBLIC_APP_URL` | endereço final do app (usado no QR code) |
 
@@ -124,25 +128,26 @@ O status de cada aviso aparece na coluna `aviso_responsavel` da view `presencas`
 
 Abra **https://flag-checkin.vercel.app/pastor** e entre com a senha `PASTOR_PASSWORD`. A sessão dura 12 h no aparelho.
 - **Ao vivo:** quem fez check-in hoje, do mais recente para o mais antigo, atualizando sozinho a cada 4 s.
-- **Cadastrar:** cadastra adolescentes sem precisar da senha do fiscal.
+- **Cadastrar:** o mesmo cadastro do responsável, para cadastrar vários em sequência.
 
 Para ver o feed funcionando sem ninguém na igreja: `npm run simular` (e `node scripts/simular-checkins.mjs --limpar`
 para apagar os cadastros de simulação depois).
 
 ## Ver as presenças
 No Supabase: **Table Editor → `presencas`** (lista por culto, com horário, responsável e distância). Para ver uma foto,
-abra **Storage → fotos** e o caminho indicado na coluna `selfie` ou `foto_cadastro`. Dá para exportar em CSV pelo
+abra **Storage → fotos** e o caminho indicado na coluna `foto_checkin` ou `foto_cadastro`. Dá para exportar em CSV pelo
 próprio painel.
 
 ## Segurança e LGPD
 - Banco com RLS ligado e sem políticas públicas: o navegador nunca fala direto com o banco, só com as rotas `/api`.
 - Fotos em bucket privado; quando o app precisa mostrar uma foto, gera um link temporário (10 min).
-- CPF inexistente e data errada dão a **mesma** mensagem, para não revelar quem está cadastrado.
-- O token entre "CPF" e "selfie" é assinado (HMAC) e vale 5 minutos; um check-in por pessoa por dia.
-- A senha do fiscal é conferida no servidor, com comparação em tempo constante.
+- Nome inexistente e data errada dão a **mesma** mensagem, para não revelar quem está cadastrado.
+- O token entre a identificação e a foto é assinado (HMAC) e vale 4 h (a foto criativa é dentro do culto); um check-in
+  por pessoa por dia, e um por telefone de visitante por dia.
+- O cadastro é aberto (sem senha), com CPF único, validação no servidor e um campo escondido contra robôs.
 - Cadastro exige marcar a autorização do responsável (dados de menores — LGPD art. 14); a data fica gravada.
-- **Limites conhecidos:** GPS de celular pode ser falsificado com apps de "fake GPS" — por isso existe a selfie, que o
-  fiscal pode comparar com a foto do cadastro. Não há limite de tentativas por IP; se precisar, adicione
+- **Limites conhecidos:** GPS de celular pode ser falsificado com apps de "fake GPS" — por isso existe a foto com
+  reconhecimento facial, que os líderes também podem conferir no feed do pastor. Não há limite de tentativas por IP; se precisar, adicione
   Upstash Ratelimit (grátis) nas rotas `/api/checkin/identificar` e `/api/cadastro`.
 
 ## Manutenção
@@ -154,11 +159,11 @@ where bucket_id = 'fotos' and name like 'checkins/%' and created_at < now() - in
 
 ## Estrutura
 ```
-app/checkin/page.tsx              fluxo de check-in (local → dados → selfie → sucesso)
-app/cadastro/page.tsx             cadastro com senha do fiscal
+app/checkin/page.tsx              fluxo de check-in (local → nome e nascimento ou visitante → foto → sucesso)
+app/cadastro/page.tsx             cadastro pelo responsável (sem foto, sem senha)
 app/api/checkin/local             confere a localização
 app/api/checkin/identificar       confere CPF + nascimento, emite token
-app/api/checkin/confirmar         recebe a selfie e grava o check-in
+app/api/checkin/confirmar         foto de registro (1º) ou criativa → grava o check-in
 app/api/cadastro                  grava novo adolescente
 components/Brand.tsx              cabeçalho Flag (destaque) + Juventude O2
 components/Camera.tsx             câmera frontal ao vivo com fallback

@@ -9,6 +9,8 @@ type Item = {
   serviceDate: string;
   name: string;
   firstName: string;
+  isVisitor?: boolean;
+  photoKind?: "registro" | "criativa" | null;
   checkedInAt: string;
   selfieUrl: string | null;
   avatarUrl: string | null;
@@ -246,10 +248,14 @@ function Post({ it, now, isNew = false, example = false }: { it: Item; now: numb
   return (
           <li className={`post ${isNew ? "post--new" : ""} ${example ? "post--example" : ""}`}>
             <header className="post__head">
-              {it.avatarUrl ? <img className="post__avatar" src={it.avatarUrl} alt="" /> : <span className="post__avatar post__avatar--empty" />}
+              {it.avatarUrl ? (
+                <img className="post__avatar" src={it.avatarUrl} alt="" />
+              ) : (
+                <span className="post__avatar post__avatar--empty" aria-hidden>{it.firstName.charAt(0).toUpperCase()}</span>
+              )}
               <div className="post__who">
                 <strong>{it.name}</strong>
-                <span>{example ? `culto de ${fmtDay(it.serviceDate)}` : "chegou ao culto"} · {fmtTime(it.checkedInAt)}</span>
+                <span>{example ? `culto de ${fmtDay(it.serviceDate)}` : it.isVisitor ? "visitante · chegou ao culto" : "chegou ao culto"} · {fmtTime(it.checkedInAt)}</span>
               </div>
               {example ? (
                 <span className="tag tag--example">Exemplo</span>
@@ -260,10 +266,13 @@ function Post({ it, now, isNew = false, example = false }: { it: Item; now: numb
             {it.selfieUrl ? (
               <img className="post__img" src={it.selfieUrl} alt={`Selfie do check-in de ${it.firstName}`} loading="lazy" />
             ) : (
-              <div className="post__img post__img--empty">Foto indisponível</div>
+              <div className="post__img post__img--empty">{it.isVisitor ? "Visitante sem foto" : "Foto indisponível"}</div>
             )}
             <footer className="post__foot">
               <span className="tag tag--ok">✓ Check-in confirmado</span>
+              {it.isVisitor && <span className="tag tag--visitor">👋 Visitante</span>}
+              {it.photoKind === "registro" && <span className="tag tag--first">⭐ 1º check-in</span>}
+              {it.photoKind === "criativa" && !it.isVisitor && <span className="tag">📸 Foto criativa</span>}
               {it.faceDistance != null && <span className="tag">🙂 Rosto confere</span>}
               {it.guardianEmailStatus === "enviado" && <span className="tag">✉️ Responsável avisado</span>}
               {it.guardianEmailStatus === "falhou" && <span className="tag tag--warn">✉️ E-mail falhou</span>}

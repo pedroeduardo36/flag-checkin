@@ -206,3 +206,26 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .feed-divider::before, .feed-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .post--example { outline: 2px dashed #f0b429; outline-offset: -2px; }
 .tag--example { background: #fff4d6; color: #8a5a00; }
+
+/* ---------- Cadastro pelo responsável ---------- */
+.section { border: 1.5px solid var(--line); border-radius: 16px; padding: 14px 14px 4px; margin-bottom: 16px; }
+.section--teen { background: #f7fbfd; }
+.section legend { display: flex; align-items: center; gap: 8px; padding: 0 6px; margin-bottom: 4px; }
+.section__step { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--flag); color: #fff; font-size: 13px; }
+.section__who { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+.field__hint { font-style: normal; font-size: 12px; color: var(--muted); }
+.success__photo--icon { display: grid; place-items: center; width: 120px; height: 120px; border-radius: 50%; background: #e7f7ee; color: var(--ok); font-size: 56px; font-weight: 900; margin: 8px 0 18px; }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+
+/* ---------- Check-in: escolha membro/visitante e fotos ---------- */
+.segmented { display: flex; gap: 4px; background: var(--flag-soft); padding: 4px; border-radius: 12px; margin-bottom: 18px; }
+.segmented button { flex: 1; font: inherit; font-weight: 700; font-size: 14px; min-height: 42px; border: 0; border-radius: 9px; background: transparent; color: var(--flag-dark); cursor: pointer; }
+.segmented button.on { background: #fff; color: var(--ink); box-shadow: 0 2px 8px rgba(13,34,48,.12); }
+.info--first { background: #fff8e1; }
+.linklike { font: inherit; color: inherit; font-weight: 700; text-decoration: underline; background: none; border: 0; padding: 0; cursor: pointer; }
+.center-text { text-align: center; margin-top: 14px; }
+.success .tag { margin-bottom: 8px; }
+.post__avatar--empty { display: inline-grid; place-items: center; color: #fff; font-weight: 800; font-size: 18px; }
+.post__img--empty { aspect-ratio: 4 / 3; }
+.tag--visitor { background: #f3e8ff; color: #6b21a8; }
+.tag--first { background: #fff4d6; color: #8a5a00; }

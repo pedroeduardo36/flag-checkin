@@ -1,12 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Shell } from "@/components/Brand";
 import { Camera } from "@/components/Camera";
-import { brDateToIso, isValidBirthDate, isValidCpf, maskCpf, maskDate } from "@/lib/format";
+import { brDateToIso, isValidBirthDate, isValidPhone, maskDate, maskPhone, nameTokens } from "@/lib/format";
 
 type Coords = { lat: number; lng: number; accuracy: number };
+type PhotoKind = "registro" | "criativa";
+/** Identificação feita na entrada, guardada no celular até a foto (que pode ser já dentro do culto). */
+type Pending = { token: string; firstName: string; photoKind: PhotoKind; expiresAt: string };
+
 type Step =
   | { name: "boot" }
   | { name: "intro" }
@@ -14,8 +17,25 @@ type Step =
   | { name: "denied" }
   | { name: "outside"; distance: number; radius: number; accuracy: number }
   | { name: "identify" }
-  | { name: "selfie"; token: string; firstName: string }
-  | { name: "success"; name_: string; photo: string | null; at: string; repeat: boolean };
+  | { name: "photo"; pending: Pending }
+  | { name: "success"; who: string; photo: string | null; at: string | null; repeat: boolean; kind: "registro" | "criativa" | "visitante" };
+
+const PENDING_KEY = "o2_checkin_pendente";
+
+function loadPending(): Pending | null {
+  try {
+    const p = JSON.parse(localStorage.getItem(PENDING_KEY) ?? "null") as Pending | null;
+    return p && new Date(p.expiresAt).getTime() > Date.now() + 60_000 ? p : null;
+  } catch {
+    return null;
+  }
+}
+const savePending = (p: Pending | null) => {
+  try {
+    if (p) localStorage.setItem(PENDING_KEY, JSON.stringify(p));
+    else localStorage.removeItem(PENDING_KEY);
+  } catch {}
+};
 
 async function post<T = any>(url: string, body: unknown): Promise<{ ok: boolean; status: number; data: T }> {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -26,26 +46,32 @@ async function post<T = any>(url: string, body: unknown): Promise<{ ok: boolean;
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
 
+const FACE_CODES = ["ROSTO_NAO_CONFERE", "SEM_ROSTO", "VARIOS_ROSTOS", "ROSTO_PEQUENO", "IMAGEM_INVALIDA"];
+
 export default function CheckinPage() {
   const [step, setStep] = useState<Step>({ name: "boot" });
   const [testMode, setTestMode] = useState(false);
   const [coords, setCoords] = useState<Coords | null>(null);
-  const [cpf, setCpf] = useState("");
+  const [who, setWho] = useState<"membro" | "visitante">("membro");
+  const [name, setName] = useState("");
   const [birth, setBirth] = useState("");
+  const [phone, setPhone] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ msg: string; code?: string } | null>(null);
 
   useEffect(() => {
     (async () => {
-      // Modo teste (GEOFENCE_DISABLED=true no servidor): pula a etapa de localização.
+      // Já se identificou na entrada? Vai direto para a foto.
+      const pending = loadPending();
+      if (pending) return setStep({ name: "photo", pending });
+
       const cfg = await fetch("/api/checkin/local").then((r) => r.json()).catch(() => ({}));
       if (cfg.disabled) {
         setTestMode(true);
         return setStep({ name: "identify" });
       }
       setStep({ name: "intro" });
-      // Se a permissão já foi dada antes, pula direto para a verificação.
       const p = await navigator.permissions?.query({ name: "geolocation" as PermissionName }).catch(() => null);
       if (p?.state === "granted") locate();
       if (p?.state === "denied") setStep({ name: "denied" });
@@ -84,40 +110,58 @@ export default function CheckinPage() {
 
   async function identify(e: React.FormEvent) {
     e.preventDefault();
-    if (!isValidCpf(cpf)) return setError({ msg: "CPF inválido. Confira os números." });
+    if (nameTokens(name).length < 2) return setError({ msg: "Digite seu nome completo (nome e sobrenome)." });
     const birthIso = brDateToIso(birth);
     if (!isValidBirthDate(birthIso)) return setError({ msg: "Data de nascimento inválida. Use DD/MM/AAAA." });
     setBusy(true);
     setError(null);
-    const r = await post("/api/checkin/identificar", { cpf, birthDate: birthIso, ...coords });
+    const r = await post("/api/checkin/identificar", { name, birthDate: birthIso, ...coords });
     setBusy(false);
     if (!r.ok) {
       if (r.data.code === "FORA_DO_LOCAL") return locate();
       return setError({ msg: r.data.error ?? "Erro inesperado.", code: r.data.code });
     }
     if (r.data.alreadyCheckedIn)
-      return setStep({ name: "success", name_: r.data.name, photo: r.data.photoUrl, at: r.data.checkedInAt, repeat: true });
+      return setStep({ name: "success", who: r.data.name, photo: r.data.photoUrl, at: r.data.checkedInAt, repeat: true, kind: "criativa" });
+    const pending: Pending = { token: r.data.token, firstName: r.data.firstName, photoKind: r.data.photoKind, expiresAt: r.data.expiresAt };
+    savePending(pending);
     setPhoto(null);
-    setStep({ name: "selfie", token: r.data.token, firstName: r.data.firstName });
+    setStep({ name: "photo", pending });
   }
 
-  async function confirm() {
-    if (step.name !== "selfie" || !photo) return;
+  async function confirm(pending: Pending) {
+    if (!photo) return;
     setBusy(true);
     setError(null);
-    const r = await post("/api/checkin/confirmar", { token: step.token, photo });
+    const r = await post("/api/checkin/confirmar", { token: pending.token, photo });
     setBusy(false);
     if (!r.ok) {
       if (r.data.code === "TOKEN") {
+        savePending(null);
         setError({ msg: r.data.error });
-        return setStep({ name: "identify" });
+        return setStep({ name: "intro" });
       }
-      // Rosto não encontrado / não confere: limpa a foto para tirar outra (o token continua valendo).
-      if (["ROSTO_NAO_CONFERE", "SEM_ROSTO", "VARIOS_ROSTOS", "ROSTO_PEQUENO", "IMAGEM_INVALIDA"].includes(r.data.code))
-        setPhoto(null);
+      if (r.data.code === "DUPLICADO") savePending(null);
+      if (FACE_CODES.includes(r.data.code)) setPhoto(null);
+      return setError({ msg: r.data.error ?? "Erro inesperado.", code: r.data.code });
+    }
+    savePending(null);
+    setStep({ name: "success", who: r.data.name, photo, at: r.data.checkedInAt, repeat: false, kind: r.data.photoKind });
+  }
+
+  async function visitor(e: React.FormEvent) {
+    e.preventDefault();
+    if (nameTokens(name).length < 2) return setError({ msg: "Digite seu nome e sobrenome." });
+    if (!isValidPhone(phone)) return setError({ msg: "Digite um telefone válido com DDD." });
+    setBusy(true);
+    setError(null);
+    const r = await post("/api/checkin/visitante", { name, phone, photo, ...coords });
+    setBusy(false);
+    if (!r.ok) {
+      if (r.data.code === "FORA_DO_LOCAL") return locate();
       return setError({ msg: r.data.error ?? "Erro inesperado." });
     }
-    setStep({ name: "success", name_: r.data.name, photo, at: r.data.checkedInAt, repeat: false });
+    setStep({ name: "success", who: r.data.name, photo, at: r.data.checkedInAt ?? null, repeat: !!r.data.alreadyCheckedIn, kind: "visitante" });
   }
 
   const errorBox = error && (
@@ -126,7 +170,11 @@ export default function CheckinPage() {
       {error.code === "NAO_ENCONTRADO" && (
         <>
           {" "}
-          Ainda não tem cadastro? <Link href="/cadastro">Cadastre-se aqui</Link>.
+          Primeira vez na O2?{" "}
+          <button type="button" className="linklike" onClick={() => { setWho("visitante"); setError(null); }}>
+            Entre como visitante
+          </button>
+          .
         </>
       )}
     </div>
@@ -135,6 +183,10 @@ export default function CheckinPage() {
   return (
     <Shell compact={step.name === "success"}>
       <Progress step={step.name} />
+
+      {step.name === "boot" && (
+        <div className="center"><div className="spinner" aria-hidden /></div>
+      )}
 
       {step.name === "intro" && (
         <>
@@ -149,14 +201,7 @@ export default function CheckinPage() {
           </div>
           {errorBox}
           <button className="btn" onClick={locate}>Ativar localização</button>
-          <Link href="/cadastro" className="link-center">Primeira vez? Faça seu cadastro</Link>
         </>
-      )}
-
-      {step.name === "boot" && (
-        <div className="center">
-          <div className="spinner" aria-hidden />
-        </div>
       )}
 
       {step.name === "locating" && (
@@ -200,39 +245,97 @@ export default function CheckinPage() {
       )}
 
       {step.name === "identify" && (
-        <form onSubmit={identify} noValidate>
+        <>
           {testMode ? (
             <div className="test-chip">Modo teste · localização desativada</div>
           ) : (
             <div className="ok-chip">✓ Local confirmado</div>
           )}
-          <h1>Quem é você?</h1>
-          <label className="field">
-            <span>CPF</span>
-            <input inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" value={cpf}
-              onChange={(e) => setCpf(maskCpf(e.target.value))} required />
-          </label>
-          <label className="field">
-            <span>Data de nascimento</span>
-            <input inputMode="numeric" autoComplete="bday" placeholder="DD/MM/AAAA" maxLength={10} value={birth}
-              onChange={(e) => setBirth(maskDate(e.target.value))} required />
-          </label>
-          {errorBox}
-          <button className="btn" disabled={busy}>{busy ? "Conferindo…" : "Continuar"}</button>
-          <Link href="/cadastro" className="link-center">Não tenho cadastro</Link>
-        </form>
+          <div className="segmented" role="tablist" aria-label="Tipo de check-in">
+            <button role="tab" aria-selected={who === "membro"} className={who === "membro" ? "on" : ""}
+              onClick={() => { setWho("membro"); setError(null); }}>Tenho cadastro</button>
+            <button role="tab" aria-selected={who === "visitante"} className={who === "visitante" ? "on" : ""}
+              onClick={() => { setWho("visitante"); setError(null); setPhoto(null); }}>Sou visitante</button>
+          </div>
+
+          {who === "membro" ? (
+            <form onSubmit={identify} noValidate>
+              <h1>Quem é você?</h1>
+              <label className="field">
+                <span>Nome completo</span>
+                <input autoComplete="name" placeholder="Ex.: Ana Beatriz Souza" value={name} onChange={(e) => setName(e.target.value)} />
+              </label>
+              <label className="field">
+                <span>Data de nascimento</span>
+                <input inputMode="numeric" autoComplete="bday" placeholder="DD/MM/AAAA" maxLength={10} value={birth}
+                  onChange={(e) => setBirth(maskDate(e.target.value))} />
+              </label>
+              {errorBox}
+              <button className="btn" disabled={busy}>{busy ? "Procurando…" : "Continuar"}</button>
+            </form>
+          ) : (
+            <form onSubmit={visitor} noValidate>
+              <h1>Bem-vindo(a) à O2! 👋</h1>
+              <p className="lead">Que bom ter você aqui. Só precisamos do seu nome e telefone.</p>
+              <label className="field">
+                <span>Nome e sobrenome</span>
+                <input autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+              </label>
+              <label className="field">
+                <span>Telefone (WhatsApp)</span>
+                <input type="tel" inputMode="tel" autoComplete="tel" placeholder="(00) 00000-0000" value={phone}
+                  onChange={(e) => setPhone(maskPhone(e.target.value))} />
+              </label>
+              <div className="field">
+                <span>Foto criativa <em className="field__hint">(opcional)</em></span>
+                <Camera value={photo} onChange={setPhoto} label="Tirar foto criativa" />
+              </div>
+              {errorBox}
+              <button className="btn" disabled={busy}>{busy ? "Enviando…" : "Fazer check-in"}</button>
+            </form>
+          )}
+        </>
       )}
 
-      {step.name === "selfie" && (
+      {step.name === "photo" && step.pending.photoKind === "registro" && (
         <>
-          <h1>Oi, {step.firstName}! 👋</h1>
-          <p className="lead">Tire uma selfie agora para confirmar que é você mesmo.</p>
+          <h1>Oi, {step.pending.firstName}! 👋</h1>
+          <div className="info info--first">
+            <span aria-hidden>⭐</span>
+            <span>
+              <strong>Seu primeiro check-in!</strong> Tire uma foto <strong>só do seu rosto</strong>, de frente e com boa luz.
+              Ela completa seu cadastro e confirma que é você mesmo.
+            </span>
+          </div>
           <Camera value={photo} onChange={(p) => { setPhoto(p); if (p) setError(null); }} label="Abrir câmera" />
           {errorBox}
           {photo && (
-            <button className="btn" onClick={confirm} disabled={busy}>
+            <button className="btn" onClick={() => confirm(step.pending)} disabled={busy}>
               {busy ? "Verificando rosto…" : "Confirmar check-in"}
             </button>
+          )}
+        </>
+      )}
+
+      {step.name === "photo" && step.pending.photoKind === "criativa" && (
+        <>
+          <div className="ok-chip">✓ {step.pending.firstName}, você foi identificado(a)</div>
+          <h1>Hora da foto criativa! 📸</h1>
+          <p className="lead">
+            Tire sua foto criativa <strong>dentro do culto</strong>: com os amigos, fazendo pose, careta… vale tudo, só
+            precisa aparecer o seu rosto.
+          </p>
+          <Camera value={photo} onChange={(p) => { setPhoto(p); if (p) setError(null); }} label="Tirar foto criativa" />
+          {errorBox}
+          {photo && (
+            <button className="btn" onClick={() => confirm(step.pending)} disabled={busy}>
+              {busy ? "Verificando…" : "Enviar e concluir check-in"}
+            </button>
+          )}
+          {!photo && (
+            <p className="hint center-text">
+              Ainda não é a hora? Pode fechar: sua identificação fica guardada neste celular até {fmtTime(step.pending.expiresAt)}.
+            </p>
           )}
         </>
       )}
@@ -240,15 +343,18 @@ export default function CheckinPage() {
       {step.name === "success" && (
         <div className="center success">
           <div className="success__photo">
-            {step.photo ? <img src={step.photo} alt={`Foto de ${step.name_}`} /> : <div className="success__noimg" />}
+            {step.photo ? <img src={step.photo} alt={`Foto de ${step.who}`} /> : <div className="success__noimg" />}
             <span className="success__badge" aria-hidden>✓</span>
           </div>
           <h1>{step.repeat ? "Check-in já feito!" : "Check-in realizado!"}</h1>
-          <p className="success__name">{step.name_}</p>
-          <p className="hint">
-            {step.repeat ? "Seu check-in de hoje foi registrado às " : "Registrado às "}
-            <strong>{fmtTime(step.at)}</strong>. Bom culto! 🙌
-          </p>
+          <p className="success__name">{step.who}</p>
+          {step.kind === "visitante" && <span className="tag">Visitante</span>}
+          {step.at && (
+            <p className="hint">
+              {step.repeat ? "Seu check-in de hoje foi registrado às " : "Registrado às "}
+              <strong>{fmtTime(step.at)}</strong>. Bom culto! 🙌
+            </p>
+          )}
         </div>
       )}
     </Shell>
@@ -257,8 +363,7 @@ export default function CheckinPage() {
 
 function Progress({ step }: { step: Step["name"] }) {
   const order = ["local", "dados", "foto", "pronto"];
-  const current =
-    step === "identify" ? 1 : step === "selfie" ? 2 : step === "success" ? 4 : 0;
+  const current = step === "identify" ? 1 : step === "photo" ? 2 : step === "success" ? 4 : 0;
   return (
     <ol className="progress" aria-label="Etapas do check-in">
       {order.map((label, i) => (

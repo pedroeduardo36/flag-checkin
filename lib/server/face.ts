@@ -22,9 +22,17 @@ const MIN_FACE_RATIO = 0.15;
 /** Um segundo rosto com pelo menos 50% da área do principal conta como "outra pessoa na foto". */
 const SECOND_FACE_AREA_RATIO = 0.5;
 
+/** Na foto criativa (em grupo, de longe) um rosto pequeno ainda serve para comparar. */
+const MIN_CREATIVE_FACE_RATIO = 0.06;
+
+/**
+ * Distância máxima entre um rosto da foto criativa e o rosto de referência do cadastro.
+ * 0,65 é mais tolerante que o padrão do face-api (0,6): a foto criativa tem pose, careta,
+ * luz do culto e outras pessoas. Pessoas diferentes ficam tipicamente acima de 0,75.
+ */
 export function matchThreshold(): number {
   const v = Number(process.env.FACE_MATCH_THRESHOLD);
-  return Number.isFinite(v) && v > 0 && v < 1.5 ? v : 0.55;
+  return Number.isFinite(v) && v > 0 && v < 1.5 ? v : 0.65;
 }
 
 let ready: Promise<void> | null = null;
@@ -52,40 +60,79 @@ export type FaceAnalysis =
 
 const fail = (code: Exclude<FaceAnalysis, { ok: true }>["code"], message: string): FaceAnalysis => ({ ok: false, code, message });
 
-/** Encontra o rosto principal da foto (JPEG) e devolve o descritor de 128 dimensões. */
-export async function analyzeFace(photo: Buffer): Promise<FaceAnalysis> {
-  await init();
+type DetectedFace = { descriptor: number[]; width: number; area: number; score: number };
 
+/** Detecta todos os rostos da foto (JPEG), do maior para o menor. */
+async function detectFaces(photo: Buffer): Promise<{ width: number; faces: DetectedFace[] } | null> {
+  await init();
   let img: { width: number; height: number; data: Uint8Array };
   try {
     img = jpeg.decode(photo, { useTArray: true, formatAsRGBA: false, maxMemoryUsageInMB: 256 });
   } catch {
-    return fail("IMAGEM_INVALIDA", "Não conseguimos ler a foto. Tire outra.");
+    return null;
   }
-
   const tensor = tf.tensor3d(img.data, [img.height, img.width, 3], "int32");
   try {
-    const faces = await faceapi
+    const found = await faceapi
       .detectAllFaces(tensor as any, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
       .withFaceLandmarks()
       .withFaceDescriptors();
-
-    if (!faces.length)
-      return fail("SEM_ROSTO", "Não encontramos um rosto na foto. Olhe para a câmera, com o rosto inteiro e bem iluminado.");
-
-    faces.sort((a, b) => b.detection.box.area - a.detection.box.area);
-    const [main, second] = faces;
-
-    if (second && second.detection.box.area >= main.detection.box.area * SECOND_FACE_AREA_RATIO)
-      return fail("VARIOS_ROSTOS", "Apareceu mais de uma pessoa na foto. Tire a foto sozinho(a).");
-
-    if (main.detection.box.width < img.width * MIN_FACE_RATIO)
-      return fail("ROSTO_PEQUENO", "O rosto ficou muito longe. Aproxime o celular e tire outra foto.");
-
-    return { ok: true, descriptor: Array.from(main.descriptor), score: main.detection.score };
+    const faces = found
+      .map((f) => ({ descriptor: Array.from(f.descriptor), width: f.detection.box.width, area: f.detection.box.area, score: f.detection.score }))
+      .sort((a, b) => b.area - a.area);
+    return { width: img.width, faces };
   } finally {
     tensor.dispose();
   }
+}
+
+/**
+ * Foto de REGISTRO (primeiro check-in): exige um rosto só, de perto.
+ * Devolve o descritor de 128 dimensões que vira a referência do cadastro.
+ */
+export async function analyzeFace(photo: Buffer): Promise<FaceAnalysis> {
+  const r = await detectFaces(photo);
+  if (!r) return fail("IMAGEM_INVALIDA", "Não conseguimos ler a foto. Tire outra.");
+  const { faces } = r;
+  {
+    if (!faces.length)
+      return fail("SEM_ROSTO", "Não encontramos um rosto na foto. Olhe para a câmera, com o rosto inteiro e bem iluminado.");
+
+    const [main, second] = faces;
+
+    if (second && second.area >= main.area * SECOND_FACE_AREA_RATIO)
+      return fail("VARIOS_ROSTOS", "Apareceu mais de uma pessoa na foto. Tire a foto sozinho(a).");
+
+    if (main.width < r.width * MIN_FACE_RATIO)
+      return fail("ROSTO_PEQUENO", "O rosto ficou muito longe. Aproxime o celular e tire outra foto.");
+
+    return { ok: true, descriptor: main.descriptor, score: main.score };
+  }
+}
+
+export type CreativeMatch =
+  | { ok: true; distance: number; faces: number }
+  | { ok: false; code: "SEM_ROSTO" | "IMAGEM_INVALIDA" | "ROSTO_NAO_CONFERE"; message: string; distance?: number };
+
+/**
+ * Foto CRIATIVA (check-ins seguintes): pode ter amigos, pose e careta.
+ * Basta UM rosto da foto ser parecido o suficiente com a referência do cadastro.
+ */
+export async function matchCreativePhoto(photo: Buffer, reference: ArrayLike<number>): Promise<CreativeMatch> {
+  const r = await detectFaces(photo);
+  if (!r) return { ok: false, code: "IMAGEM_INVALIDA", message: "Não conseguimos ler a foto. Tire outra." };
+  const usable = r.faces.filter((f) => f.width >= r.width * MIN_CREATIVE_FACE_RATIO);
+  if (!usable.length)
+    return { ok: false, code: "SEM_ROSTO", message: "Seu rosto precisa aparecer na foto criativa. Pode ter amigos junto, mas apareça!" };
+  const distance = Math.min(...usable.map((f) => faceDistance(f.descriptor, reference)));
+  if (distance > matchThreshold())
+    return {
+      ok: false,
+      code: "ROSTO_NAO_CONFERE",
+      distance,
+      message: "Não reconhecemos você nessa foto. Tire outra com o rosto bem visível.",
+    };
+  return { ok: true, distance, faces: usable.length };
 }
 
 export function faceDistance(a: ArrayLike<number>, b: ArrayLike<number>): number {

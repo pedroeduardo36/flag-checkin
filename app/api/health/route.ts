@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 // Diagnóstico da integração: confere variáveis, tabelas e bucket. Não expõe dados.
 export async function GET() {
   const checks: Record<string, boolean | string> = {};
-  const envs = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "CHURCH_LAT", "CHURCH_LNG", "REGISTRATION_PASSWORD", "CHECKIN_SECRET"];
+  const envs = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "CHURCH_LAT", "CHURCH_LNG", "PASTOR_PASSWORD", "CHECKIN_SECRET"];
   const missing = envs.filter((k) => !process.env[k]);
   checks.env = missing.length ? `faltando: ${missing.join(", ")}` : true;
   if (missing.length) return NextResponse.json({ ok: false, checks }, { status: 500 });

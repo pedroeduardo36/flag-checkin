@@ -1,6 +1,6 @@
 // Simula adolescentes chegando ao culto, para ver o feed do pastor ao vivo.
 // Uso:  node scripts/simular-checkins.mjs [URL] [--limpar]
-// Cadastra pela área do pastor (sem senha do fiscal) e faz o check-in nas coordenadas da igreja.
+// Cadastra como o responsável faria (sem foto) e faz o 1º check-in (foto de registro) nas coordenadas da igreja.
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
@@ -16,7 +16,7 @@ if (args.includes("--limpar")) {
   for (const m of data ?? []) {
     const { data: cks } = await sb.from("checkins").select("photo_path, is_example").eq("member_id", m.id);
     if (cks?.some((c) => c.is_example)) continue; // nunca apaga o check-in de exemplo
-    await sb.storage.from("fotos").remove([m.photo_path, ...(cks ?? []).map((c) => c.photo_path)]);
+    await sb.storage.from("fotos").remove([m.photo_path, ...(cks ?? []).map((c) => c.photo_path)].filter(Boolean));
     await sb.from("members").delete().eq("id", m.id);
   }
   console.log(`🧹 ${data?.length ?? 0} cadastro(s) de simulação removido(s)`);
@@ -47,11 +47,11 @@ for (const [i, p] of pessoas.entries()) {
   const doc = cpf();
   const c = await post("/api/cadastro", {
     name: p.name, cpf: doc, phone: "61999990000", birthDate: "2010-05-20", guardianName: "Responsável Simulação",
-    guardianPhone: "61988880000", guardianEmail: env.SMTP_USER || "responsavel@example.com", consent: true, photo: foto(p.cadastro),
+    guardianPhone: "61988880000", guardianEmail: env.SMTP_USER || "responsavel@example.com", consent: true,
   }, cookie);
-  console.log(`cadastro pelo pastor, sem senha do fiscal: ${p.name} → ${c.status}`);
-  const id = await post("/api/checkin/identificar", { ...local, cpf: doc, birthDate: "2010-05-20" });
-  const ok = await post("/api/checkin/confirmar", { token: id.data.token, photo: foto(p.selfie) });
-  console.log(`check-in: ${p.name} → ${ok.status}`);
+  console.log(`cadastro (sem foto): ${p.name} → ${c.status}`);
+  const id = await post("/api/checkin/identificar", { ...local, name: p.name, birthDate: "2010-05-20" });
+  const ok = await post("/api/checkin/confirmar", { token: id.data.token, photo: foto(p.cadastro) });
+  console.log(`1º check-in (foto de ${id.data.photoKind}): ${p.name} → ${ok.status}`);
   if (i < pessoas.length - 1) await new Promise((r) => setTimeout(r, 8000));
 }

@@ -1,28 +1,24 @@
 import { withErrors } from "@/lib/server/http";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/server/supabase";
-import { env, PHOTO_BUCKET } from "@/lib/server/env";
-import { decodePhoto, safeEqual } from "@/lib/server/security";
-import { analyzeFace } from "@/lib/server/face";
-import { isPastorRequest } from "@/lib/server/pastor";
-
-export const maxDuration = 30;
-import { isValidBirthDate, isValidCpf, isValidEmail, isValidPhone, onlyDigits } from "@/lib/format";
+import { isValidBirthDate, isValidCpf, isValidEmail, isValidPhone, nameTokens, onlyDigits } from "@/lib/format";
 
 const clean = (v: unknown, max = 120) => String(v ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
+/**
+ * Cadastro feito pelo RESPONSÁVEL antes do culto (página /cadastro) ou pelo pastor.
+ * Sem foto e sem senha do fiscal: a foto de referência é tirada no primeiro check-in.
+ */
 export const POST = withErrors(async (req: Request) => {
   const b = await req.json().catch(() => null);
   if (!b) return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
-
-  // Libera com a senha do fiscal OU com a sessão da área do pastor.
-  if (!isPastorRequest(req) && !safeEqual(String(b.password ?? ""), env.registrationPassword))
-    return NextResponse.json({ error: "Senha do fiscal incorreta.", field: "password" }, { status: 401 });
+  // Campo invisível para pessoas: só robôs o preenchem.
+  if (b.website) return NextResponse.json({ ok: true });
 
   const data = {
     name: clean(b.name),
     cpf: onlyDigits(b.cpf),
-    phone: onlyDigits(b.phone),
+    phone: onlyDigits(b.phone) || null,
     birth_date: String(b.birthDate ?? ""),
     guardian_name: clean(b.guardianName),
     guardian_phone: onlyDigits(b.guardianPhone),
@@ -30,47 +26,22 @@ export const POST = withErrors(async (req: Request) => {
   };
 
   const errors: Record<string, string> = {};
-  if (data.name.split(" ").length < 2) errors.name = "Informe nome e sobrenome.";
-  if (!isValidCpf(data.cpf)) errors.cpf = "CPF inválido.";
-  if (!isValidPhone(data.phone)) errors.phone = "Telefone inválido.";
+  if (nameTokens(data.name).length < 2) errors.name = "Informe nome e sobrenome do adolescente.";
+  if (!isValidCpf(data.cpf)) errors.cpf = "CPF do adolescente inválido.";
+  if (data.phone && !isValidPhone(data.phone)) errors.phone = "Telefone do adolescente inválido.";
   if (!isValidBirthDate(data.birth_date)) errors.birthDate = "Data de nascimento inválida.";
-  if (data.guardian_name.split(" ").length < 2) errors.guardianName = "Informe nome e sobrenome do responsável.";
-  if (!isValidPhone(data.guardian_phone)) errors.guardianPhone = "Telefone do responsável inválido.";
-  if (!isValidEmail(data.guardian_email)) errors.guardianEmail = "E-mail do responsável inválido.";
-  if (b.consent !== true) errors.consent = "É preciso a autorização do responsável.";
-  const photo = decodePhoto(b.photo);
-  if (!photo) errors.photo = "Tire uma foto do rosto.";
+  if (nameTokens(data.guardian_name).length < 2) errors.guardianName = "Informe seu nome e sobrenome.";
+  if (!isValidPhone(data.guardian_phone)) errors.guardianPhone = "Seu telefone está inválido.";
+  if (!isValidEmail(data.guardian_email)) errors.guardianEmail = "Seu e-mail está inválido.";
+  if (b.consent !== true) errors.consent = "É preciso autorizar o uso dos dados.";
   if (Object.keys(errors).length)
     return NextResponse.json({ error: "Corrija os campos destacados.", errors }, { status: 400 });
 
-  const { data: dup } = await db().from("members").select("id").eq("cpf", data.cpf).maybeSingle();
-  if (dup)
-    return NextResponse.json({ error: "Este CPF já está cadastrado. Faça o check-in.", code: "CPF_EXISTE" }, { status: 409 });
-
-  // A foto do cadastro precisa ter exatamente um rosto: ela é a referência dos check-ins.
-  const face = await analyzeFace(photo!.buffer);
-  if (!face.ok)
-    return NextResponse.json(
-      { error: face.message, code: face.code, errors: { photo: face.message } },
-      { status: 422 },
-    );
-
-  const path = `membros/${data.cpf}-${Date.now()}.jpg`;
-  const up = await db().storage.from(PHOTO_BUCKET).upload(path, photo!.buffer, { contentType: photo!.contentType });
-  if (up.error) {
-    console.error(up.error);
-    return NextResponse.json({ error: "Não foi possível enviar a foto." }, { status: 500 });
-  }
-
-  const { error } = await db()
-    .from("members")
-    .insert({ ...data, photo_path: path, face_descriptor: face.descriptor, guardian_consent_at: new Date().toISOString() });
+  const { error } = await db().from("members").insert({ ...data, guardian_consent_at: new Date().toISOString() });
   if (error) {
-    await db().storage.from(PHOTO_BUCKET).remove([path]);
     if (error.code === "23505")
-      return NextResponse.json({ error: "Este CPF já está cadastrado.", code: "CPF_EXISTE" }, { status: 409 });
-    console.error(error);
-    return NextResponse.json({ error: "Erro ao salvar o cadastro." }, { status: 500 });
+      return NextResponse.json({ error: "Este CPF já está cadastrado. O adolescente já pode fazer o check-in.", code: "CPF_EXISTE" }, { status: 409 });
+    throw error;
   }
   return NextResponse.json({ ok: true });
 });

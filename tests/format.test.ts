@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { brDateToIso, isValidEmail, maskDate, distanceMeters, firstName, isValidBirthDate, isValidCpf, isValidPhone, maskCpf, maskPhone } from "@/lib/format";
+import { brDateToIso, isValidEmail, maskDate, nameMatchScore, nameTokens, distanceMeters, firstName, isValidBirthDate, isValidCpf, isValidPhone, maskCpf, maskPhone } from "@/lib/format";
 
 describe("CPF", () => {
   it("aceita CPFs válidos, com ou sem máscara", () => {
@@ -48,6 +48,29 @@ describe("Campo de data (DD/MM/AAAA)", () => {
   it("converte para o formato do banco só quando completa", () => {
     expect(brDateToIso("20/05/2010")).toBe("2010-05-20");
     expect(brDateToIso("20/05/201")).toBe("");
+  });
+});
+
+describe("Nome completo no check-in", () => {
+  const cadastro = "Ana Beatriz de Souza Lima";
+  it("normaliza acento, maiúsculas e conectivos", () => {
+    expect(nameTokens("  ANA Beatríz de Souza ")).toEqual(["ana", "beatriz", "souza"]);
+  });
+  it("acha com o nome completo, sem acento e com nomes do meio omitidos", () => {
+    expect(nameMatchScore("Ana Beatriz de Souza Lima", cadastro)).toBe(1);
+    expect(nameMatchScore("ana souza", cadastro)).toBeGreaterThan(0);
+    expect(nameMatchScore("Ana Lima", cadastro)).toBeGreaterThan(0);
+  });
+  it("tolera um erro de digitação em palavras longas", () => {
+    expect(nameMatchScore("Ana Beatris Souza", cadastro)).toBeGreaterThan(0);
+  });
+  it("nome mais completo pontua mais", () => {
+    expect(nameMatchScore("Ana Beatriz Souza Lima", cadastro)).toBeGreaterThan(nameMatchScore("Ana Lima", cadastro));
+  });
+  it("recusa só o primeiro nome, primeiro nome diferente ou sobrenome que não existe", () => {
+    expect(nameMatchScore("Ana", cadastro)).toBe(0);
+    expect(nameMatchScore("Maria Souza", cadastro)).toBe(0);
+    expect(nameMatchScore("Ana Pereira", cadastro)).toBe(0);
   });
 });
 

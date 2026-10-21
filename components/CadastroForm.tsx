@@ -1,9 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
-import { Camera } from "@/components/Camera";
-import { brDateToIso, isValidBirthDate, isValidCpf, isValidEmail, isValidPhone, maskCpf, maskDate, maskPhone } from "@/lib/format";
+import { brDateToIso, isValidBirthDate, isValidCpf, isValidEmail, isValidPhone, maskCpf, maskDate, maskPhone, nameTokens } from "@/lib/format";
 
 type Form = {
   name: string;
@@ -13,41 +11,40 @@ type Form = {
   guardianName: string;
   guardianPhone: string;
   guardianEmail: string;
-  password: string;
   consent: boolean;
+  website: string; // armadilha para robôs (fica escondido)
 };
 
-const empty: Form = { name: "", cpf: "", phone: "", birthDate: "", guardianName: "", guardianPhone: "", guardianEmail: "", password: "", consent: false };
+const empty: Form = { name: "", cpf: "", phone: "", birthDate: "", guardianName: "", guardianPhone: "", guardianEmail: "", consent: false, website: "" };
 
-function validate(f: Form, photo: string | null, mode: Mode) {
+function validate(f: Form) {
   const e: Record<string, string> = {};
-  if (f.name.trim().split(/\s+/).length < 2) e.name = "Informe nome e sobrenome.";
-  if (!isValidCpf(f.cpf)) e.cpf = "CPF inválido.";
-  if (!isValidPhone(f.phone)) e.phone = "Telefone inválido.";
+  if (nameTokens(f.name).length < 2) e.name = "Informe nome e sobrenome do adolescente.";
+  if (!isValidCpf(f.cpf)) e.cpf = "CPF do adolescente inválido.";
+  if (f.phone && !isValidPhone(f.phone)) e.phone = "Telefone do adolescente inválido.";
   if (!isValidBirthDate(brDateToIso(f.birthDate))) e.birthDate = "Data inválida. Use DD/MM/AAAA.";
-  if (!photo) e.photo = "Tire uma foto do rosto.";
-  if (f.guardianName.trim().split(/\s+/).length < 2) e.guardianName = "Informe nome e sobrenome do responsável.";
-  if (!isValidPhone(f.guardianPhone)) e.guardianPhone = "Telefone do responsável inválido.";
-  if (!isValidEmail(f.guardianEmail)) e.guardianEmail = "E-mail do responsável inválido.";
-  if (!f.consent) e.consent = "É preciso a autorização do responsável.";
-  if (mode === "fiscal" && !f.password) e.password = "O fiscal precisa digitar a senha.";
+  if (nameTokens(f.guardianName).length < 2) e.guardianName = "Informe seu nome e sobrenome.";
+  if (!isValidPhone(f.guardianPhone)) e.guardianPhone = "Seu telefone está inválido.";
+  if (!isValidEmail(f.guardianEmail)) e.guardianEmail = "Seu e-mail está inválido.";
+  if (!f.consent) e.consent = "É preciso autorizar o uso dos dados.";
   return e;
 }
 
-type Mode = "fiscal" | "pastor";
+type Mode = "responsavel" | "pastor";
 
 /**
- * Formulário de cadastro do adolescente.
- * - fiscal: pede a senha do fiscal (página pública /cadastro).
- * - pastor: sem senha; a API libera pela sessão da área do pastor.
+ * Cadastro do adolescente, sem foto e sem senha.
+ * - responsavel: o pai, a mãe ou o responsável preenche antes do culto (/cadastro).
+ * - pastor: mesmo formulário dentro da área do pastor, com "cadastrar outro".
+ * A foto de referência é tirada pelo próprio adolescente no primeiro check-in.
  */
 export function CadastroForm({ mode, onSessionExpired }: { mode: Mode; onSessionExpired?: () => void }) {
   const [f, setF] = useState<Form>(empty);
-  const [photo, setPhoto] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  const pastor = mode === "pastor";
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => {
     setF((p) => ({ ...p, [k]: v }));
@@ -56,7 +53,7 @@ export function CadastroForm({ mode, onSessionExpired }: { mode: Mode; onSession
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const v = validate(f, photo, mode);
+    const v = validate(f);
     setErrors(v);
     if (Object.keys(v).length) {
       setMsg("Corrija os campos destacados.");
@@ -68,118 +65,116 @@ export function CadastroForm({ mode, onSessionExpired }: { mode: Mode; onSession
     const res = await fetch("/api/cadastro", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...f, password: mode === "fiscal" ? f.password : undefined, birthDate: brDateToIso(f.birthDate), photo }),
-    });
-    const data = await res.json().catch(() => ({}));
+      body: JSON.stringify({ ...f, birthDate: brDateToIso(f.birthDate) }),
+    }).catch(() => null);
+    const data = res ? await res.json().catch(() => ({})) : {};
     setBusy(false);
-    if (res.ok) return setDone(true);
-    if (mode === "pastor" && res.status === 401) return onSessionExpired?.();
-    setMsg(data.error ?? "Erro ao salvar.");
+    if (res?.ok) return setDone(true);
+    if (pastor && res?.status === 401) return onSessionExpired?.();
+    setMsg(data.error ?? "Erro ao salvar. Tente de novo.");
     if (data.errors) setErrors(data.errors);
-    if (data.field) setErrors({ [data.field]: data.error });
   }
 
   const reset = () => {
     setF(empty);
-    setPhoto(null);
     setErrors({});
     setMsg(null);
     setDone(false);
   };
 
   if (done) {
+    const teen = nameTokens(f.name).length ? f.name.trim().split(/\s+/)[0] : "O adolescente";
     return (
-        <div className="center success">
-          <div className="success__photo">
-            {photo && <img src={photo} alt="Foto cadastrada" />}
-            <span className="success__badge" aria-hidden>✓</span>
-          </div>
-          <h1>Cadastro concluído!</h1>
-          <p className="success__name">{f.name}</p>
-          <p className="hint">Agora é só fazer o check-in com o CPF e a data de nascimento.</p>
-          {mode === "pastor" ? (
-            <button type="button" className="btn" onClick={reset}>Cadastrar outro adolescente</button>
-          ) : (
-            <Link href="/checkin" className="btn">Fazer check-in agora</Link>
-          )}
-        </div>
+      <div className="center success">
+        <div className="success__photo success__photo--icon" aria-hidden>✓</div>
+        <h1>Cadastro concluído!</h1>
+        <p className="success__name">{f.name}</p>
+        <p className="hint">
+          No culto, {teen} faz o check-in com <strong>nome completo</strong> e <strong>data de nascimento</strong>. No
+          primeiro check-in, tira uma foto do rosto para completar o cadastro.
+          {f.guardianEmail && <> A cada check-in, você recebe um e-mail em <strong>{f.guardianEmail}</strong>.</>}
+        </p>
+        <button type="button" className="btn" onClick={reset}>
+          {pastor ? "Cadastrar outro adolescente" : "Cadastrar outro filho(a)"}
+        </button>
+      </div>
     );
   }
 
-  const field = (k: keyof Form, label: string, input: React.ReactNode) => (
+  const field = (k: keyof Form, label: string, input: React.ReactNode, hint?: string) => (
     <label className={`field ${errors[k] ? "field--error" : ""}`} data-field={k}>
       <span>{label}</span>
       {input}
+      {hint && !errors[k] && <em className="field__hint">{hint}</em>}
       {errors[k] && <small>{errors[k]}</small>}
     </label>
   );
 
   return (
     <>
-      <h1>{mode === "pastor" ? "Novo cadastro" : "Cadastro"}</h1>
+      <h1>{pastor ? "Novo cadastro" : "Cadastro do adolescente"}</h1>
       <p className="lead">
-        {mode === "pastor"
-          ? "Cadastro feito pelo pastor: não precisa da senha do fiscal."
-          : "Preencha com o adolescente. No final, o fiscal confirma com a senha."}
+        {pastor
+          ? "Cadastro feito pelo pastor. A foto é tirada pelo adolescente no primeiro check-in."
+          : "Para pais, mães e responsáveis. Faça antes do culto: primeiro os dados do seu filho ou filha, depois os seus."}
       </p>
 
       <form onSubmit={submit} noValidate>
-        <fieldset>
-          <legend>Adolescente</legend>
-          {field("name", "Nome completo", (
-            <input autoComplete="name" value={f.name} onChange={(e) => set("name", e.target.value)} />
+        <fieldset className="section section--teen">
+          <legend>
+            <span className="section__step">1</span> {pastor ? "Adolescente" : "Dados do seu filho(a)"}
+          </legend>
+          {!pastor && <p className="section__who">Preencha com os dados do <strong>adolescente</strong>, não os seus.</p>}
+          {field("name", "Nome completo do adolescente", (
+            <input autoComplete="off" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Ex.: Ana Beatriz Souza" />
+          ), "É com esse nome que ele(a) vai fazer o check-in.")}
+          {field("birthDate", "Data de nascimento do adolescente", (
+            <input inputMode="numeric" autoComplete="off" placeholder="DD/MM/AAAA" maxLength={10} value={f.birthDate}
+              onChange={(e) => set("birthDate", maskDate(e.target.value))} />
           ))}
-          {field("cpf", "CPF", (
-            <input inputMode="numeric" placeholder="000.000.000-00" value={f.cpf} onChange={(e) => set("cpf", maskCpf(e.target.value))} />
+          {field("cpf", "CPF do adolescente", (
+            <input inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" value={f.cpf} onChange={(e) => set("cpf", maskCpf(e.target.value))} />
           ))}
-          {field("phone", "Telefone (WhatsApp)", (
-            <input type="tel" inputMode="tel" placeholder="(00) 00000-0000" value={f.phone} onChange={(e) => set("phone", maskPhone(e.target.value))} />
+          {field("phone", "Celular do adolescente (opcional)", (
+            <input type="tel" inputMode="tel" autoComplete="off" placeholder="(00) 00000-0000" value={f.phone}
+              onChange={(e) => set("phone", maskPhone(e.target.value))} />
           ))}
-          {field("birthDate", "Data de nascimento", (
-            <input inputMode="numeric" autoComplete="bday" placeholder="DD/MM/AAAA" maxLength={10} value={f.birthDate} onChange={(e) => set("birthDate", maskDate(e.target.value))} />
-          ))}
-          <div className={`field ${errors.photo ? "field--error" : ""}`} data-field="photo">
-            <span>Foto do rosto</span>
-            <Camera value={photo} onChange={(p) => { setPhoto(p); if (p) setErrors(({ photo: _, ...r }) => r); }} />
-            {errors.photo && <small>{errors.photo}</small>}
-          </div>
         </fieldset>
 
-        <fieldset>
-          <legend>Responsável</legend>
-          {field("guardianName", "Nome do responsável", (
-            <input value={f.guardianName} onChange={(e) => set("guardianName", e.target.value)} />
+        <fieldset className="section section--guardian">
+          <legend>
+            <span className="section__step">2</span> {pastor ? "Responsável" : "Seus dados (responsável)"}
+          </legend>
+          {!pastor && <p className="section__who">Agora sim, os <strong>seus</strong> dados: pai, mãe ou responsável.</p>}
+          {field("guardianName", pastor ? "Nome do responsável" : "Seu nome completo", (
+            <input autoComplete={pastor ? "off" : "name"} value={f.guardianName} onChange={(e) => set("guardianName", e.target.value)} />
           ))}
-          {field("guardianPhone", "Telefone do responsável", (
-            <input type="tel" inputMode="tel" placeholder="(00) 00000-0000" value={f.guardianPhone} onChange={(e) => set("guardianPhone", maskPhone(e.target.value))} />
+          {field("guardianPhone", pastor ? "Telefone do responsável" : "Seu telefone (WhatsApp)", (
+            <input type="tel" inputMode="tel" autoComplete={pastor ? "off" : "tel"} placeholder="(00) 00000-0000" value={f.guardianPhone}
+              onChange={(e) => set("guardianPhone", maskPhone(e.target.value))} />
           ))}
-          {field("guardianEmail", "E-mail do responsável", (
-            <input type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false}
+          {field("guardianEmail", pastor ? "E-mail do responsável" : "Seu e-mail", (
+            <input type="email" inputMode="email" autoComplete={pastor ? "off" : "email"} autoCapitalize="none" spellCheck={false}
               placeholder="nome@email.com" value={f.guardianEmail} onChange={(e) => set("guardianEmail", e.target.value.trim())} />
-          ))}
-          <p className="hint field-hint">O responsável recebe um e-mail com o horário e a foto a cada check-in.</p>
+          ), "Você recebe um e-mail com o horário e a foto a cada check-in.")}
+
           <label className={`check ${errors.consent ? "field--error" : ""}`} data-field="consent">
             <input type="checkbox" checked={f.consent} onChange={(e) => set("consent", e.target.checked)} />
             <span>
-              O responsável autoriza o Ministério Flag a guardar estes dados e as fotos do adolescente, usados só para o
-              controle de presença nos cultos, e a enviar avisos de check-in para o e-mail informado (LGPD, art. 14).
+              Como responsável, autorizo o Ministério Flag a guardar estes dados e as fotos tiradas pelo adolescente no
+              check-in, usados só para o controle de presença nos cultos, e a me enviar avisos de check-in por e-mail
+              (LGPD, art. 14).
             </span>
           </label>
           {errors.consent && <small className="err">{errors.consent}</small>}
         </fieldset>
 
-        {mode === "fiscal" && (
-          <fieldset className="fiscal">
-            <legend>Uso do fiscal</legend>
-            {field("password", "Senha do fiscal", (
-              <input type="password" autoComplete="off" value={f.password} onChange={(e) => set("password", e.target.value)} />
-            ))}
-          </fieldset>
-        )}
+        {/* Armadilha para robôs: invisível para pessoas */}
+        <input className="hp" tabIndex={-1} autoComplete="off" aria-hidden name="website" value={f.website}
+          onChange={(e) => set("website", e.target.value)} />
 
         {msg && <div className="alert" role="alert">{msg}</div>}
-        <button className="btn" disabled={busy}>{busy ? "Verificando foto…" : "Concluir cadastro"}</button>
-        {mode === "fiscal" && <Link href="/checkin" className="link-center">Já tenho cadastro</Link>}
+        <button className="btn" disabled={busy}>{busy ? "Salvando…" : "Concluir cadastro"}</button>
       </form>
     </>
   );

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { analyzeFace, faceDistance, matchThreshold, parseDescriptor } from "@/lib/server/face";
+import { analyzeFace, faceDistance, matchCreativePhoto, matchThreshold, parseDescriptor } from "@/lib/server/face";
 
 // Rostos sintéticos (StyleGAN2, thispersondoesnotexist.com): nenhuma pessoa real.
 const foto = (nome: string) => readFileSync(`tests/fixtures/${nome}.jpg`);
@@ -44,6 +44,22 @@ describe("reconhecimento facial (servidor)", { timeout: 60_000 }, () => {
   });
 });
 
+describe("foto criativa (check-ins seguintes)", { timeout: 60_000 }, () => {
+  it("aceita foto em grupo quando um dos rostos é o do adolescente", async () => {
+    const r = await matchCreativePhoto(foto("duas-pessoas"), await descritor("pessoa-a-cadastro"));
+    expect(r).toMatchObject({ ok: true, faces: 2 });
+  });
+  it("aceita a mesma pessoa em outro ângulo e luz", async () => {
+    expect((await matchCreativePhoto(foto("pessoa-a-selfie"), await descritor("pessoa-a-cadastro"))).ok).toBe(true);
+  });
+  it("recusa quando ninguém da foto é o adolescente", async () => {
+    expect(await matchCreativePhoto(foto("duas-pessoas"), await descritor("pessoa-b"))).toMatchObject({ ok: false, code: "ROSTO_NAO_CONFERE" });
+  });
+  it("recusa foto criativa sem nenhum rosto", async () => {
+    expect(await matchCreativePhoto(foto("sem-rosto"), await descritor("pessoa-b"))).toMatchObject({ ok: false, code: "SEM_ROSTO" });
+  });
+});
+
 describe("descritores", () => {
   it("distância euclidiana", () => {
     expect(faceDistance([0, 0], [3, 4])).toBe(5);
@@ -54,8 +70,8 @@ describe("descritores", () => {
     expect(parseDescriptor(Array(127).fill(0.1))).toBeNull();
     expect(parseDescriptor(null)).toBeNull();
   });
-  it("limite padrão 0,55 e configurável por FACE_MATCH_THRESHOLD", () => {
-    expect(matchThreshold()).toBe(0.55);
+  it("limite padrão 0,65 (foto criativa) e configurável por FACE_MATCH_THRESHOLD", () => {
+    expect(matchThreshold()).toBe(0.65);
     process.env.FACE_MATCH_THRESHOLD = "0.5";
     expect(matchThreshold()).toBe(0.5);
     delete process.env.FACE_MATCH_THRESHOLD;

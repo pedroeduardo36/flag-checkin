@@ -1,14 +1,18 @@
-// Teste ponta a ponta contra o Supabase real: cadastro → check-in → limpeza.
-// Uso (com o "npm run dev" rodando):  npm run test:fluxo  [-- http://localhost:3000]
+// Teste ponta a ponta contra o Supabase real (com limpeza no final).
+// Uso (com o servidor rodando):  npm run test:fluxo  [-- https://flag-checkin.vercel.app]
+// E2E_EMAIL=voce@email.com envia o aviso de check-in para esse endereço.
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
 const BASE = (process.argv[2] || "http://localhost:3000").replace(/\/$/, "");
-const env = { ...Object.fromEntries(
-  readFileSync(".env.local", "utf8").split("\n").filter((l) => /^[A-Z_]+=/.test(l)).map((l) => {
-    const i = l.indexOf("=");
-    return [l.slice(0, i), l.slice(i + 1).trim()];
-  })), ...(process.env.E2E_EMAIL ? { E2E_EMAIL: process.env.E2E_EMAIL } : {}) };
+const env = {
+  ...Object.fromEntries(
+    readFileSync(".env.local", "utf8").split("\n").filter((l) => /^[A-Z_]+=/.test(l))
+      .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1).trim().replace(/^"(.*)"$/, "$1")]),
+  ),
+  ...(process.env.E2E_EMAIL ? { E2E_EMAIL: process.env.E2E_EMAIL } : {}),
+};
+const sb = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
 function cpfAleatorio() {
   const n = Array.from({ length: 9 }, () => Math.floor(Math.random() * 10));
@@ -19,130 +23,169 @@ function cpfAleatorio() {
   }
   return n.join("");
 }
+const telAleatorio = () => "619" + String(Math.floor(Math.random() * 1e8)).padStart(8, "0");
 
-const post = async (path, body) => {
-  const r = await fetch(BASE + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  return { status: r.status, data: await r.json().catch(() => ({})) };
+const post = async (path, body, headers = {}) => {
+  const r = await fetch(BASE + path, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
+  return { status: r.status, data: await r.json().catch(() => ({})), headers: r.headers };
 };
 
 let falhas = 0;
 const check = (nome, cond, extra) => {
-  console.log(`${cond ? "✅" : "❌"} ${nome}${!cond && extra ? ` → ${JSON.stringify(extra)}` : ""}`);
+  console.log(`${cond ? "✅" : "❌"} ${nome}${!cond && extra !== undefined ? ` → ${JSON.stringify(extra).slice(0, 300)}` : ""}`);
   if (!cond) falhas++;
 };
 
-const sb = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 // Rostos sintéticos (StyleGAN2): nenhuma pessoa real.
 const foto = (nome) => "data:image/jpeg;base64," + readFileSync(`tests/fixtures/${nome}.jpg`).toString("base64");
-const photo = foto("pessoa-a-cadastro");
-const cpf = cpfAleatorio();
-const extrasCpf = [];
-const nasc = "2010-05-20";
-const dentro = { lat: Number(env.CHURCH_LAT), lng: Number(env.CHURCH_LNG), accuracy: 15 };
 const geoOff = env.GEOFENCE_DISABLED === "true";
 if (geoOff) console.log("⚠️  GEOFENCE_DISABLED=true — verificação de localização DESLIGADA (modo teste)\n");
+const dentro = { lat: Number(env.CHURCH_LAT), lng: Number(env.CHURCH_LNG), accuracy: 15 };
 const fora = { lat: dentro.lat + 0.05, lng: dentro.lng, accuracy: 15 };
+
+const cpf = cpfAleatorio();
+const cpfsCriados = [cpf];
+const telsVisitantes = [telAleatorio(), telAleatorio()];
+const nasc = "2010-05-20";
+const cad = {
+  name: "Teste Automático de Souza Flag", cpf, phone: "", birthDate: nasc,
+  guardianName: "Responsável Teste", guardianPhone: "61988880000",
+  guardianEmail: env.E2E_EMAIL || env.SMTP_USER || "responsavel.teste@example.com", consent: true,
+};
+const esperaAviso = async (memberCpf) => {
+  for (let i = 0; i < 20; i++) {
+    await new Promise((res) => setTimeout(res, 1000));
+    const { data } = await sb.from("checkins").select("guardian_email_status, members!inner(cpf)").eq("members.cpf", memberCpf).maybeSingle();
+    if (data?.guardian_email_status) return data.guardian_email_status;
+  }
+  return null;
+};
 
 try {
   const h = await fetch(`${BASE}/api/health`).then((r) => r.json());
-  check("health: variáveis, tabelas e bucket", h.ok, h.checks);
+  check("health: variáveis, tabelas, bucket e reconhecimento facial", h.ok, h.checks);
   if (!h.ok) throw new Error("Corrija o /api/health antes de continuar.");
 
-  const cad = {
-    name: "Teste Automático Flag", cpf, phone: "61999990000", birthDate: nasc,
-    guardianName: "Responsável Teste", guardianPhone: "61988880000", guardianEmail: env.E2E_EMAIL || env.SMTP_USER || "responsavel.teste@example.com", consent: true, photo,
-  };
-  let r = await post("/api/cadastro", { ...cad, password: "senha-errada" });
-  check("cadastro com senha errada é recusado (401)", r.status === 401, r);
-  r = await post("/api/cadastro", { ...cad, guardianEmail: "email-invalido", password: env.REGISTRATION_PASSWORD });
+  // ---------- Cadastro pelo responsável: sem foto e sem senha ----------
+  let r = await post("/api/cadastro", { ...cad, guardianEmail: "email-invalido" });
   check("cadastro com e-mail do responsável inválido é recusado (400)", r.status === 400 && !!r.data.errors?.guardianEmail, r);
-  r = await post("/api/cadastro", { ...cad, photo: foto("sem-rosto"), password: env.REGISTRATION_PASSWORD });
-  check("cadastro com foto sem rosto é recusado (422 SEM_ROSTO)", r.status === 422 && r.data.code === "SEM_ROSTO", r);
-  r = await post("/api/cadastro", { ...cad, photo: foto("duas-pessoas"), password: env.REGISTRATION_PASSWORD });
-  check("cadastro com duas pessoas é recusado (422 VARIOS_ROSTOS)", r.status === 422 && r.data.code === "VARIOS_ROSTOS", r);
-  r = await post("/api/cadastro", { ...cad, password: env.REGISTRATION_PASSWORD });
-  check("cadastro válido (200)", r.status === 200, r);
-  r = await post("/api/cadastro", { ...cad, password: env.REGISTRATION_PASSWORD });
+  r = await post("/api/cadastro", cad);
+  check("responsável cadastra SEM foto e SEM senha do fiscal (200)", r.status === 200, r);
+  r = await post("/api/cadastro", cad);
   check("CPF duplicado é recusado (409)", r.status === 409, r);
+  const { data: semFoto } = await sb.from("members").select("photo_path, face_descriptor").eq("cpf", cpf).single();
+  check("cadastro fica sem foto até o primeiro check-in", !semFoto.photo_path && !semFoto.face_descriptor, semFoto);
 
+  // ---------- Localização ----------
   r = await post("/api/checkin/local", fora);
-  if (geoOff) check("[modo teste] fora do raio é aceito", r.data.ok === true && r.data.disabled === true, r);
+  if (geoOff) check("[modo teste] fora do raio é aceito", r.data.ok === true, r);
   else check("fora do raio → ok:false", r.status === 200 && r.data.ok === false, r);
   r = await post("/api/checkin/local", dentro);
   check("dentro do raio → ok:true", r.data.ok === true, r);
 
-  r = await post("/api/checkin/identificar", { ...dentro, cpf, birthDate: "2011-01-01" });
-  check("data de nascimento errada (404)", r.status === 404, r);
-  if (geoOff) {
-    r = await post("/api/checkin/identificar", { cpf, birthDate: "2011-01-01" });
-    check("[modo teste] identificar sem localização é aceito (só falha pela data)", r.status === 404, r);
-  } else {
-    r = await post("/api/checkin/identificar", { ...fora, cpf, birthDate: nasc });
+  // ---------- Identificação por nome + nascimento ----------
+  r = await post("/api/checkin/identificar", { ...dentro, name: cad.name, birthDate: "2011-01-01" });
+  check("data de nascimento errada (404)", r.status === 404 && r.data.code === "NAO_ENCONTRADO", r);
+  r = await post("/api/checkin/identificar", { ...dentro, name: "Fulano Inexistente", birthDate: nasc });
+  check("nome que não existe (404)", r.status === 404, r);
+  if (!geoOff) {
+    r = await post("/api/checkin/identificar", { ...fora, name: cad.name, birthDate: nasc });
     check("identificar fora do local (403)", r.status === 403, r);
   }
-  // No modo teste, faz o check-in completo SEM enviar localização (como no celular fora da igreja).
-  r = await post("/api/checkin/identificar", geoOff ? { cpf, birthDate: nasc } : { ...dentro, cpf, birthDate: nasc });
-  check("identificar com dados certos → token", r.status === 200 && !!r.data.token, r);
+  r = await post("/api/checkin/identificar", { ...dentro, name: "teste automatico flag", birthDate: nasc });
+  check("acha o cadastro sem acento, minúsculo e sem nome do meio", r.status === 200 && !!r.data.token, r);
+  check("primeiro check-in pede foto de REGISTRO", r.data.photoKind === "registro", r.data.photoKind);
+  check("identificação vale ~4 h (para a foto dentro do culto)", Date.parse(r.data.expiresAt) - Date.now() > 3.9 * 3600_000, r.data.expiresAt);
+  let token = r.data.token;
 
-  const token = r.data.token;
+  // ---------- 1º check-in: foto de registro ----------
   let f = await post("/api/checkin/confirmar", { token, photo: foto("sem-rosto") });
-  check("selfie sem rosto é recusada (422 SEM_ROSTO)", f.status === 422 && f.data.code === "SEM_ROSTO", f);
-  f = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-b") });
-  check("selfie de OUTRA pessoa é recusada (403 ROSTO_NAO_CONFERE)", f.status === 403 && f.data.code === "ROSTO_NAO_CONFERE", f);
-  const conf = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-a-selfie") });
-  check("selfie da MESMA pessoa (outro ângulo/luz) é aceita (200)", conf.status === 200 && conf.data.ok, conf);
-  // O e-mail é enviado depois da resposta (after): espera o status ser gravado.
-  let aviso = null;
-  for (let i = 0; i < 20 && !aviso; i++) {
-    await new Promise((res) => setTimeout(res, 1000));
-    const { data: ck } = await sb.from("checkins").select("guardian_email_status, members!inner(cpf)").eq("members.cpf", cpf).maybeSingle();
-    aviso = ck?.guardian_email_status ?? null;
-  }
+  check("registro sem rosto é recusado (422 SEM_ROSTO)", f.status === 422 && f.data.code === "SEM_ROSTO", f.data);
+  f = await post("/api/checkin/confirmar", { token, photo: foto("duas-pessoas") });
+  check("registro com duas pessoas é recusado (422 VARIOS_ROSTOS)", f.status === 422 && f.data.code === "VARIOS_ROSTOS", f.data);
+  f = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-a-cadastro") });
+  check("registro com um rosto conclui o 1º check-in (200)", f.status === 200 && f.data.photoKind === "registro", f.data);
+  const { data: comFoto } = await sb.from("members").select("photo_path, face_descriptor").eq("cpf", cpf).single();
+  check("foto de registro vira a foto do cadastro (com descritor)", !!comFoto.photo_path && comFoto.face_descriptor?.length === 128, !!comFoto.photo_path);
+  const aviso = await esperaAviso(cpf);
   const esperado = env.E2E_EMAIL ? ["enviado"] : ["enviado", "falhou", "sem_config"];
   check(`aviso ao responsável registrado (${aviso})`, esperado.includes(aviso), aviso);
+  f = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-a-selfie") });
+  check("segundo check-in no mesmo dia é recusado (409)", f.status === 409, f.data);
+  r = await post("/api/checkin/identificar", { ...dentro, name: cad.name, birthDate: nasc });
+  check("identificar de novo → já fez check-in hoje", r.data.alreadyCheckedIn === true && !!r.data.photoUrl, r.data);
 
-  const dup = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-a-selfie") });
-  check("segundo check-in no mesmo dia é recusado (409)", dup.status === 409, dup);
+  // ---------- Check-ins seguintes: foto criativa ----------
+  // Simula "outro domingo": apaga o check-in de hoje (o cadastro já tem a foto de referência).
+  const { data: m } = await sb.from("members").select("id").eq("cpf", cpf).single();
+  const { data: ck } = await sb.from("checkins").select("photo_path").eq("member_id", m.id).single();
+  await sb.from("checkins").delete().eq("member_id", m.id);
+  if (ck?.photo_path && ck.photo_path !== comFoto.photo_path) await sb.storage.from("fotos").remove([ck.photo_path]);
+  r = await post("/api/checkin/identificar", { ...dentro, name: cad.name, birthDate: nasc });
+  check("check-in seguinte pede foto CRIATIVA", r.status === 200 && r.data.photoKind === "criativa", r.data);
+  token = r.data.token;
+  f = await post("/api/checkin/confirmar", { token, photo: foto("sem-rosto") });
+  check("foto criativa sem rosto é recusada (422)", f.status === 422 && f.data.code === "SEM_ROSTO", f.data);
+  f = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-b") });
+  check("foto criativa de OUTRA pessoa é recusada (403)", f.status === 403 && f.data.code === "ROSTO_NAO_CONFERE", f.data);
+  f = await post("/api/checkin/confirmar", { token, photo: foto("duas-pessoas") });
+  check("foto criativa EM GRUPO com o adolescente é aceita (200)", f.status === 200 && f.data.photoKind === "criativa", f.data);
 
-  r = await post("/api/checkin/identificar", { ...dentro, cpf, birthDate: nasc });
-  check("identificar de novo → já fez check-in", r.data.alreadyCheckedIn === true, r);
-  const img = r.data.photoUrl ? await fetch(r.data.photoUrl) : null;
-  check("selfie acessível por URL assinada", img?.status === 200, img?.status);
+  // ---------- Visitante ----------
+  r = await post("/api/checkin/visitante", { ...dentro, name: "Visitante Teste", phone: "123" });
+  check("visitante com telefone inválido é recusado (400)", r.status === 400 && !!r.data.errors?.phone, r.data);
+  r = await post("/api/checkin/visitante", { ...dentro, name: "Visitante Teste Sem Foto", phone: telsVisitantes[0] });
+  check("visitante só com nome e telefone (200)", r.status === 200 && r.data.ok && !r.data.alreadyCheckedIn, r.data);
+  r = await post("/api/checkin/visitante", { ...dentro, name: "Visitante Teste Sem Foto", phone: telsVisitantes[0] });
+  check("visitante repetido no mesmo dia → já fez check-in", r.status === 200 && r.data.alreadyCheckedIn === true, r.data);
+  r = await post("/api/checkin/visitante", { ...dentro, name: "Visitante Teste Com Foto", phone: telsVisitantes[1], photo: foto("pessoa-b") });
+  check("visitante com foto criativa opcional (200)", r.status === 200 && r.data.ok, r.data);
+  if (!geoOff) {
+    r = await post("/api/checkin/visitante", { ...fora, name: "Visitante Longe", phone: telAleatorio() });
+    check("visitante fora do local (403)", r.status === 403, r.data);
+  }
 
-  // Área do pastor: senha, feed ao vivo e cadastro sem a senha do fiscal.
+  // ---------- Área do pastor ----------
   const semSessao = await fetch(`${BASE}/api/pastor/feed`);
   check("feed do pastor sem sessão é bloqueado (401)", semSessao.status === 401, semSessao.status);
   const loginErrado = await post("/api/pastor/sessao", { password: "errada" });
-  check("senha do pastor errada é recusada (401)", loginErrado.status === 401, loginErrado);
-  const login = await fetch(`${BASE}/api/pastor/sessao`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: env.PASTOR_PASSWORD }) });
-  const pastorCookie = (login.headers.get("set-cookie") ?? "").split(";")[0];
-  check("login do pastor define cookie httpOnly", login.status === 200 && /httponly/i.test(login.headers.get("set-cookie") ?? ""), login.status);
+  check("senha do pastor errada é recusada (401)", loginErrado.status === 401, loginErrado.status);
+  const login = await post("/api/pastor/sessao", { password: env.PASTOR_PASSWORD });
+  const setCookie = login.headers.get("set-cookie") ?? "";
+  const pastorCookie = setCookie.split(";")[0];
+  check("login do pastor define cookie httpOnly", login.status === 200 && /httponly/i.test(setCookie), login.status);
   const feed = await fetch(`${BASE}/api/pastor/feed`, { headers: { cookie: pastorCookie } }).then((x) => x.json());
   const meu = feed.items?.find((i) => i.name === cad.name);
-  check("check-in aparece no feed do pastor com selfie e foto do cadastro", !!meu?.selfieUrl && !!meu?.avatarUrl, meu);
-  const desde = await fetch(`${BASE}/api/pastor/feed?since=${encodeURIComponent(meu?.checkedInAt ?? "")}`, { headers: { cookie: pastorCookie } }).then((x) => x.json());
-  check("feed incremental (since) não repete o que já foi visto", Array.isArray(desde.items) && !desde.items.some((i) => i.id === meu?.id), desde.items?.length);
+  check("check-in aparece no feed com foto criativa e foto do cadastro", !!meu?.selfieUrl && !!meu?.avatarUrl && meu.photoKind === "criativa", meu);
+  const vis = feed.items?.filter((i) => i.isVisitor && i.name.startsWith("Visitante Teste")) ?? [];
+  check("visitantes aparecem no feed marcados como visitante", vis.length === 2, vis.length);
+  const desde = await fetch(`${BASE}/api/pastor/feed?since=${encodeURIComponent(feed.items?.[0]?.checkedInAt ?? "")}`, { headers: { cookie: pastorCookie } }).then((x) => x.json());
+  check("feed incremental (since) não repete o que já foi visto", Array.isArray(desde.items) && desde.items.length === 0, desde.items?.length);
   const cpf2 = cpfAleatorio();
-  const r2 = await fetch(`${BASE}/api/cadastro`, { method: "POST", headers: { "Content-Type": "application/json", cookie: pastorCookie }, body: JSON.stringify({ ...cad, cpf: cpf2, name: "Teste Automático Pastor" }) });
-  check("pastor cadastra sem a senha do fiscal (200)", r2.status === 200, r2.status);
-  extrasCpf.push(cpf2);
+  cpfsCriados.push(cpf2);
+  const r2 = await post("/api/cadastro", { ...cad, cpf: cpf2, name: "Teste Automático Pastor" }, { cookie: pastorCookie });
+  check("pastor cadastra pelo mesmo formulário (200)", r2.status === 200, r2.data);
 
-  const { data: pres } = await sb.from("presencas").select("nome, distancia_rosto").eq("nome", cad.name);
-  check("aparece na view presencas com a distância do rosto", pres?.length === 1 && pres[0].distancia_rosto > 0, pres);
+  const { data: pres } = await sb.from("presencas").select("nome, tipo, tipo_foto").in("nome", [cad.name, "Visitante Teste Sem Foto"]);
+  check("view presencas mostra adolescente (criativa) e visitante", pres?.some((p) => p.tipo === "cadastrado" && p.tipo_foto === "criativa") && pres?.some((p) => p.tipo === "visitante"), pres);
 } catch (e) {
   console.error("⚠️ ", e.message);
   falhas++;
 } finally {
-  // Limpeza: apaga os adolescentes de teste (check-ins caem em cascata) e as fotos.
-  for (const doc of [cpf, ...extrasCpf]) {
-  const { data: m } = await sb.from("members").select("id, photo_path").eq("cpf", doc).maybeSingle();
-  if (m) {
+  // Limpeza: adolescentes de teste (check-ins em cascata), visitantes de teste e todas as fotos.
+  for (const doc of cpfsCriados) {
+    const { data: m } = await sb.from("members").select("id, photo_path").eq("cpf", doc).maybeSingle();
+    if (!m) continue;
     const { data: cks } = await sb.from("checkins").select("photo_path").eq("member_id", m.id);
-    await sb.storage.from("fotos").remove([m.photo_path, ...(cks ?? []).map((c) => c.photo_path)]);
+    await sb.storage.from("fotos").remove([m.photo_path, ...(cks ?? []).map((c) => c.photo_path)].filter(Boolean));
     await sb.from("members").delete().eq("id", m.id);
-    console.log("🧹 dados de teste removidos");
   }
+  const { data: vcks } = await sb.from("checkins").select("id, photo_path").is("member_id", null).in("visitor_phone", telsVisitantes);
+  if (vcks?.length) {
+    await sb.storage.from("fotos").remove(vcks.map((c) => c.photo_path).filter(Boolean));
+    await sb.from("checkins").delete().in("id", vcks.map((c) => c.id));
   }
+  console.log("🧹 dados de teste removidos");
 }
 console.log(falhas ? `\n${falhas} falha(s).` : "\nTudo funcionando! 🎉");
 process.exit(falhas ? 1 : 0);

@@ -12,7 +12,6 @@ const nextConfig = {
   // TensorFlow.js roda direto do node_modules, sem passar pelo bundler.
   serverExternalPackages: ["@vladmandic/face-api", "@tensorflow/tfjs", "@tensorflow/tfjs-backend-wasm"],
   outputFileTracingIncludes: {
-    "/api/cadastro": faceFiles,
     "/api/checkin/confirmar": faceFiles,
     "/api/health": [...faceFiles, "./public/brand/flag-logo.jpg"],
   },

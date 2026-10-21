@@ -3,39 +3,52 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/server/supabase";
 import { PHOTO_BUCKET } from "@/lib/server/env";
 import { checkGeofence, createCheckinToken, parseCoords, serviceDate } from "@/lib/server/security";
-import { firstName, isValidBirthDate, isValidCpf, onlyDigits } from "@/lib/format";
+import { firstName, isValidBirthDate, nameMatchScore, nameTokens } from "@/lib/format";
 
-// Etapa 2: CPF + data de nascimento. Devolve um token para a etapa da foto.
+/** A identificação vale até a foto criativa, que é tirada já dentro do culto. */
+const TOKEN_TTL_SECONDS = 4 * 60 * 60;
+
+// Etapa 2: nome completo + data de nascimento. Devolve um token para a etapa da foto.
 export const POST = withErrors(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const coords = parseCoords(body);
-  const cpf = onlyDigits(body?.cpf);
+  const name = String(body?.name ?? "").trim().slice(0, 120);
   const birthDate = String(body?.birthDate ?? "");
 
   const geo = checkGeofence(coords);
   if (!coords && !geo.disabled)
     return NextResponse.json({ error: "Localização ausente. Volte e ative a localização." }, { status: 400 });
-  if (!isValidCpf(cpf) || !isValidBirthDate(birthDate))
-    return NextResponse.json({ error: "Confira o CPF e a data de nascimento." }, { status: 400 });
-
+  if (nameTokens(name).length < 2 || !isValidBirthDate(birthDate))
+    return NextResponse.json({ error: "Informe nome e sobrenome e a data de nascimento." }, { status: 400 });
   if (!geo.inside)
     return NextResponse.json({ error: "Você precisa estar no local do culto para fazer o check-in.", code: "FORA_DO_LOCAL" }, { status: 403 });
 
-  const { data: member, error } = await db()
+  // Todos os nascidos nesse dia; o nome decide (tolera acento, "de/da", nome do meio omitido e um erro de digitação).
+  const { data: sameDay, error } = await db()
     .from("members")
-    .select("id, name, birth_date")
-    .eq("cpf", cpf)
-    .maybeSingle();
-  if (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Erro ao consultar o cadastro. Tente de novo." }, { status: 500 });
-  }
-  // Mesma mensagem para CPF inexistente e data errada: não revela quais CPFs existem.
-  if (!member || member.birth_date !== birthDate)
+    .select("id, name, face_descriptor, photo_path")
+    .eq("birth_date", birthDate);
+  if (error) throw error;
+
+  const ranked = (sameDay ?? [])
+    .map((m) => ({ m, score: nameMatchScore(name, m.name) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (!ranked.length)
     return NextResponse.json(
-      { error: "Não encontramos um cadastro com esse CPF e data de nascimento.", code: "NAO_ENCONTRADO" },
+      {
+        error: "Não encontramos seu cadastro com esse nome e data de nascimento. Confira os dados ou peça ao seu responsável para fazer o cadastro.",
+        code: "NAO_ENCONTRADO",
+      },
       { status: 404 },
     );
+  if (ranked.length > 1 && ranked[0].score === ranked[1].score)
+    return NextResponse.json(
+      { error: "Encontramos mais de um cadastro parecido. Digite seu nome completo, como está no cadastro.", code: "AMBIGUO" },
+      { status: 409 },
+    );
+  const member = ranked[0].m;
 
   const { data: existing } = await db()
     .from("checkins")
@@ -45,7 +58,9 @@ export const POST = withErrors(async (req: Request) => {
     .maybeSingle();
 
   if (existing) {
-    const { data: signed } = await db().storage.from(PHOTO_BUCKET).createSignedUrl(existing.photo_path, 600);
+    const signed = existing.photo_path
+      ? (await db().storage.from(PHOTO_BUCKET).createSignedUrl(existing.photo_path, 600)).data
+      : null;
     return NextResponse.json({
       alreadyCheckedIn: true,
       name: member.name,
@@ -54,12 +69,16 @@ export const POST = withErrors(async (req: Request) => {
     });
   }
 
-  const token = createCheckinToken({
-    mid: member.id,
-    lat: coords?.lat ?? null,
-    lng: coords?.lng ?? null,
-    acc: coords?.accuracy ?? null,
-    dist: geo.distance,
+  const token = createCheckinToken(
+    { mid: member.id, lat: coords?.lat ?? null, lng: coords?.lng ?? null, acc: coords?.accuracy ?? null, dist: geo.distance },
+    TOKEN_TTL_SECONDS,
+  );
+  return NextResponse.json({
+    alreadyCheckedIn: false,
+    token,
+    expiresAt: new Date(Date.now() + TOKEN_TTL_SECONDS * 1000).toISOString(),
+    firstName: firstName(member.name),
+    // Primeiro check-in da vida: a foto é de REGISTRO (vira a referência do cadastro).
+    photoKind: member.face_descriptor || member.photo_path ? "criativa" : "registro",
   });
-  return NextResponse.json({ alreadyCheckedIn: false, token, firstName: firstName(member.name) });
 });
