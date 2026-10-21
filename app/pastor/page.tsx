@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Brand } from "@/components/Brand";
 import { CadastroForm } from "@/components/CadastroForm";
+import { PastorDashboard } from "@/components/PastorDashboard";
 
 type Item = {
   id: string;
@@ -19,7 +20,7 @@ type Item = {
 };
 
 type Auth = "checking" | "login" | "in";
-type Tab = "feed" | "cadastro";
+type Tab = "feed" | "dashboard" | "cadastro";
 
 const POLL_MS = 4000;
 const FULL_RELOAD_MS = 30 * 60 * 1000; // renova as URLs assinadas das fotos (valem 1 h)
@@ -73,6 +74,9 @@ export default function PastorPage() {
         <button role="tab" aria-selected={tab === "feed"} className={tab === "feed" ? "on" : ""} onClick={() => setTab("feed")}>
           <span className="live-dot" aria-hidden /> Ao vivo
         </button>
+        <button role="tab" aria-selected={tab === "dashboard"} className={tab === "dashboard" ? "on" : ""} onClick={() => setTab("dashboard")}>
+          📊 Dashboard
+        </button>
         <button role="tab" aria-selected={tab === "cadastro"} className={tab === "cadastro" ? "on" : ""} onClick={() => setTab("cadastro")}>
           ＋ Cadastrar
         </button>
@@ -82,6 +86,7 @@ export default function PastorPage() {
       <div hidden={tab !== "feed"}>
         <Feed onUnauthorized={() => setAuth("login")} />
       </div>
+      {tab === "dashboard" && <PastorDashboard onUnauthorized={() => setAuth("login")} />}
       {tab === "cadastro" && (
         <section className="card">
           <CadastroForm mode="pastor" onSessionExpired={() => setAuth("login")} />

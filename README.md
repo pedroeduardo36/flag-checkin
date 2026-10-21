@@ -47,19 +47,23 @@ Um **web app mobile-first**, sem instalar nada, em três momentos:
 | :-: | :-: | :-: | :-: | :-: |
 | <img src="docs/screenshots/01-localizacao.jpg" width="160" /> | <img src="docs/screenshots/02-identificacao.jpg" width="160" /> | <img src="docs/screenshots/03-sucesso.jpg" width="160" /> | <img src="docs/screenshots/04-fora-do-local.jpg" width="160" /> | <img src="docs/screenshots/05-cadastro.jpg" width="160" /> |
 
-| E-mail para o responsável | Área do pastor (ao vivo) |
-| :-: | :-: |
-| <img src="docs/screenshots/06-email-responsavel.jpg" width="220" /> | <img src="docs/screenshots/07-pastor-feed.jpg" width="220" /> |
+| E-mail para o responsável | Pastor: ao vivo | Pastor: dashboard |
+| :-: | :-: | :-: |
+| <img src="docs/screenshots/06-email-responsavel.jpg" width="200" /> | <img src="docs/screenshots/07-pastor-feed.jpg" width="200" /> | <img src="docs/screenshots/08-pastor-dashboard.jpg" width="200" /> |
 
 ### Área do pastor — [`/pastor`](https://flag-checkin.vercel.app/pastor)
 
-Protegida por senha, com duas abas:
+Protegida por senha, com três abas:
 - **Ao vivo:** feed no estilo Instagram com quem acabou de chegar (foto do cadastro, nome, horário e foto do
   check-in), contador de presentes do dia e selos "1º check-in", "foto criativa", "visitante", "rosto confere" e
   "responsável avisado". Novos check-ins aparecem
   sozinhos, em cerca de 4 segundos, com destaque de entrada.
 - **Exemplo para teste:** check-ins marcados com `is_example` aparecem sempre no fim do feed, com a etiqueta "Exemplo"
   e a data do culto. Não entram no contador do dia e as rotinas de limpeza dos testes não os apagam.
+- **Dashboard:** indicadores (encontros, média por encontro, último encontro comparado ao anterior, adolescentes
+  diferentes), **evolução da frequência a cada encontro** em colunas empilhadas (cadastrados e visitantes, com dica ao
+  tocar e opção de tabela) e **ranking dos 10 mais frequentes**, com % de presença desde o 1º check-in e 🔥 sequência
+  de encontros seguidos.
 - **Cadastrar:** o mesmo formulário do responsável, com o botão "Cadastrar outro" para cadastrar em sequência.
 
 E o responsável recebe na hora um **e-mail com o horário e a foto do check-in**.
@@ -117,6 +121,8 @@ flowchart LR
 | **SMTP, não SDK de um fornecedor** | Nodemailer funciona com Gmail, Brevo ou Resend só trocando variáveis de ambiente. |
 | **Feed "ao vivo" por *polling* incremental** | A cada 4 s a página pergunta só pelo que chegou depois do último check-in visto (`?since=`). Não precisa de WebSocket nem de Realtime, que exigiria abrir o banco para a chave pública. Pausa com a aba escondida e renova as URLs das fotos a cada 30 min. |
 | **Sessão do pastor sem tabela** | O cookie `httpOnly` + `SameSite=strict` guarda `validade.assinatura` (HMAC). O servidor só confere a assinatura e o prazo de 12 h. |
+| **Dashboard calculado numa função pura** | `lib/stats.ts` recebe só `(data, membro, visitante)` de cada check-in e devolve indicadores, evolução e ranking, testada sem banco. O percentual de presença conta só os encontros **desde a 1ª vez** do adolescente, para não punir quem chegou depois. |
+| **Gráfico em SVG próprio, sem biblioteca** | Colunas empilhadas com um só eixo, rótulo só no maior e no último encontro, dica ao passar o dedo ou o mouse, alternativa em tabela e paleta (azul da marca + laranja) **validada por script** para daltonismo e contraste. |
 | **Data do culto em `America/Sao_Paulo`** | Um culto às 22h em Brasília já é o "dia seguinte" em UTC. O fuso é explícito e coberto por teste. |
 
 ## Fluxo do check-in
@@ -218,9 +224,9 @@ tentativas por IP; o próximo passo seria o Upstash Ratelimit nas rotas de ident
 ## Testes
 
 ```bash
-npm test             # 51 testes unitários (Vitest): busca por nome, máscaras, datas, Haversine, HMAC, geofence, upload, rostos (registro e criativa), e-mail, sessão do pastor
+npm test             # 56 testes unitários (Vitest): dashboard, busca por nome, máscaras, datas, Haversine, HMAC, geofence, upload, rostos (registro e criativa), e-mail, sessão do pastor
 npm run typecheck    # TypeScript em modo strict
-npm run test:fluxo   # 37 verificações ponta a ponta contra o Supabase real, com limpeza dos dados no final
+npm run test:fluxo   # 40 verificações ponta a ponta contra o Supabase real, com limpeza dos dados no final
 npm run simular      # dois adolescentes sintéticos fazem check-in com 8 s de intervalo (para ver o feed ao vivo)
 ```
 
@@ -257,10 +263,12 @@ app/
   api/checkin/visitante       visitante: nome + telefone (+ foto opcional)
   api/cadastro                novo adolescente
   api/pastor/sessao           login (POST), sessão (GET) e saída (DELETE) do pastor
+  api/pastor/dashboard        indicadores, evolução por encontro e ranking (só com a sessão do pastor)
   api/pastor/feed             check-ins do dia com URLs assinadas das fotos (?since= para o incremental)
   api/health                  diagnóstico (variáveis, tabelas, view e bucket)
   api/qrcode · qrcode/        QR code gerado no servidor (PNG/SVG) e página para imprimir
-components/                   Brand (marca), Camera (getUserMedia + fallback), CadastroForm (responsável | pastor)
+components/                   Brand (marca), Camera (getUserMedia + fallback), CadastroForm (responsável | pastor), PastorDashboard (indicadores, gráfico SVG, ranking)
+lib/stats.ts                  cálculo do dashboard (função pura)
 lib/format.ts                 validações compartilhadas cliente/servidor
 lib/server/                   env, cliente Supabase, segurança, reconhecimento facial, tratamento de erros
 supabase/migrations/          schema, RLS, view de presença e bucket

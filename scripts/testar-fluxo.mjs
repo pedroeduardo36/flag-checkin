@@ -161,6 +161,17 @@ try {
   check("visitantes aparecem no feed marcados como visitante", vis.length === 2, vis.length);
   const desde = await fetch(`${BASE}/api/pastor/feed?since=${encodeURIComponent(feed.items?.[0]?.checkedInAt ?? "")}`, { headers: { cookie: pastorCookie } }).then((x) => x.json());
   check("feed incremental (since) não repete o que já foi visto", Array.isArray(desde.items) && desde.items.length === 0, desde.items?.length);
+  const dashSem = await fetch(`${BASE}/api/pastor/dashboard`);
+  check("dashboard sem sessão é bloqueado (401)", dashSem.status === 401, dashSem.status);
+  const dash = await fetch(`${BASE}/api/pastor/dashboard`, { headers: { cookie: pastorCookie } }).then((x) => x.json());
+  const hoje = dash.evolucao?.at(-1);
+  check("dashboard conta o encontro de hoje (adolescente + 2 visitantes)", hoje?.cadastrados >= 1 && hoje?.visitantes >= 2 && dash.kpis?.encontros >= 1, hoje);
+  const rk = dash.ranking ?? [];
+  const ordenado = rk.every((r, i) => i === 0 || rk[i - 1].presencas >= r.presencas);
+  const temVaga = rk.length < 10;
+  check("ranking ordenado (até 10) e com o adolescente de teste quando há vaga",
+    ordenado && rk.length <= 10 && (!temVaga || rk.some((r) => r.name === cad.name)), rk.map((r) => [r.name, r.presencas]));
+
   const cpf2 = cpfAleatorio();
   cpfsCriados.push(cpf2);
   const r2 = await post("/api/cadastro", { ...cad, cpf: cpf2, name: "Teste Automático Pastor" }, { cookie: pastorCookie });

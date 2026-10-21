@@ -128,7 +128,12 @@ O status de cada aviso aparece na coluna `aviso_responsavel` da view `presencas`
 
 Abra **https://flag-checkin.vercel.app/pastor** e entre com a senha `PASTOR_PASSWORD`. A sessão dura 12 h no aparelho.
 - **Ao vivo:** quem fez check-in hoje, do mais recente para o mais antigo, atualizando sozinho a cada 4 s.
+- **Dashboard:** encontros, média por encontro, último encontro comparado ao anterior, gráfico da frequência a cada
+  culto (cadastrados e visitantes) e ranking dos 10 mais frequentes. O botão "↻ Atualizar" recarrega os números.
 - **Cadastrar:** o mesmo cadastro do responsável, para cadastrar vários em sequência.
+
+Para ver o dashboard com dados: `node scripts/simular-dashboard.mjs` cria 8 domingos simulados (adolescentes e visitantes
+com o prefixo "Simulação"); `node scripts/simular-dashboard.mjs --limpar` apaga tudo depois.
 
 Para ver o feed funcionando sem ninguém na igreja: `npm run simular` (e `node scripts/simular-checkins.mjs --limpar`
 para apagar os cadastros de simulação depois).
