@@ -297,3 +297,24 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .email2__remove { position: absolute; top: 0; right: 0; font: inherit; font-size: 13px; font-weight: 700; color: var(--muted); background: none; border: 0; cursor: pointer; padding: 0; }
 .email2__remove:hover { color: var(--danger); }
 .email2 .field > span { padding-right: 72px; }
+
+/* ---------- Explicação da foto criativa ---------- */
+.explain__list { list-style: none; padding: 0; margin: 0 0 20px; display: flex; flex-direction: column; gap: 10px; }
+.explain__list li { display: flex; gap: 12px; align-items: center; background: var(--flag-soft); border-radius: 12px; padding: 12px 14px; font-size: 15px; line-height: 1.35; }
+.explain__icon { font-size: 22px; flex-shrink: 0; }
+
+/* ---------- Sucesso do cadastro ---------- */
+.success-cadastro .lead { text-align: center; }
+.spam-alert { display: flex; gap: 12px; align-items: flex-start; background: #fff4d6; border: 2px solid #f0b429; border-radius: 16px; padding: 14px 16px; margin: 4px 0 18px; color: #5c3d00; }
+.spam-alert__icon { font-size: 30px; line-height: 1; }
+.spam-alert strong { display: block; font-size: 17px; margin-bottom: 4px; color: #3d2900; }
+.spam-alert p { margin: 0; font-size: 14px; line-height: 1.5; }
+.summary { border: 1.5px solid var(--line); border-radius: 16px; padding: 14px 16px; margin-bottom: 18px; }
+.summary h2 { font-size: 16px; margin: 0 0 10px; }
+.summary__group + .summary__group { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.summary__title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--flag-dark); margin-bottom: 6px; }
+.summary dl { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.summary dl > div { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.summary dt { color: var(--muted); flex-shrink: 0; }
+.summary dd { margin: 0; font-weight: 600; text-align: right; word-break: break-word; }
+.summary__note { margin: 12px 0 0; font-size: 13px; }

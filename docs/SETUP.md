@@ -14,8 +14,8 @@ Antes do culto ──► /cadastro (o RESPONSÁVEL preenche)
 QR code / tag NFC ──► /checkin
    1. Localização  → confere se o celular está dentro do raio da igreja
    2. "Tenho cadastro": nome completo + nascimento   |   "Sou visitante": nome + telefone (+ foto opcional)
-   3. 1º check-in: foto de REGISTRO (1 rosto, vira a foto do cadastro)
-      Demais: foto CRIATIVA dentro do culto (pode ter amigos; um rosto precisa ser o dele)
+   3. 1º check-in: foto de REGISTRO (1 rosto, vira a foto do cadastro) → explicação → foto CRIATIVA
+      Demais: explicação → foto CRIATIVA dentro do culto (pode ter amigos; um rosto precisa ser o dele)
    4. Tela de sucesso + e-mail ao responsável com horário e foto
 ```
 

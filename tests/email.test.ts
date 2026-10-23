@@ -81,3 +81,28 @@ describe("envio", () => {
     expect(await sendCheckinEmail("mae@exemplo.com", dados)).toBe("falhou");
   });
 });
+
+describe("e-mail de confirmação do cadastro", () => {
+  it("assunto com o primeiro nome, passo a passo do check-in e aviso de spam", async () => {
+    const { buildCadastroEmail } = await load();
+    const e = buildCadastroEmail({ guardianName: "Maria Souza", teenName: "Ana <i>Beatriz</i> Souza" });
+    expect(e.subject).toBe("✅ Cadastro de Ana na O2 · Flag confirmado");
+    expect(e.text).toContain("nome completo e data de nascimento");
+    expect(e.html).toContain("Não é spam");
+    expect(e.html).not.toContain("<i>Beatriz</i>");
+  });
+
+  it("envia para os dois e-mails do cadastro", async () => {
+    Object.assign(process.env, SMTP);
+    sendMail.mockResolvedValue({ messageId: "1" });
+    const { sendCadastroEmail } = await load();
+    expect(await sendCadastroEmail(["mae@exemplo.com", "pai@exemplo.com"], { guardianName: "Maria", teenName: "Ana Souza" })).toBe("enviado");
+    expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: "mae@exemplo.com, pai@exemplo.com" }));
+  });
+
+  it("extrai o endereço do remetente de EMAIL_FROM", async () => {
+    Object.assign(process.env, SMTP);
+    const { senderAddress } = await load();
+    expect(senderAddress()).toBe("checkin@exemplo.com");
+  });
+});

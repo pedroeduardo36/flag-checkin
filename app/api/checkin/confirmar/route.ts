@@ -20,7 +20,8 @@ async function referenceDescriptor(m: { id: string; face_descriptor: unknown; ph
   return face.descriptor;
 }
 
-// Etapa 3: foto de registro (1º check-in) ou foto criativa (demais) → grava o check-in.
+// Etapa 3. No 1º check-in são duas chamadas: a foto de REGISTRO (completa o cadastro, sem check-in)
+// e depois a foto CRIATIVA (conclui o check-in). Nos seguintes, só a criativa.
 export const POST = withErrors(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const t = readCheckinToken(body?.token);
@@ -36,32 +37,32 @@ export const POST = withErrors(async (req: Request) => {
     .single();
   if (mErr || !m) throw mErr ?? new Error("Membro não encontrado");
 
-  const date = serviceDate();
   const reference = await referenceDescriptor(m);
-  let path: string;
-  let photoKind: "registro" | "criativa";
-  let faceDistance: number | null = null;
 
   if (!reference) {
-    // PRIMEIRO CHECK-IN: a foto precisa ter um rosto só, de perto. Vira a foto do cadastro.
+    // FOTO DE REGISTRO: um rosto só, de perto. Vira a foto do cadastro; o check-in vem com a criativa.
     const face = await analyzeFace(photo.buffer);
     if (!face.ok) return NextResponse.json({ error: face.message, code: face.code }, { status: 422 });
-    path = `membros/${m.id}-${Date.now()}.jpg`;
-    const up = await db().storage.from(PHOTO_BUCKET).upload(path, photo.buffer, { contentType: photo.contentType });
+    const regPath = `membros/${m.id}-${Date.now()}.jpg`;
+    const up = await db().storage.from(PHOTO_BUCKET).upload(regPath, photo.buffer, { contentType: photo.contentType });
     if (up.error) throw up.error;
-    await db().from("members").update({ photo_path: path, face_descriptor: face.descriptor }).eq("id", m.id);
-    photoKind = "registro";
-  } else {
-    // DEMAIS CHECK-INS: foto criativa (amigos, pose, careta). Basta um rosto conferir.
-    const match = await matchCreativePhoto(photo.buffer, reference);
-    if (!match.ok)
-      return NextResponse.json({ error: match.message, code: match.code }, { status: match.code === "ROSTO_NAO_CONFERE" ? 403 : 422 });
-    path = `checkins/${date}/${m.id}-${Date.now()}.jpg`;
-    const up = await db().storage.from(PHOTO_BUCKET).upload(path, photo.buffer, { contentType: photo.contentType });
-    if (up.error) throw up.error;
-    photoKind = "criativa";
-    faceDistance = Number(match.distance.toFixed(4));
+    const upd = await db().from("members").update({ photo_path: regPath, face_descriptor: face.descriptor }).eq("id", m.id);
+    if (upd.error) throw upd.error;
+    return NextResponse.json({ ok: true, registered: true, next: "criativa", name: m.name });
   }
+
+  // FOTO CRIATIVA (amigos, pose, careta): basta um rosto conferir com o registro.
+  const match = await matchCreativePhoto(photo.buffer, reference);
+  if (!match.ok)
+    return NextResponse.json({ error: match.message, code: match.code }, { status: match.code === "ROSTO_NAO_CONFERE" ? 403 : 422 });
+
+  const date = serviceDate();
+  const path = `checkins/${date}/${m.id}-${Date.now()}.jpg`;
+  const up = await db().storage.from(PHOTO_BUCKET).upload(path, photo.buffer, { contentType: photo.contentType });
+  if (up.error) throw up.error;
+  const { count: anteriores } = await db().from("checkins").select("id", { count: "exact", head: true }).eq("member_id", m.id);
+  const photoKind = "criativa" as const;
+  const faceDistance = Number(match.distance.toFixed(4));
 
   const { data, error } = await db()
     .from("checkins")
@@ -74,6 +75,7 @@ export const POST = withErrors(async (req: Request) => {
       distance_m: t.dist,
       photo_path: path,
       photo_kind: photoKind,
+      is_first: !anteriores,
       face_distance: faceDistance,
       user_agent: req.headers.get("user-agent")?.slice(0, 300) ?? null,
     })
@@ -81,7 +83,7 @@ export const POST = withErrors(async (req: Request) => {
     .single();
 
   if (error) {
-    if (photoKind === "criativa") await db().storage.from(PHOTO_BUCKET).remove([path]);
+    await db().storage.from(PHOTO_BUCKET).remove([path]);
     if (error.code === "23505")
       return NextResponse.json({ error: "Você já fez check-in hoje.", code: "DUPLICADO" }, { status: 409 });
     throw error;
@@ -98,5 +100,5 @@ export const POST = withErrors(async (req: Request) => {
     await db().from("checkins").update({ guardian_email_status: status, guardian_email_at: new Date().toISOString() }).eq("id", data.id);
   });
 
-  return NextResponse.json({ ok: true, name: m.name, checkedInAt: data.checked_in_at, photoKind });
+  return NextResponse.json({ ok: true, name: m.name, checkedInAt: data.checked_in_at, photoKind, isFirst: !anteriores });
 });

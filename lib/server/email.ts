@@ -126,3 +126,83 @@ export async function sendCheckinEmail(
     return "falhou";
   }
 }
+
+/** Endereço do remetente (de EMAIL_FROM), para avisar o responsável de quem esperar o e-mail. */
+export function senderAddress(): string | null {
+  const from = process.env.EMAIL_FROM ?? "";
+  return /<([^>]+)>/.exec(from)?.[1] ?? (from.includes("@") ? from.trim() : null);
+}
+
+export type CadastroEmailData = { guardianName: string; teenName: string };
+
+/** Confirmação do cadastro feito pelo responsável (função pura). */
+export function buildCadastroEmail(d: CadastroEmailData) {
+  const teen = firstName(d.teenName);
+  const guardian = firstName(d.guardianName);
+  const subject = `✅ Cadastro de ${teen} na O2 · Flag confirmado`;
+  const text = [
+    `Olá, ${guardian}!`,
+    "",
+    `O cadastro de ${d.teenName} na Juventude O2 · Ministério Flag foi concluído.`,
+    "",
+    "Como funciona o check-in:",
+    "1. No culto, o adolescente abre o check-in pelo QR code e informa nome completo e data de nascimento.",
+    "2. No primeiro check-in, tira uma foto do rosto para completar o cadastro.",
+    "3. Dentro do culto, tira uma foto criativa, que conclui o check-in.",
+    "",
+    "A cada check-in você recebe um e-mail com o horário e a foto.",
+    "Se este e-mail caiu no spam, marque como \"Não é spam\" para os próximos avisos chegarem na caixa de entrada.",
+    "",
+    "Ministério Flag · Juventude O2",
+  ].join("\n");
+  const html = `<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Cadastro O2 · Flag</title></head>
+<body style="margin:0;padding:0;background:#f3f8fb;font-family:Montserrat,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0d2230">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f8fb;padding:24px 12px;font-family:Montserrat,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:18px;overflow:hidden">
+  <tr><td style="background:#008ec3;padding:22px 24px;color:#ffffff">
+    <div style="font-size:30px;font-weight:900;letter-spacing:.06em;line-height:1">FLAG</div>
+    <div style="font-size:13px;opacity:.9;margin-top:6px;letter-spacing:.04em">Juventude <b>O2</b></div>
+  </td></tr>
+  <tr><td style="padding:24px">
+    <p style="margin:0 0 6px;font-size:15px;color:#5b6b77">Olá, ${esc(guardian)}!</p>
+    <h1 style="margin:0 0 14px;font-size:22px;line-height:1.3">Cadastro de ${esc(teen)} confirmado ✅</h1>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.5">${esc(d.teenName)} já pode fazer check-in nos cultos da Juventude O2.</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#e6f5fb;border-radius:12px;margin:0 0 16px">
+      <tr><td style="padding:14px 16px;font-size:14px;line-height:1.6">
+        <b>Como funciona o check-in</b><br/>
+        1. No culto, o adolescente abre o check-in pelo QR code e informa <b>nome completo</b> e <b>data de nascimento</b>.<br/>
+        2. No primeiro check-in, tira uma <b>foto do rosto</b> para completar o cadastro.<br/>
+        3. Dentro do culto, tira uma <b>foto criativa</b>, que conclui o check-in.
+      </td></tr>
+    </table>
+    <p style="margin:0 0 12px;font-size:14px;line-height:1.5">A cada check-in você recebe um e-mail com o <b>horário</b> e a <b>foto</b>.</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#fff4d6;border-radius:12px">
+      <tr><td style="padding:12px 16px;font-size:14px;line-height:1.5;color:#5c3d00">
+        📬 Se este e-mail caiu no <b>spam</b>, marque como <b>"Não é spam"</b>: assim os avisos de check-in chegam na caixa de entrada.
+      </td></tr>
+    </table>
+  </td></tr>
+  <tr><td style="padding:16px 24px;border-top:1px solid #d9e3ea;font-size:12px;line-height:1.5;color:#5b6b77">
+    Você recebe este e-mail porque cadastrou o(a) adolescente no check-in do Ministério Flag.
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
+  return { subject, text, html };
+}
+
+/** Envia a confirmação do cadastro. Nunca lança erro. */
+export async function sendCadastroEmail(recipients: (string | null | undefined)[], d: CadastroEmailData): Promise<EmailStatus> {
+  const list = [...new Set(recipients.map((e) => e?.trim().toLowerCase()).filter(Boolean) as string[])];
+  if (!list.length) return "sem_email";
+  if (!emailConfigured()) return "sem_config";
+  try {
+    await transport().sendMail({ from: process.env.EMAIL_FROM, to: list.join(", "), ...buildCadastroEmail(d) });
+    return "enviado";
+  } catch (err) {
+    console.error("Falha ao enviar e-mail de cadastro:", err instanceof Error ? err.message : err);
+    return "falhou";
+  }
+}

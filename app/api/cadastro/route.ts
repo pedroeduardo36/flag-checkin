@@ -1,6 +1,7 @@
 import { withErrors } from "@/lib/server/http";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { db } from "@/lib/server/supabase";
+import { emailConfigured, sendCadastroEmail, senderAddress } from "@/lib/server/email";
 import { isValidBirthDate, isValidCpf, isValidEmail, isValidPhone, nameTokens, onlyDigits } from "@/lib/format";
 
 const clean = (v: unknown, max = 120) => String(v ?? "").trim().replace(/\s+/g, " ").slice(0, max);
@@ -46,5 +47,8 @@ export const POST = withErrors(async (req: Request) => {
       return NextResponse.json({ error: "Este CPF já está cadastrado. O adolescente já pode fazer o check-in.", code: "CPF_EXISTE" }, { status: 409 });
     throw error;
   }
-  return NextResponse.json({ ok: true });
+  // Confirmação por e-mail depois da resposta: o responsável já confere se caiu no spam.
+  after(() => sendCadastroEmail([data.guardian_email, data.guardian_email2], { guardianName: data.guardian_name, teenName: data.name }));
+
+  return NextResponse.json({ ok: true, confirmationSent: emailConfigured(), sender: senderAddress() });
 });

@@ -12,6 +12,7 @@ type Item = {
   firstName: string;
   isVisitor?: boolean;
   photoKind?: "registro" | "criativa" | null;
+  isFirst?: boolean;
   checkedInAt: string;
   selfieUrl: string | null;
   avatarUrl: string | null;
@@ -276,7 +277,7 @@ function Post({ it, now, isNew = false, example = false }: { it: Item; now: numb
             <footer className="post__foot">
               <span className="tag tag--ok">✓ Check-in confirmado</span>
               {it.isVisitor && <span className="tag tag--visitor">👋 Visitante</span>}
-              {it.photoKind === "registro" && <span className="tag tag--first">⭐ 1º check-in</span>}
+              {it.isFirst && <span className="tag tag--first">⭐ 1º check-in</span>}
               {it.photoKind === "criativa" && !it.isVisitor && <span className="tag">📸 Foto criativa</span>}
               {it.faceDistance != null && <span className="tag">🙂 Rosto confere</span>}
               {it.guardianEmailStatus === "enviado" && <span className="tag">✉️ Responsável avisado</span>}

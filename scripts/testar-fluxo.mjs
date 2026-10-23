@@ -78,6 +78,7 @@ try {
   check("cadastro com e-mail do responsável inválido é recusado (400)", r.status === 400 && !!r.data.errors?.guardianEmail, r);
   r = await post("/api/cadastro", cad);
   check("responsável cadastra SEM foto e SEM senha do fiscal (200)", r.status === 200, r);
+  check("cadastro informa o remetente para o aviso de spam", typeof r.data.sender === "string" && r.data.sender.includes("@"), r.data);
   r = await post("/api/cadastro", cad);
   check("CPF duplicado é recusado (409)", r.status === 409, r);
   const { data: semFoto } = await sb.from("members").select("photo_path, face_descriptor, guardian_email2").eq("cpf", cpf).single();
@@ -112,9 +113,15 @@ try {
   f = await post("/api/checkin/confirmar", { token, photo: foto("duas-pessoas") });
   check("registro com duas pessoas é recusado (422 VARIOS_ROSTOS)", f.status === 422 && f.data.code === "VARIOS_ROSTOS", f.data);
   f = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-a-cadastro") });
-  check("registro com um rosto conclui o 1º check-in (200)", f.status === 200 && f.data.photoKind === "registro", f.data);
-  const { data: comFoto } = await sb.from("members").select("photo_path, face_descriptor").eq("cpf", cpf).single();
+  check("registro com um rosto completa o cadastro e pede a foto criativa", f.status === 200 && f.data.registered === true && f.data.next === "criativa", f.data);
+  const { data: comFoto } = await sb.from("members").select("id, photo_path, face_descriptor").eq("cpf", cpf).single();
   check("foto de registro vira a foto do cadastro (com descritor)", !!comFoto.photo_path && comFoto.face_descriptor?.length === 128, !!comFoto.photo_path);
+  const { count: aindaSem } = await sb.from("checkins").select("id", { count: "exact", head: true }).eq("member_id", comFoto.id);
+  check("só a foto de registro ainda NÃO conclui o check-in", aindaSem === 0, aindaSem);
+  f = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-b") });
+  check("1º check-in: foto criativa de outra pessoa é recusada (403)", f.status === 403 && f.data.code === "ROSTO_NAO_CONFERE", f.data);
+  f = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-a-selfie") });
+  check("1º check-in: foto criativa conclui o check-in (200, marcado como 1º)", f.status === 200 && f.data.photoKind === "criativa" && f.data.isFirst === true, f.data);
   const aviso = await esperaAviso(cpf);
   const esperado = env.E2E_EMAIL ? ["enviado"] : ["enviado", "falhou", "sem_config"];
   check(`aviso ao responsável registrado (${aviso})`, esperado.includes(aviso), aviso);
@@ -124,20 +131,19 @@ try {
   check("identificar de novo → já fez check-in hoje", r.data.alreadyCheckedIn === true && !!r.data.photoUrl, r.data);
 
   // ---------- Check-ins seguintes: foto criativa ----------
-  // Simula "outro domingo": apaga o check-in de hoje (o cadastro já tem a foto de referência).
+  // Simula "outro domingo": o check-in de hoje passa para a semana passada (o cadastro já tem a foto de referência).
   const { data: m } = await sb.from("members").select("id").eq("cpf", cpf).single();
-  const { data: ck } = await sb.from("checkins").select("photo_path").eq("member_id", m.id).single();
-  await sb.from("checkins").delete().eq("member_id", m.id);
-  if (ck?.photo_path && ck.photo_path !== comFoto.photo_path) await sb.storage.from("fotos").remove([ck.photo_path]);
+  const semanaPassada = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10);
+  await sb.from("checkins").update({ service_date: semanaPassada }).eq("member_id", m.id);
   r = await post("/api/checkin/identificar", { ...dentro, name: cad.name, birthDate: nasc });
-  check("check-in seguinte pede foto CRIATIVA", r.status === 200 && r.data.photoKind === "criativa", r.data);
+  check("check-in seguinte pede foto CRIATIVA (sem registro)", r.status === 200 && r.data.photoKind === "criativa", r.data);
   token = r.data.token;
   f = await post("/api/checkin/confirmar", { token, photo: foto("sem-rosto") });
   check("foto criativa sem rosto é recusada (422)", f.status === 422 && f.data.code === "SEM_ROSTO", f.data);
   f = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-b") });
   check("foto criativa de OUTRA pessoa é recusada (403)", f.status === 403 && f.data.code === "ROSTO_NAO_CONFERE", f.data);
   f = await post("/api/checkin/confirmar", { token, photo: foto("duas-pessoas") });
-  check("foto criativa EM GRUPO com o adolescente é aceita (200)", f.status === 200 && f.data.photoKind === "criativa", f.data);
+  check("foto criativa EM GRUPO com o adolescente é aceita (200, não é o 1º)", f.status === 200 && f.data.photoKind === "criativa" && f.data.isFirst === false, f.data);
 
   // ---------- Visitante ----------
   r = await post("/api/checkin/visitante", { ...dentro, name: "Visitante Teste", phone: "123" });

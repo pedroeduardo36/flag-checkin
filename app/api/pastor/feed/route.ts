@@ -9,7 +9,7 @@ import { firstName } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 const PHOTO_URL_TTL = 60 * 60; // 1 h
-const COLUMNS = "id, service_date, checked_in_at, photo_path, photo_kind, face_distance, guardian_email_status, visitor_name, members(name, photo_path)";
+const COLUMNS = "id, service_date, checked_in_at, photo_path, photo_kind, is_first, face_distance, guardian_email_status, visitor_name, members(name, photo_path)";
 
 type Row = {
   id: string;
@@ -17,6 +17,7 @@ type Row = {
   checked_in_at: string;
   photo_path: string | null;
   photo_kind: "registro" | "criativa" | null;
+  is_first: boolean;
   visitor_name: string | null;
   face_distance: number | null;
   guardian_email_status: string | null;
@@ -74,6 +75,7 @@ export const GET = withErrors(async (req: Request) => {
       firstName: firstName(m?.name ?? r.visitor_name ?? ""),
       isVisitor: !m,
       photoKind: r.photo_kind,
+      isFirst: r.is_first || r.photo_kind === "registro",
       checkedInAt: r.checked_in_at,
       selfieUrl: r.photo_path ? urlOf.get(r.photo_path) ?? null : null,
       avatarUrl: m?.photo_path ? urlOf.get(m.photo_path) ?? null : null,

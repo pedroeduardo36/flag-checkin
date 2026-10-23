@@ -48,7 +48,7 @@ export function CadastroForm({ mode, onSessionExpired }: { mode: Mode; onSession
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<false | { confirmationSent: boolean; sender: string | null }>(false);
   const [showEmail2, setShowEmail2] = useState(false);
   const pastor = mode === "pastor";
 
@@ -75,7 +75,10 @@ export function CadastroForm({ mode, onSessionExpired }: { mode: Mode; onSession
     }).catch(() => null);
     const data = res ? await res.json().catch(() => ({})) : {};
     setBusy(false);
-    if (res?.ok) return setDone(true);
+    if (res?.ok) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return setDone({ confirmationSent: !!data.confirmationSent, sender: data.sender ?? null });
+    }
     if (pastor && res?.status === 401) return onSessionExpired?.();
     setMsg(data.error ?? "Erro ao salvar. Tente de novo.");
     if (data.errors) setErrors(data.errors);
@@ -91,27 +94,62 @@ export function CadastroForm({ mode, onSessionExpired }: { mode: Mode; onSession
 
   if (done) {
     const teen = nameTokens(f.name).length ? f.name.trim().split(/\s+/)[0] : "O adolescente";
+    const emails = [f.guardianEmail, f.guardianEmail2].filter(Boolean);
+    const rows: [string, string][] = [
+      ["Nome", f.name.trim()],
+      ["Nascimento", f.birthDate],
+      ["CPF", f.cpf],
+      ...(f.phone ? ([["Celular", f.phone]] as [string, string][]) : []),
+    ];
+    const guardianRows: [string, string][] = [
+      ["Nome", f.guardianName.trim()],
+      ["Telefone", f.guardianPhone],
+      ...emails.map((e, i) => [emails.length > 1 ? `E-mail ${i + 1}` : "E-mail", e] as [string, string]),
+    ];
     return (
-      <div className="center success">
-        <div className="success__photo success__photo--icon" aria-hidden>✓</div>
-        <h1>Cadastro concluído!</h1>
-        <p className="success__name">{f.name}</p>
-        <p className="hint">
-          No culto, {teen} faz o check-in com <strong>nome completo</strong> e <strong>data de nascimento</strong>. No
-          primeiro check-in, tira uma foto do rosto para completar o cadastro.
-          {f.guardianEmail && (
-            <>
-              {" "}A cada check-in, o aviso vai para <strong>{f.guardianEmail}</strong>
-              {f.guardianEmail2 && <> e <strong>{f.guardianEmail2}</strong></>}.
-            </>
-          )}
-        </p>
+      <div className="success-cadastro">
+        <div className="center">
+          <div className="success__photo success__photo--icon" aria-hidden>✓</div>
+          <h1>Cadastro concluído!</h1>
+          <p className="lead">{teen} já pode fazer check-in nos cultos da O2.</p>
+        </div>
+
+        <div className="spam-alert" role="status">
+          <div className="spam-alert__icon" aria-hidden>📬</div>
+          <div>
+            <strong>Confira a caixa de spam!</strong>
+            <p>
+              {done.confirmationSent ? "Enviamos agora um e-mail de confirmação" : "Os avisos de check-in são enviados"}
+              {done.sender ? <> de <b>{done.sender}</b></> : null} para {emails.length > 1 ? "os e-mails cadastrados" : "o e-mail cadastrado"}.
+              Se não estiver na caixa de entrada, procure em <b>Spam</b> ou <b>Lixo eletrônico</b> e marque como{" "}
+              <b>&quot;Não é spam&quot;</b>. Assim os avisos de cada check-in {pastor ? "chegam ao responsável" : "do seu filho(a) chegam certinho"}.
+            </p>
+          </div>
+        </div>
+
+        <div className="summary">
+          <h2>Dados cadastrados</h2>
+          <div className="summary__group">
+            <div className="summary__title">Adolescente</div>
+            <dl>{rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+          </div>
+          <div className="summary__group">
+            <div className="summary__title">Responsável</div>
+            <dl>{guardianRows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+          </div>
+          <p className="hint summary__note">
+            No culto, {teen} faz o check-in com <strong>nome completo</strong> e <strong>data de nascimento</strong>. No
+            primeiro, tira uma foto do rosto e depois a foto criativa. Algum dado errado? Fale com a liderança da O2.
+          </p>
+        </div>
+
         <button type="button" className="btn" onClick={reset}>
           {pastor ? "Cadastrar outro adolescente" : "Cadastrar outro filho(a)"}
         </button>
       </div>
     );
   }
+
 
   const field = (k: keyof Form, label: string, input: React.ReactNode, hint?: string) => (
     <label className={`field ${errors[k] ? "field--error" : ""}`} data-field={k}>

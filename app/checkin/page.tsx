@@ -17,6 +17,7 @@ type Step =
   | { name: "denied" }
   | { name: "outside"; distance: number; radius: number; accuracy: number }
   | { name: "identify" }
+  | { name: "explain"; pending: Pending; justRegistered: boolean }
   | { name: "photo"; pending: Pending }
   | { name: "success"; who: string; photo: string | null; at: string | null; repeat: boolean; kind: "registro" | "criativa" | "visitante" };
 
@@ -126,7 +127,8 @@ export default function CheckinPage() {
     const pending: Pending = { token: r.data.token, firstName: r.data.firstName, photoKind: r.data.photoKind, expiresAt: r.data.expiresAt };
     savePending(pending);
     setPhoto(null);
-    setStep({ name: "photo", pending });
+    // 1º check-in: foto de registro primeiro. Demais: explica a foto criativa antes da câmera.
+    setStep(pending.photoKind === "registro" ? { name: "photo", pending } : { name: "explain", pending, justRegistered: false });
   }
 
   async function confirm(pending: Pending) {
@@ -144,6 +146,13 @@ export default function CheckinPage() {
       if (r.data.code === "DUPLICADO") savePending(null);
       if (FACE_CODES.includes(r.data.code)) setPhoto(null);
       return setError({ msg: r.data.error ?? "Erro inesperado.", code: r.data.code });
+    }
+    if (r.data.registered) {
+      // Foto de registro salva no cadastro. Falta a foto criativa para concluir o check-in.
+      const next: Pending = { ...pending, photoKind: "criativa" };
+      savePending(next);
+      setPhoto(null);
+      return setStep({ name: "explain", pending: next, justRegistered: true });
     }
     savePending(null);
     setStep({ name: "success", who: r.data.name, photo, at: r.data.checkedInAt, repeat: false, kind: r.data.photoKind });
@@ -297,21 +306,43 @@ export default function CheckinPage() {
         </>
       )}
 
+      {step.name === "explain" && (
+        <div className="explain">
+          {step.justRegistered ? (
+            <div className="ok-chip">✓ Foto de registro salva: seu cadastro está completo</div>
+          ) : (
+            <div className="ok-chip">✓ {step.pending.firstName}, você foi identificado(a)</div>
+          )}
+          <h1>Agora, a foto criativa 📸</h1>
+          <p className="lead">É ela que conclui o seu check-in.</p>
+          <ul className="explain__list">
+            <li><span className="explain__icon" aria-hidden>⛪</span><span>Tire <strong>dentro do culto</strong>, quando quiser.</span></li>
+            <li><span className="explain__icon" aria-hidden>🤳</span><span>Vale tudo: <strong>com os amigos, pose ou careta</strong>.</span></li>
+            <li><span className="explain__icon" aria-hidden>🙂</span><span>Só precisa <strong>aparecer o seu rosto</strong>.</span></li>
+            <li><span className="explain__icon" aria-hidden>✉️</span><span>A foto vai para o <strong>e-mail do seu responsável</strong>.</span></li>
+          </ul>
+          <button className="btn" onClick={() => setStep({ name: "photo", pending: step.pending })}>Entendi, tirar a foto criativa</button>
+          <p className="hint center-text">
+            Ainda não é a hora? Pode fechar: fica guardado neste celular até {fmtTime(step.pending.expiresAt)}.
+          </p>
+        </div>
+      )}
+
       {step.name === "photo" && step.pending.photoKind === "registro" && (
         <>
           <h1>Oi, {step.pending.firstName}! 👋</h1>
           <div className="info info--first">
             <span aria-hidden>⭐</span>
             <span>
-              <strong>Seu primeiro check-in!</strong> Tire uma foto <strong>só do seu rosto</strong>, de frente e com boa luz.
-              Ela completa seu cadastro e confirma que é você mesmo.
+              <strong>Seu primeiro check-in!</strong> Primeiro, uma foto <strong>só do seu rosto</strong>, de frente e com boa
+              luz. Ela completa seu cadastro e confirma que é você. Depois vem a foto criativa.
             </span>
           </div>
           <Camera value={photo} onChange={(p) => { setPhoto(p); if (p) setError(null); }} label="Abrir câmera" />
           {errorBox}
           {photo && (
             <button className="btn" onClick={() => confirm(step.pending)} disabled={busy}>
-              {busy ? "Verificando rosto…" : "Confirmar check-in"}
+              {busy ? "Verificando rosto…" : "Salvar foto de registro"}
             </button>
           )}
         </>
@@ -363,7 +394,7 @@ export default function CheckinPage() {
 
 function Progress({ step }: { step: Step["name"] }) {
   const order = ["local", "dados", "foto", "pronto"];
-  const current = step === "identify" ? 1 : step === "photo" ? 2 : step === "success" ? 4 : 0;
+  const current = step === "identify" ? 1 : step === "photo" || step === "explain" ? 2 : step === "success" ? 4 : 0;
   return (
     <ol className="progress" aria-label="Etapas do check-in">
       {order.map((label, i) => (

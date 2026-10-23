@@ -22,7 +22,8 @@ describe("token de check-in (HMAC)", () => {
     const [data, sig] = createCheckinToken(payload).split(".");
     const forged = Buffer.from(JSON.stringify({ ...payload, mid: "outro", exp: Date.now() + 1e6 })).toString("base64url");
     expect(readCheckinToken(`${forged}.${sig}`)).toBeNull();
-    expect(readCheckinToken(`${data}.x${sig.slice(1)}`)).toBeNull();
+    const outro = sig[0] === "x" ? "y" : "x"; // garante que a assinatura muda de verdade
+    expect(readCheckinToken(`${data}.${outro}${sig.slice(1)}`)).toBeNull();
   });
   it("recusa token expirado", async () => {
     const { createCheckinToken, readCheckinToken } = await load();
