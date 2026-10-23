@@ -316,14 +316,13 @@ export default function CheckinPage() {
           <h1>Agora, a foto criativa 📸</h1>
           <p className="lead">É ela que conclui o seu check-in.</p>
           <ul className="explain__list">
-            <li><span className="explain__icon" aria-hidden>⛪</span><span>Tire <strong>dentro do culto</strong>, quando quiser.</span></li>
+            <li><span className="explain__icon" aria-hidden>⛪</span><span>Tire <strong>quando o pastor pedir</strong>, durante o culto.</span></li>
             <li><span className="explain__icon" aria-hidden>🤳</span><span>Vale tudo: <strong>com os amigos, pose ou careta</strong>.</span></li>
             <li><span className="explain__icon" aria-hidden>🙂</span><span>Só precisa <strong>aparecer o seu rosto</strong>.</span></li>
-            <li><span className="explain__icon" aria-hidden>✉️</span><span>A foto vai para o <strong>e-mail do seu responsável</strong>.</span></li>
           </ul>
           <button className="btn" onClick={() => setStep({ name: "photo", pending: step.pending })}>Entendi, tirar a foto criativa</button>
           <p className="hint center-text">
-            Ainda não é a hora? Pode fechar: fica guardado neste celular até {fmtTime(step.pending.expiresAt)}.
+            Pode fechar o app enquanto isso: fica guardado neste celular até {fmtTime(step.pending.expiresAt)}.
           </p>
         </div>
       )}
@@ -353,7 +352,7 @@ export default function CheckinPage() {
           <div className="ok-chip">✓ {step.pending.firstName}, você foi identificado(a)</div>
           <h1>Hora da foto criativa! 📸</h1>
           <p className="lead">
-            Tire sua foto criativa <strong>dentro do culto</strong>: com os amigos, fazendo pose, careta… vale tudo, só
+            Quando o pastor pedir, tire sua foto criativa: com os amigos, fazendo pose, careta… vale tudo, só
             precisa aparecer o seu rosto.
           </p>
           <Camera value={photo} onChange={(p) => { setPhoto(p); if (p) setError(null); }} label="Tirar foto criativa" />
@@ -365,7 +364,7 @@ export default function CheckinPage() {
           )}
           {!photo && (
             <p className="hint center-text">
-              Ainda não é a hora? Pode fechar: sua identificação fica guardada neste celular até {fmtTime(step.pending.expiresAt)}.
+              O pastor ainda não pediu? Pode fechar: sua identificação fica guardada neste celular até {fmtTime(step.pending.expiresAt)}.
             </p>
           )}
         </>
