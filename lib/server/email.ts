@@ -106,9 +106,17 @@ export function buildCheckinEmail(d: CheckinEmailData) {
   };
 }
 
-/** Envia o aviso. Nunca lança erro: devolve o status para gravar no check-in. */
-export async function sendCheckinEmail(to: string | null | undefined, d: CheckinEmailData): Promise<EmailStatus> {
-  if (!to) return "sem_email";
+/**
+ * Envia o aviso para um ou mais e-mails do responsável (todos na mesma mensagem).
+ * Nunca lança erro: devolve o status para gravar no check-in.
+ */
+export async function sendCheckinEmail(
+  recipients: string | null | undefined | (string | null | undefined)[],
+  d: CheckinEmailData,
+): Promise<EmailStatus> {
+  const list = [...new Set((Array.isArray(recipients) ? recipients : [recipients]).map((e) => e?.trim().toLowerCase()).filter(Boolean) as string[])];
+  if (!list.length) return "sem_email";
+  const to = list.join(", ");
   if (!emailConfigured()) return "sem_config";
   try {
     await transport().sendMail({ from: process.env.EMAIL_FROM, to, ...buildCheckinEmail(d) });

@@ -50,7 +50,10 @@ const nasc = "2010-05-20";
 const cad = {
   name: "Teste Automático de Souza Flag", cpf, phone: "", birthDate: nasc,
   guardianName: "Responsável Teste", guardianPhone: "61988880000",
-  guardianEmail: env.E2E_EMAIL || env.SMTP_USER || "responsavel.teste@example.com", consent: true,
+  guardianEmail: env.E2E_EMAIL || env.SMTP_USER || "responsavel.teste@example.com",
+  // Segundo e-mail: mesmo endereço com "+responsavel2" (o Gmail entrega na mesma caixa, sem devolução).
+  guardianEmail2: (env.E2E_EMAIL || env.SMTP_USER || "responsavel.teste@example.com").replace("@", "+responsavel2@"),
+  consent: true,
 };
 const esperaAviso = async (memberCpf) => {
   for (let i = 0; i < 20; i++) {
@@ -67,14 +70,19 @@ try {
   if (!h.ok) throw new Error("Corrija o /api/health antes de continuar.");
 
   // ---------- Cadastro pelo responsável: sem foto e sem senha ----------
-  let r = await post("/api/cadastro", { ...cad, guardianEmail: "email-invalido" });
+  let r = await post("/api/cadastro", { ...cad, guardianEmail2: "invalido" });
+  check("segundo e-mail inválido é recusado (400)", r.status === 400 && !!r.data.errors?.guardianEmail2, r.data);
+  r = await post("/api/cadastro", { ...cad, guardianEmail2: cad.guardianEmail.toUpperCase() });
+  check("segundo e-mail igual ao primeiro é recusado (400)", r.status === 400 && !!r.data.errors?.guardianEmail2, r.data);
+  r = await post("/api/cadastro", { ...cad, guardianEmail: "email-invalido" });
   check("cadastro com e-mail do responsável inválido é recusado (400)", r.status === 400 && !!r.data.errors?.guardianEmail, r);
   r = await post("/api/cadastro", cad);
   check("responsável cadastra SEM foto e SEM senha do fiscal (200)", r.status === 200, r);
   r = await post("/api/cadastro", cad);
   check("CPF duplicado é recusado (409)", r.status === 409, r);
-  const { data: semFoto } = await sb.from("members").select("photo_path, face_descriptor").eq("cpf", cpf).single();
+  const { data: semFoto } = await sb.from("members").select("photo_path, face_descriptor, guardian_email2").eq("cpf", cpf).single();
   check("cadastro fica sem foto até o primeiro check-in", !semFoto.photo_path && !semFoto.face_descriptor, semFoto);
+  check("segundo e-mail do responsável é salvo", semFoto.guardian_email2 === cad.guardianEmail2, semFoto.guardian_email2);
 
   // ---------- Localização ----------
   r = await post("/api/checkin/local", fora);

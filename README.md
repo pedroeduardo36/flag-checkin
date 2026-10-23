@@ -34,7 +34,8 @@ querem saber se o filho chegou.
 Um **web app mobile-first**, sem instalar nada, em três momentos:
 
 1. **Antes do culto, o responsável cadastra o filho** em [`/cadastro`](https://flag-checkin.vercel.app/cadastro): sem foto e
-   sem senha, com seções separadas para os dados do adolescente e os do responsável.
+   sem senha, com seções separadas para os dados do adolescente e os do responsável, e até **dois e-mails** para os
+   avisos (o segundo é opcional, pelo botão "+ Adicionar outro e-mail").
 2. **Na entrada:** um QR code ou tag NFC abre o check-in. O app confere a **localização** e o adolescente informa **nome
    completo e data de nascimento**. No **primeiro check-in da vida**, ele tira uma **foto de registro**, que precisa ter um
    rosto só e vira a referência do cadastro.
@@ -66,7 +67,7 @@ Protegida por senha, com três abas:
   de encontros seguidos.
 - **Cadastrar:** o mesmo formulário do responsável, com o botão "Cadastrar outro" para cadastrar em sequência.
 
-E o responsável recebe na hora um **e-mail com o horário e a foto do check-in**.
+E o responsável recebe na hora, **nos dois e-mails cadastrados**, um aviso com o horário e a foto do check-in.
 
 Três fatores tornam a fraude cara:
 
@@ -224,9 +225,9 @@ tentativas por IP; o próximo passo seria o Upstash Ratelimit nas rotas de ident
 ## Testes
 
 ```bash
-npm test             # 56 testes unitários (Vitest): dashboard, busca por nome, máscaras, datas, Haversine, HMAC, geofence, upload, rostos (registro e criativa), e-mail, sessão do pastor
+npm test             # 58 testes unitários (Vitest): dashboard, busca por nome, máscaras, datas, Haversine, HMAC, geofence, upload, rostos (registro e criativa), e-mail, sessão do pastor
 npm run typecheck    # TypeScript em modo strict
-npm run test:fluxo   # 40 verificações ponta a ponta contra o Supabase real, com limpeza dos dados no final
+npm run test:fluxo   # 43 verificações ponta a ponta contra o Supabase real, com limpeza dos dados no final
 npm run simular      # dois adolescentes sintéticos fazem check-in com 8 s de intervalo (para ver o feed ao vivo)
 ```
 

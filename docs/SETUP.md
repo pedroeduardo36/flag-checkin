@@ -9,7 +9,7 @@ App web (abre no navegador do celular, sem instalar nada) para o check-in dos ad
 ```
 Antes do culto ──► /cadastro (o RESPONSÁVEL preenche)
    Dados do adolescente (nome, nascimento, CPF, celular opcional) +
-   dados do responsável (nome, telefone, e-mail) + autorização LGPD. Sem foto, sem senha.
+   dados do responsável (nome, telefone, e-mail e um 2º e-mail opcional) + autorização LGPD. Sem foto, sem senha.
 
 QR code / tag NFC ──► /checkin
    1. Localização  → confere se o celular está dentro do raio da igreja

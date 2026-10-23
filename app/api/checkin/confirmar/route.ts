@@ -31,7 +31,7 @@ export const POST = withErrors(async (req: Request) => {
 
   const { data: m, error: mErr } = await db()
     .from("members")
-    .select("id, name, face_descriptor, photo_path, guardian_name, guardian_email")
+    .select("id, name, face_descriptor, photo_path, guardian_name, guardian_email, guardian_email2")
     .eq("id", t.mid)
     .single();
   if (mErr || !m) throw mErr ?? new Error("Membro não encontrado");
@@ -89,7 +89,7 @@ export const POST = withErrors(async (req: Request) => {
 
   // Aviso ao responsável depois da resposta: o adolescente não espera o servidor de e-mail.
   after(async () => {
-    const status = await sendCheckinEmail(m.guardian_email, {
+    const status = await sendCheckinEmail([m.guardian_email, m.guardian_email2], {
       guardianName: m.guardian_name ?? "",
       teenName: m.name,
       checkedInAt: data.checked_in_at,

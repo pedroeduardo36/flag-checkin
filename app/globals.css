@@ -289,3 +289,11 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .tabs button { white-space: nowrap; font-size: 13px; gap: 6px; }
 .rank__top .rank__streak { font-size: 12px; white-space: nowrap; flex-shrink: 0; }
 .rank__meta .rank__value { font-size: 12px; }
+
+/* ---------- Segundo e-mail do responsável ---------- */
+.add-email { font: inherit; font-size: 14px; font-weight: 700; color: var(--flag-dark); background: transparent; border: 1.5px dashed #b5d9e9; border-radius: 12px; padding: 10px 12px; width: 100%; margin: -4px 0 16px; cursor: pointer; text-align: left; }
+.add-email:hover { background: var(--flag-soft); }
+.email2 { position: relative; }
+.email2__remove { position: absolute; top: 0; right: 0; font: inherit; font-size: 13px; font-weight: 700; color: var(--muted); background: none; border: 0; cursor: pointer; padding: 0; }
+.email2__remove:hover { color: var(--danger); }
+.email2 .field > span { padding-right: 72px; }

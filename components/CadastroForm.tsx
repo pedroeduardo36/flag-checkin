@@ -11,11 +11,12 @@ type Form = {
   guardianName: string;
   guardianPhone: string;
   guardianEmail: string;
+  guardianEmail2: string;
   consent: boolean;
   website: string; // armadilha para robôs (fica escondido)
 };
 
-const empty: Form = { name: "", cpf: "", phone: "", birthDate: "", guardianName: "", guardianPhone: "", guardianEmail: "", consent: false, website: "" };
+const empty: Form = { name: "", cpf: "", phone: "", birthDate: "", guardianName: "", guardianPhone: "", guardianEmail: "", guardianEmail2: "", consent: false, website: "" };
 
 function validate(f: Form) {
   const e: Record<string, string> = {};
@@ -26,6 +27,10 @@ function validate(f: Form) {
   if (nameTokens(f.guardianName).length < 2) e.guardianName = "Informe seu nome e sobrenome.";
   if (!isValidPhone(f.guardianPhone)) e.guardianPhone = "Seu telefone está inválido.";
   if (!isValidEmail(f.guardianEmail)) e.guardianEmail = "Seu e-mail está inválido.";
+  if (f.guardianEmail2) {
+    if (!isValidEmail(f.guardianEmail2)) e.guardianEmail2 = "Este e-mail está inválido.";
+    else if (f.guardianEmail2.toLowerCase() === f.guardianEmail.toLowerCase()) e.guardianEmail2 = "Use um e-mail diferente do primeiro.";
+  }
   if (!f.consent) e.consent = "É preciso autorizar o uso dos dados.";
   return e;
 }
@@ -44,6 +49,7 @@ export function CadastroForm({ mode, onSessionExpired }: { mode: Mode; onSession
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  const [showEmail2, setShowEmail2] = useState(false);
   const pastor = mode === "pastor";
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => {
@@ -80,6 +86,7 @@ export function CadastroForm({ mode, onSessionExpired }: { mode: Mode; onSession
     setErrors({});
     setMsg(null);
     setDone(false);
+    setShowEmail2(false);
   };
 
   if (done) {
@@ -92,7 +99,12 @@ export function CadastroForm({ mode, onSessionExpired }: { mode: Mode; onSession
         <p className="hint">
           No culto, {teen} faz o check-in com <strong>nome completo</strong> e <strong>data de nascimento</strong>. No
           primeiro check-in, tira uma foto do rosto para completar o cadastro.
-          {f.guardianEmail && <> A cada check-in, você recebe um e-mail em <strong>{f.guardianEmail}</strong>.</>}
+          {f.guardianEmail && (
+            <>
+              {" "}A cada check-in, o aviso vai para <strong>{f.guardianEmail}</strong>
+              {f.guardianEmail2 && <> e <strong>{f.guardianEmail2}</strong></>}.
+            </>
+          )}
         </p>
         <button type="button" className="btn" onClick={reset}>
           {pastor ? "Cadastrar outro adolescente" : "Cadastrar outro filho(a)"}
@@ -157,6 +169,20 @@ export function CadastroForm({ mode, onSessionExpired }: { mode: Mode; onSession
             <input type="email" inputMode="email" autoComplete={pastor ? "off" : "email"} autoCapitalize="none" spellCheck={false}
               placeholder="nome@email.com" value={f.guardianEmail} onChange={(e) => set("guardianEmail", e.target.value.trim())} />
           ), "Você recebe um e-mail com o horário e a foto a cada check-in.")}
+
+          {showEmail2 ? (
+            <div className="email2" data-field="guardianEmail2">
+              {field("guardianEmail2", "Outro e-mail (opcional)", (
+                <input type="email" inputMode="email" autoComplete="off" autoCapitalize="none" spellCheck={false} autoFocus
+                  placeholder="ex.: e-mail do pai ou da mãe" value={f.guardianEmail2} onChange={(e) => set("guardianEmail2", e.target.value.trim())} />
+              ), "Os dois e-mails recebem o aviso de cada check-in.")}
+              <button type="button" className="email2__remove" onClick={() => { set("guardianEmail2", ""); setShowEmail2(false); }}>
+                Remover
+              </button>
+            </div>
+          ) : (
+            <button type="button" className="add-email" onClick={() => setShowEmail2(true)}>+ Adicionar outro e-mail</button>
+          )}
 
           <label className={`check ${errors.consent ? "field--error" : ""}`} data-field="consent">
             <input type="checkbox" checked={f.consent} onChange={(e) => set("consent", e.target.checked)} />

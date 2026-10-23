@@ -23,6 +23,7 @@ export const POST = withErrors(async (req: Request) => {
     guardian_name: clean(b.guardianName),
     guardian_phone: onlyDigits(b.guardianPhone),
     guardian_email: String(b.guardianEmail ?? "").trim().toLowerCase(),
+    guardian_email2: String(b.guardianEmail2 ?? "").trim().toLowerCase() || null,
   };
 
   const errors: Record<string, string> = {};
@@ -33,6 +34,8 @@ export const POST = withErrors(async (req: Request) => {
   if (nameTokens(data.guardian_name).length < 2) errors.guardianName = "Informe seu nome e sobrenome.";
   if (!isValidPhone(data.guardian_phone)) errors.guardianPhone = "Seu telefone está inválido.";
   if (!isValidEmail(data.guardian_email)) errors.guardianEmail = "Seu e-mail está inválido.";
+  if (data.guardian_email2 && !isValidEmail(data.guardian_email2)) errors.guardianEmail2 = "O segundo e-mail está inválido.";
+  else if (data.guardian_email2 && data.guardian_email2 === data.guardian_email) errors.guardianEmail2 = "Use um e-mail diferente do primeiro.";
   if (b.consent !== true) errors.consent = "É preciso autorizar o uso dos dados.";
   if (Object.keys(errors).length)
     return NextResponse.json({ error: "Corrija os campos destacados.", errors }, { status: 400 });

@@ -60,6 +60,19 @@ describe("envio", () => {
     expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: "mae@exemplo.com", from: SMTP.EMAIL_FROM }));
   });
 
+  it("envia para os dois e-mails do responsável, sem repetir e ignorando vazios", async () => {
+    Object.assign(process.env, SMTP);
+    sendMail.mockResolvedValue({ messageId: "1" });
+    const { sendCheckinEmail } = await load();
+    expect(await sendCheckinEmail(["mae@exemplo.com", "PAI@exemplo.com", null, "mae@exemplo.com"], dados)).toBe("enviado");
+    expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: "mae@exemplo.com, pai@exemplo.com" }));
+  });
+
+  it("lista sem nenhum e-mail → sem_email", async () => {
+    const { sendCheckinEmail } = await load();
+    expect(await sendCheckinEmail([null, ""], dados)).toBe("sem_email");
+  });
+
   it("erro do servidor SMTP → falhou (o check-in não quebra)", async () => {
     Object.assign(process.env, SMTP);
     sendMail.mockRejectedValue(new Error("535 auth failed"));
