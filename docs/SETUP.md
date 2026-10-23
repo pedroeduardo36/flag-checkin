@@ -124,6 +124,11 @@ A cada check-in, o responsável recebe um e-mail com o **horário** e a **foto d
 
 O status de cada aviso aparece na coluna `aviso_responsavel` da view `presencas`.
 
+**Confirmação de cadastro em lote** (para quem se cadastrou antes de existir o e-mail de confirmação):
+`npm run email:confirmacao` só simula e mostra quantos e-mails sairiam; `npm run email:confirmacao -- --enviar` envia
+um por adolescente, com 1,5 s de intervalo. O registro fica em `logs/confirmacao-cadastro.json` (fora do git): rodar
+de novo pula quem já recebeu.
+
 ## Área do pastor
 
 Abra **https://flag-checkin.vercel.app/pastor** e entre com a senha `PASTOR_PASSWORD`. A sessão dura 12 h no aparelho.

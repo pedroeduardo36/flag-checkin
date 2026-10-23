@@ -10,3 +10,4 @@ supabase/.branches
 .vercel
 .env*
 !.env.example
+/logs
