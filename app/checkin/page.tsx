@@ -143,7 +143,11 @@ export default function CheckinPage() {
         setError({ msg: r.data.error });
         return setStep({ name: "intro" });
       }
-      if (r.data.code === "DUPLICADO") savePending(null);
+      if (r.data.code === "DUPLICADO") {
+        // Rosto conferido e já havia check-in hoje: mostra o check-in existente.
+        savePending(null);
+        return setStep({ name: "success", who: r.data.name, photo: r.data.photoUrl, at: r.data.checkedInAt, repeat: true, kind: "criativa" });
+      }
       if (FACE_CODES.includes(r.data.code)) setPhoto(null);
       return setError({ msg: r.data.error ?? "Erro inesperado.", code: r.data.code });
     }

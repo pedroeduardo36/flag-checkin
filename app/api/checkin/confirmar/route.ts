@@ -5,6 +5,8 @@ import { PHOTO_BUCKET } from "@/lib/server/env";
 import { decodePhoto, readCheckinToken, serviceDate } from "@/lib/server/security";
 import { analyzeFace, matchCreativePhoto, parseDescriptor } from "@/lib/server/face";
 import { sendCheckinEmail } from "@/lib/server/email";
+import { audit } from "@/lib/server/audit";
+import { VISIT_COOKIE, createVisitSession, visitCookieOptions } from "@/lib/server/visit";
 
 export const maxDuration = 30;
 
@@ -25,7 +27,8 @@ async function referenceDescriptor(m: { id: string; face_descriptor: unknown; ph
 export const POST = withErrors(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const t = readCheckinToken(body?.token);
-  if (!t) return NextResponse.json({ error: "Sua identificação expirou. Comece o check-in de novo.", code: "TOKEN" }, { status: 401 });
+  const log = (outcome: string) => audit(req, { event: "confirmar", outcome, memberId: t?.mid, lat: t?.lat, lng: t?.lng });
+  if (!t) return log("TOKEN"), NextResponse.json({ error: "Sua identificação expirou. Comece o check-in de novo.", code: "TOKEN" }, { status: 401 });
 
   const photo = decodePhoto(body?.photo);
   if (!photo) return NextResponse.json({ error: "Foto inválida. Tire a foto novamente." }, { status: 400 });
@@ -42,19 +45,20 @@ export const POST = withErrors(async (req: Request) => {
   if (!reference) {
     // FOTO DE REGISTRO: um rosto só, de perto. Vira a foto do cadastro; o check-in vem com a criativa.
     const face = await analyzeFace(photo.buffer);
-    if (!face.ok) return NextResponse.json({ error: face.message, code: face.code }, { status: 422 });
+    if (!face.ok) return log(face.code), NextResponse.json({ error: face.message, code: face.code }, { status: 422 });
     const regPath = `membros/${m.id}-${Date.now()}.jpg`;
     const up = await db().storage.from(PHOTO_BUCKET).upload(regPath, photo.buffer, { contentType: photo.contentType });
     if (up.error) throw up.error;
     const upd = await db().from("members").update({ photo_path: regPath, face_descriptor: face.descriptor }).eq("id", m.id);
     if (upd.error) throw upd.error;
+    log("registro");
     return NextResponse.json({ ok: true, registered: true, next: "criativa", name: m.name });
   }
 
   // FOTO CRIATIVA (amigos, pose, careta): basta um rosto conferir com o registro.
   const match = await matchCreativePhoto(photo.buffer, reference);
   if (!match.ok)
-    return NextResponse.json({ error: match.message, code: match.code }, { status: match.code === "ROSTO_NAO_CONFERE" ? 403 : 422 });
+    return log(match.code), NextResponse.json({ error: match.message, code: match.code }, { status: match.code === "ROSTO_NAO_CONFERE" ? 403 : 422 });
 
   const date = serviceDate();
   const path = `checkins/${date}/${m.id}-${Date.now()}.jpg`;
@@ -84,9 +88,24 @@ export const POST = withErrors(async (req: Request) => {
 
   if (error) {
     await db().storage.from(PHOTO_BUCKET).remove([path]);
-    if (error.code === "23505")
-      return NextResponse.json({ error: "Você já fez check-in hoje.", code: "DUPLICADO" }, { status: 409 });
-    throw error;
+    if (error.code !== "23505") throw error;
+    // Já havia check-in hoje. Só chegamos aqui DEPOIS de o rosto conferir: quem está no aparelho provou
+    // ser o adolescente, então pode ver o próprio check-in (e este aparelho ganha a sessão da visita).
+    const { data: existing } = await db()
+      .from("checkins")
+      .select("checked_in_at, photo_path")
+      .eq("member_id", m.id)
+      .eq("service_date", date)
+      .single();
+    const signed = existing?.photo_path ? (await db().storage.from(PHOTO_BUCKET).createSignedUrl(existing.photo_path, 300)).data : null;
+    log("DUPLICADO");
+    const visit = createVisitSession(m.id, date);
+    const dup = NextResponse.json(
+      { error: "Você já fez check-in hoje.", code: "DUPLICADO", name: m.name, checkedInAt: existing?.checked_in_at ?? null, photoUrl: signed?.signedUrl ?? null },
+      { status: 409 },
+    );
+    dup.cookies.set(VISIT_COOKIE, visit.value, visitCookieOptions(visit.maxAge));
+    return dup;
   }
 
   // Aviso ao responsável depois da resposta: o adolescente não espera o servidor de e-mail.
@@ -100,5 +119,10 @@ export const POST = withErrors(async (req: Request) => {
     await db().from("checkins").update({ guardian_email_status: status, guardian_email_at: new Date().toISOString() }).eq("id", data.id);
   });
 
-  return NextResponse.json({ ok: true, name: m.name, checkedInAt: data.checked_in_at, photoKind, isFirst: !anteriores });
+  log("ok");
+  // Este aparelho provou ser o adolescente (rosto conferido): só ele pode rever a foto e o horário hoje.
+  const visit = createVisitSession(m.id, date);
+  const res = NextResponse.json({ ok: true, name: m.name, checkedInAt: data.checked_in_at, photoKind, isFirst: !anteriores });
+  res.cookies.set(VISIT_COOKIE, visit.value, visitCookieOptions(visit.maxAge));
+  return res;
 });

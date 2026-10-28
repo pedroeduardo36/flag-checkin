@@ -122,13 +122,36 @@ try {
   check("1º check-in: foto criativa de outra pessoa é recusada (403)", f.status === 403 && f.data.code === "ROSTO_NAO_CONFERE", f.data);
   f = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-a-selfie") });
   check("1º check-in: foto criativa conclui o check-in (200, marcado como 1º)", f.status === 200 && f.data.photoKind === "criativa" && f.data.isFirst === true, f.data);
+  // Sessão da visita: só o aparelho que concluiu o check-in pode rever foto e horário.
+  const setVisita = f.headers.get("set-cookie") ?? "";
+  const cookieVisita = setVisita.split(";")[0];
+  check("check-in concluído grava sessão da visita (httpOnly, SameSite=strict, só /api/checkin)",
+    cookieVisita.startsWith("o2_visita=") && /httponly/i.test(setVisita) && /samesite=strict/i.test(setVisita) && /path=\/api\/checkin/i.test(setVisita), setVisita);
   const aviso = await esperaAviso(cpf);
   const esperado = env.E2E_EMAIL ? ["enviado"] : ["enviado", "falhou", "sem_config"];
   check(`aviso ao responsável registrado (${aviso})`, esperado.includes(aviso), aviso);
+
+  // ---------- REGRESSÃO P0: nome + nascimento + coordenadas NÃO dão acesso a foto/horário ----------
+  // Quem sabe o nome e a data de nascimento de outro adolescente, e informa coordenadas DENTRO da igreja
+  // (o celular pode forjar), não pode obter a foto nem o horário do check-in dele.
+  const vazou = (resp) => {
+    const txt = JSON.stringify(resp.data);
+    return "photoUrl" in resp.data || "checkedInAt" in resp.data || "alreadyCheckedIn" in resp.data || /\/storage\/v1\/object|token=ey/.test(txt);
+  };
+  const atacante = await post("/api/checkin/identificar", { ...dentro, name: cad.name, birthDate: nasc });
+  check("P0: sem sessão da visita, nome+nascimento+coordenadas válidas NÃO revelam foto, horário nem 'já fez check-in'",
+    atacante.status === 200 && !vazou(atacante), atacante.data);
+  const comFalso = await post("/api/checkin/identificar", { ...dentro, name: cad.name, birthDate: nasc }, { cookie: "o2_visita=eyJtaWQiOiJ4In0.assinaturafalsa" });
+  check("P0: cookie de visita forjado também não revela nada", comFalso.status === 200 && !vazou(comFalso), comFalso.data);
+  const semAcento = await post("/api/checkin/identificar", { ...dentro, name: "teste automatico flag", birthDate: nasc });
+  check("P0: variação do nome também não revela nada", semAcento.status === 200 && !vazou(semAcento), semAcento.data);
+  const fotoErrada = await post("/api/checkin/confirmar", { token: atacante.data.token, photo: foto("pessoa-b") });
+  check("P0: com o token do atacante, outro rosto é recusado sem revelar o check-in (403)",
+    fotoErrada.status === 403 && fotoErrada.data.code === "ROSTO_NAO_CONFERE" && !("photoUrl" in fotoErrada.data) && !("checkedInAt" in fotoErrada.data), fotoErrada.data);
+  const dono = await post("/api/checkin/identificar", { ...dentro, name: cad.name, birthDate: nasc }, { cookie: cookieVisita });
+  check("aparelho que fez o check-in (sessão da visita) revê foto e horário", dono.data.alreadyCheckedIn === true && !!dono.data.photoUrl && !!dono.data.checkedInAt, dono.data);
   f = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-a-selfie") });
-  check("segundo check-in no mesmo dia é recusado (409)", f.status === 409, f.data);
-  r = await post("/api/checkin/identificar", { ...dentro, name: cad.name, birthDate: nasc });
-  check("identificar de novo → já fez check-in hoje", r.data.alreadyCheckedIn === true && !!r.data.photoUrl, r.data);
+  check("2º check-in no mesmo dia, com o rosto conferido, é recusado (409) e mostra o existente", f.status === 409 && f.data.code === "DUPLICADO" && !!f.data.checkedInAt, f.data);
 
   // ---------- Check-ins seguintes: foto criativa ----------
   // Simula "outro domingo": o check-in de hoje passa para a semana passada (o cadastro já tem a foto de referência).

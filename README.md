@@ -207,6 +207,8 @@ para pessoas diferentes.
 | Acesso ao feed (fotos de menores) | Senha do pastor conferida no servidor. O cookie de sessão é `httpOnly`, `SameSite=strict` e assinado; cookie forjado ou vencido recebe 401. A página não é indexada (`robots: noindex`). |
 | Força bruta na senha do pastor | Comparação em tempo constante e atraso de 0,8 s a cada senha errada. |
 | Foto de registro de qualquer coisa | A foto do 1º check-in precisa ter exatamente um rosto, de perto, verificado no servidor. |
+| Ver a foto ou o horário de outro adolescente (**P0 corrigido**, [relatório](docs/seguranca/P0-fotos-de-presenca.md)) | Nome, nascimento e coordenadas **não** autorizam ler dados privados. Foto e horário só voltam ao aparelho com a **sessão da visita** (cookie HMAC `httpOnly`, ligado ao adolescente e ao dia, emitido depois do rosto conferido) ou aos líderes logados. A resposta pública é idêntica para quem já fez ou não o check-in. |
+| Investigar abuso depois | Tabela `audit_events` com cada identificação e confirmação (resultado, adolescente, IP como HMAC, coordenadas), porque os planos gratuitos da Vercel e do Supabase quase não retêm logs. |
 | Descobrir quem está cadastrado | Nome inexistente e data errada recebem **a mesma** resposta (sem *user enumeration*). |
 | Pular a etapa de identificação | A foto só é aceita com um token HMAC-SHA256 válido (4 h), comparado em tempo constante. |
 | Cadastro aberto (sem senha) | CPF único, validação completa no servidor e *honeypot* contra robôs. Mesmo um cadastro falso não faz check-in sem estar na igreja e sem um rosto real na foto de registro. |
@@ -227,9 +229,9 @@ tentativas por IP; o próximo passo seria o Upstash Ratelimit nas rotas de ident
 ## Testes
 
 ```bash
-npm test             # 61 testes unitários (Vitest): dashboard, busca por nome, máscaras, datas, Haversine, HMAC, geofence, upload, rostos (registro e criativa), e-mail, sessão do pastor
+npm test             # 65 testes unitários (Vitest): dashboard, busca por nome, máscaras, datas, Haversine, HMAC, geofence, upload, rostos (registro e criativa), e-mail, sessão do pastor
 npm run typecheck    # TypeScript em modo strict
-npm run test:fluxo   # 48 verificações ponta a ponta contra o Supabase real, com limpeza dos dados no final
+npm run test:fluxo   # 54 verificações ponta a ponta (inclui a regressão do P0) contra o Supabase real, com limpeza dos dados no final
 npm run simular      # dois adolescentes sintéticos fazem check-in com 8 s de intervalo (para ver o feed ao vivo)
 ```
 
