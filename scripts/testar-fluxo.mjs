@@ -256,7 +256,6 @@ try {
   r = await req("POST", "/api/lider/entrar", { email: emailsLideres[0], password: SENHA_A });
   r = await req("POST", "/api/lider/verificar", { code: proximo }, r.cookie);
   check("P1: o mesmo código não serve para um segundo login", r.status === 401, r.status);
-  const pastorCookie = ckA;
 
   // Limite de tentativas com requisições SIMULTÂNEAS (contador no banco, vale para qualquer instância).
   const rajada = await Promise.all(Array.from({ length: 14 }, () => req("POST", "/api/lider/entrar", { email: emailsLideres[1], password: "chute qualquer 123" })));
@@ -311,6 +310,7 @@ try {
   const r2v = await req("GET", "/api/pastor/feed", null, cookieVisita);
   const r3v = await req("DELETE", "/api/pastor/checkins", { id: "x", reason: "teste de acesso" }, cookieVisita);
   check("P1: sessão da visita do adolescente não acessa funções de líder", r.status === 401 && r2v.status === 401 && r3v.status === 401, [r.status, r2v.status, r3v.status]);
+  const pastorCookie = ckA; // sessão atual do líder A (a anterior caiu quando ele usou o código de recuperação)
 
   const feed = await fetch(`${BASE}/api/pastor/feed`, { headers: { cookie: pastorCookie } }).then((x) => x.json());
   const meu = feed.items?.find((i) => i.name === cad.name);

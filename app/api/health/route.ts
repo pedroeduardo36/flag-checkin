@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 // Diagnóstico da integração: confere variáveis, tabelas e bucket. Não expõe dados.
 export async function GET() {
   const checks: Record<string, boolean | string> = {};
+  let lideresAtivos: number | null = null;
   const envs = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "CHURCH_LAT", "CHURCH_LNG", "CHECKIN_SECRET"];
   const missing = envs.filter((k) => !process.env[k]);
   checks.env = missing.length ? `faltando: ${missing.join(", ")}` : true;
@@ -23,7 +24,8 @@ export async function GET() {
     const checkins = await db().from("checkins").select("id", { count: "exact", head: true });
     checks.checkins = checkins.error ? checkins.error.message : true;
     const leaders = await db().from("leaders").select("id", { count: "exact", head: true }).eq("status", "ativo");
-    checks.lideres = leaders.error ? leaders.error.message : (leaders.count ?? 0) > 0 ? true : "nenhum líder ativo: rode npm run lider:criar";
+    checks.lideres = leaders.error ? leaders.error.message : true;
+    lideresAtivos = leaders.count ?? 0; // 0 = ninguém entra em /pastor ainda: rode npm run lider:criar
     const view = await db().from("presencas").select("culto", { head: true });
     checks.presencas = view.error ? view.error.message : true;
     const bucket = await db().storage.getBucket(PHOTO_BUCKET);
@@ -38,5 +40,5 @@ export async function GET() {
 
   const ok = Object.values(checks).every((v) => v === true);
   const geofence = process.env.GEOFENCE_DISABLED === "true" ? "DESLIGADA (modo teste)" : "ligada";
-  return NextResponse.json({ ok, geofence, checks }, { status: ok ? 200 : 500 });
+  return NextResponse.json({ ok, geofence, lideresAtivos, checks }, { status: ok ? 200 : 500 });
 }
