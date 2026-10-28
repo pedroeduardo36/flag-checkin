@@ -3,7 +3,7 @@
 // E2E_EMAIL=voce@email.com envia o aviso de check-in para esse endereço.
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 
 const BASE = (process.argv[2] || "http://localhost:3000").replace(/\/$/, "");
 const env = {
@@ -44,7 +44,7 @@ const totp = (secret, offset = 0) => {
   const h = createHmac("sha1", b32(secret)).update(msg).digest(); const o = h[h.length - 1] & 0xf;
   return String((h.readUInt32BE(o) & 0x7fffffff) % 1e6).padStart(6, "0");
 };
-const codigoAtivacao = (code) => createHmac("sha256", env.CHECKIN_SECRET).update(`ativacao:${code.replace(/-/g, "")}`).digest("base64url");
+const codigoAtivacao = (code) => createHash("sha256").update(`ativacao:${code.replace(/-/g, "")}`).digest("base64url");
 const t0 = new Date().toISOString();
 const stamp = Date.now();
 const emailsLideres = [`e2e.lider.a.${stamp}@example.com`, `e2e.lider.b.${stamp}@example.com`, `e2e.lider.c.${stamp}@example.com`];

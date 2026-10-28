@@ -74,9 +74,16 @@ export function randomCode(groups: number[]): string {
 
 export const normalizeCode = (code: unknown) => String(code ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
 
-/** Guardamos só o HMAC do código: um vazamento do banco não entrega códigos válidos. */
-export const codeHash = (kind: "ativacao" | "recuperacao", code: unknown) =>
+/** Códigos de recuperação: guardamos só o HMAC (50 bits, valem até serem usados): um vazamento do banco não os entrega. */
+export const codeHash = (kind: "recuperacao", code: unknown) =>
   createHmac("sha256", env.checkinSecret).update(`${kind}:${normalizeCode(code)}`).digest("base64url");
+
+/**
+ * Código de ativação: SHA-256 sem chave, para o script `lider:criar` (que roda fora da Vercel, sem o
+ * segredo de produção) gerar códigos que a produção aceita. 60 bits aleatórios, uso único e 24 h de
+ * validade: inverter o hash por força bruta nesse prazo é inviável.
+ */
+export const setupCodeHash = (code: unknown) => createHash("sha256").update(`ativacao:${normalizeCode(code)}`).digest("base64url");
 
 /** Hash do valor do cookie de sessão (o banco nunca guarda o valor em si). */
 export const tokenHash = (token: string) => createHash("sha256").update(token).digest("base64url");

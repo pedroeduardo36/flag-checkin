@@ -66,9 +66,19 @@ describe("códigos de ativação e recuperação", () => {
   });
 
   it("hash ignora hífen, espaço e minúsculas, e separa ativação de recuperação", async () => {
-    const { codeHash } = await load();
+    const { codeHash, setupCodeHash } = await load();
     expect(codeHash("recuperacao", "k7qm2 xr9td")).toBe(codeHash("recuperacao", "K7QM2-XR9TD"));
-    expect(codeHash("ativacao", "K7QM2-XR9TD")).not.toBe(codeHash("recuperacao", "K7QM2-XR9TD"));
+    expect(setupCodeHash("k7qm-2xr9-tdab")).toBe(setupCodeHash("K7QM-2XR9-TDAB"));
+    expect(setupCodeHash("K7QM2-XR9TD")).not.toBe(codeHash("recuperacao", "K7QM2-XR9TD"));
     expect(codeHash("recuperacao", "K7QM2-XR9TD")).not.toContain("K7QM2");
+  });
+
+  it("código de ativação não depende do segredo do servidor (o script local gera, a produção aceita)", async () => {
+    const a = (await load()).setupCodeHash("ABCD-EFGH-JKMN");
+    vi.resetModules();
+    process.env.CHECKIN_SECRET = "z".repeat(64);
+    expect((await load()).setupCodeHash("ABCD-EFGH-JKMN")).toBe(a);
+    // HMAC dos códigos de recuperação, ao contrário, muda com o segredo
+    expect((await load()).codeHash("recuperacao", "K7QM2-XR9TD")).not.toBe(a);
   });
 });

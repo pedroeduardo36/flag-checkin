@@ -50,6 +50,8 @@ Não existe hierarquia entre líderes: todos administram. Para não haver autoat
 
 ### Recuperação
 
+- **Código de ativação:** 12 caracteres (60 bits), uso único, 24 h, com limite de tentativas. Fica guardado como
+  SHA-256 sem chave, para o script `lider:criar`, que roda fora da Vercel, gerar códigos que a produção aceita.
 - **Códigos de recuperação:** 10 por líder, mostrados uma única vez, com só o HMAC guardado. Cada um vale **uma vez**
   (atualização condicional `used_at is null`). Usar um código significa "perdi o celular": o autenticador antigo é
   apagado, **as outras sessões da conta caem** e um autenticador novo é cadastrado na hora, com 10 códigos novos.

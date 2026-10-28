@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { db } from "./supabase";
 import { ipHash } from "./audit";
-import { codeHash, randomCode, tokenHash } from "./credentials";
+import { codeHash, randomCode, setupCodeHash, tokenHash } from "./credentials";
 
 /**
  * Contas de LÍDER: senha + código do app autenticador, sessão guardada no banco.
@@ -164,7 +164,7 @@ export async function resetAccess(leaderId: string): Promise<{ code: string; exp
   const { error } = await db()
     .from("leaders")
     .update({
-      setup_code_hash: codeHash("ativacao", code),
+      setup_code_hash: setupCodeHash(code),
       setup_expires_at: expiresAt,
       password_hash: null,
       totp_secret_enc: null,

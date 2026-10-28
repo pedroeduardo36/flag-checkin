@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { withErrors } from "@/lib/server/http";
 import { db } from "@/lib/server/supabase";
 import { ipHash } from "@/lib/server/audit";
-import { codeHash, hashPassword, normalizeCode, passwordProblem } from "@/lib/server/credentials";
+import { hashPassword, normalizeCode, passwordProblem, setupCodeHash } from "@/lib/server/credentials";
 import { adminAudit, clearAttempts, normalizeEmail, revokeSessions, startSession, tooMany, tooManyAttempts } from "@/lib/server/leader";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +42,7 @@ export const POST = withErrors(async (req: Request) => {
         .from("leaders")
         .update({ setup_code_hash: null, setup_expires_at: null, password_hash: await hashPassword(password) })
         .eq("id", l.id)
-        .eq("setup_code_hash", codeHash("ativacao", code))
+        .eq("setup_code_hash", setupCodeHash(code))
         .select("id")).data?.length
     : 0;
   if (!l || !consumed) {
