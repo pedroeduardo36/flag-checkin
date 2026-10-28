@@ -64,8 +64,7 @@ Copie `.env.example` para `.env.local` e preencha:
 | `FACE_MATCH_THRESHOLD` | opcional, padrão `0.65`. Distância máxima entre um rosto da foto criativa e a foto de registro. Menor = mais rígido; se adolescentes forem recusados, teste `0.7` |
 | `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `EMAIL_FROM` | envio do e-mail ao responsável a cada check-in (veja "E-mail para o responsável" abaixo). Sem elas, o check-in funciona e o aviso fica como `sem_config` |
 | `GEOFENCE_DISABLED` | `true` = **modo teste**: pula a localização (check-in de qualquer lugar, aviso amarelo na tela). Deixe `false` no culto |
-| `PASTOR_PASSWORD` | senha da área do pastor (`/pastor`): feed ao vivo dos check-ins e cadastro |
-| `CHECKIN_SECRET` | gere com `openssl rand -hex 32` |
+| `CHECKIN_SECRET` | gere com `openssl rand -hex 32`. Também cifra o segredo do autenticador dos líderes: **trocar este valor obriga todos os líderes a recadastrar o autenticador** (redefinir acesso) |
 | `PUBLIC_APP_URL` | endereço final do app (usado no QR code) |
 
 ### 3. Rodar no computador
@@ -131,7 +130,23 @@ de novo pula quem já recebeu.
 
 ## Área do pastor
 
-Abra **https://flag-checkin.vercel.app/pastor** e entre com a senha `PASTOR_PASSWORD`. A sessão dura 12 h no aparelho.
+Cada líder tem a própria conta: **e-mail + senha + código do app autenticador** (Google Authenticator, Microsoft
+Authenticator, 1Password…). A sessão dura 12 h no aparelho. Não existe senha compartilhada.
+
+**Primeiro líder** (uma vez só, no computador com o `.env.local`):
+```bash
+npm run lider:criar -- "Nome Sobrenome" email@exemplo.com
+```
+O comando mostra um **código de ativação** (uso único, 24 h). A pessoa abre **https://flag-checkin.vercel.app/pastor →
+Ativar conta**, informa e-mail e código, cria a senha, escaneia o QR code no app autenticador e guarda os **10 códigos
+de recuperação**. Os demais líderes são criados na aba **Líderes**, do mesmo jeito.
+
+**Celular perdido:** na tela do código, "Perdi o celular" aceita um código de recuperação (cada um vale uma vez; as outras
+sessões caem e um autenticador novo é cadastrado na hora). Sem códigos, **outro líder** confirma pessoalmente quem é e
+usa **Redefinir acesso** na aba Líderes: sai um código de ativação novo, entregue em mãos.
+
+- **Líderes:** criar conta, desativar (as sessões da pessoa caem na hora), reativar, redefinir acesso, encerrar sessões,
+  gerar novos códigos de recuperação e o **registro de ações** (somente leitura).
 - **Ao vivo:** quem fez check-in hoje, do mais recente para o mais antigo, atualizando sozinho a cada 4 s.
 - **Dashboard:** encontros, média por encontro, último encontro comparado ao anterior, gráfico da frequência a cada
   culto (cadastrados e visitantes) e ranking dos 10 mais frequentes. O botão "↻ Atualizar" recarrega os números.

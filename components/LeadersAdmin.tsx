@@ -1,0 +1,278 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+
+type LeaderRow = {
+  id: string;
+  name: string;
+  email: string;
+  status: "ativo" | "desativado";
+  authenticator: boolean;
+  pendingActivation: boolean;
+  lastLoginAt: string | null;
+  activeSessions: number;
+  recoveryCodesLeft: number;
+};
+type AuditRow = {
+  id: number;
+  at: string;
+  actor_name: string | null;
+  action: string;
+  target_label: string | null;
+  outcome: "ok" | "negado" | "bloqueado";
+  details: Record<string, unknown> | null;
+};
+type Issued = { name: string; email: string; code: string; expiresAt: string; reason: string };
+
+const ACTION_LABEL: Record<string, string> = {
+  login: "Entrou",
+  login_codigo: "Código do autenticador",
+  logout: "Saiu",
+  conta_criada: "Criou conta",
+  conta_ativada: "Ativou a conta",
+  conta_desativada: "Desativou conta",
+  conta_reativada: "Reativou conta",
+  acesso_redefinido: "Redefiniu acesso",
+  sessoes_revogadas: "Encerrou sessões",
+  totp_cadastrado: "Cadastrou autenticador",
+  recuperacao_usada: "Usou código de recuperação",
+  codigos_recuperacao_gerados: "Gerou códigos de recuperação",
+  presenca_removida: "Removeu presença",
+};
+
+const fmtWhen = (iso: string) =>
+  new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+
+async function send(method: string, path: string, body?: unknown) {
+  const r = await fetch(path, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  }).catch(() => null);
+  return { status: r?.status ?? 0, data: (r ? await r.json().catch(() => ({})) : {}) as Record<string, any> };
+}
+
+/** Aba "Líderes": contas, sessões, códigos de ativação/recuperação e o registro de ações. */
+export function LeadersAdmin({ onUnauthorized }: { onUnauthorized: () => void }) {
+  const [me, setMe] = useState<{ id: string } | null>(null);
+  const [leaders, setLeaders] = useState<LeaderRow[]>([]);
+  const [audit, setAudit] = useState<AuditRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [issued, setIssued] = useState<Issued | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const [c, a] = await Promise.all([send("GET", "/api/lider/contas"), send("GET", "/api/lider/auditoria")]);
+    if (c.status === 401 || a.status === 401) return onUnauthorized();
+    if (c.status !== 200) return setError(c.data.error ?? "Não foi possível carregar os líderes.");
+    setMe(c.data.me);
+    setLeaders(c.data.leaders);
+    setAudit(a.data.items ?? []);
+  }, [onUnauthorized]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function act(l: LeaderRow, action: "desativar" | "reativar" | "redefinir" | "revogar_sessoes") {
+    const self = l.id === me?.id;
+    const ask: Record<typeof action, string> = {
+      desativar: `Desativar a conta de ${l.name}? As sessões abertas dela terminam agora.`,
+      reativar: `Reativar a conta de ${l.name}? Ela vai precisar de um novo código de ativação para definir senha e autenticador.`,
+      redefinir: `Redefinir o acesso de ${l.name}? Senha, autenticador e códigos de recuperação atuais deixam de valer. Faça isso só depois de confirmar pessoalmente que é ela.`,
+      revogar_sessoes: self ? "Encerrar a sua sessão nos outros aparelhos? Este continua conectado." : `Encerrar todas as sessões abertas de ${l.name}?`,
+    };
+    if (!window.confirm(ask[action])) return;
+    setBusy(`${l.id}:${action}`);
+    setError(null);
+    setNotice(null);
+    const r = await send("PATCH", "/api/lider/contas", { id: l.id, action });
+    setBusy(null);
+    if (r.status === 401) return onUnauthorized();
+    if (r.status !== 200) return setError(r.data.error ?? "Não foi possível concluir.");
+    if (r.data.setupCode) {
+      setIssued({ name: l.name, email: l.email, code: r.data.setupCode, expiresAt: r.data.expiresAt, reason: action === "reativar" ? "Conta reativada" : "Acesso redefinido" });
+    } else {
+      setNotice(action === "desativar" ? `${l.name} desativado(a). ${r.data.sessionsEnded} sessão(ões) encerrada(s).` : `${r.data.sessionsEnded} sessão(ões) encerrada(s).`);
+    }
+    load();
+  }
+
+  return (
+    <section aria-label="Líderes" className="leaders">
+      {error && <div className="alert" role="alert">{error}</div>}
+      {notice && <div className="info" role="status">{notice}</div>}
+      {issued && <IssuedCode issued={issued} onClose={() => setIssued(null)} />}
+
+      <div className="card dash__card">
+        <h3>Líderes</h3>
+        <p className="hint dash__sub">Todos os líderes entram com senha e app autenticador.</p>
+        <ul className="leader-list">
+          {leaders.map((l) => {
+            const self = l.id === me?.id;
+            return (
+              <li key={l.id} className={`leader ${l.status === "desativado" ? "leader--off" : ""}`}>
+                <div className="leader__head">
+                  <div className="leader__who">
+                    <strong>{l.name}{self && " (você)"}</strong>
+                    <span>{l.email}</span>
+                  </div>
+                </div>
+                <div className="leader__tags">
+                  {l.status === "desativado" ? <span className="tag tag--warn">Desativado</span>
+                    : l.authenticator ? <span className="tag tag--ok">✓ Autenticador</span>
+                    : <span className="tag tag--warn">{l.pendingActivation ? "Aguardando ativação" : "Sem autenticador"}</span>}
+                  {l.status === "ativo" && <span className="tag">{l.activeSessions} sessão(ões) aberta(s)</span>}
+                  {l.authenticator && <span className={`tag ${l.recoveryCodesLeft <= 2 ? "tag--warn" : ""}`}>{l.recoveryCodesLeft} códigos de recuperação</span>}
+                </div>
+                <p className="hint leader__last">{l.lastLoginAt ? `Último acesso: ${fmtWhen(l.lastLoginAt)}` : "Ainda não entrou"}</p>
+                <div className="leader__actions">
+                  {l.status === "ativo" && l.activeSessions > (self ? 1 : 0) && (
+                    <button className="chip" disabled={!!busy} onClick={() => act(l, "revogar_sessoes")}>
+                      {self ? "Sair dos outros aparelhos" : "Encerrar sessões"}
+                    </button>
+                  )}
+                  {!self && l.status === "ativo" && (
+                    <button className="chip" disabled={!!busy} onClick={() => act(l, "redefinir")}>Redefinir acesso</button>
+                  )}
+                  {!self && l.status === "ativo" && (
+                    <button className="chip chip--danger" disabled={!!busy} onClick={() => act(l, "desativar")}>Desativar</button>
+                  )}
+                  {!self && l.status === "desativado" && (
+                    <button className="chip" disabled={!!busy} onClick={() => act(l, "reativar")}>Reativar</button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      <NewLeader onCreated={(i) => { setIssued(i); load(); }} onUnauthorized={onUnauthorized} />
+      <MyRecoveryCodes onUnauthorized={onUnauthorized} onDone={load} />
+
+      <div className="card dash__card">
+        <h3>Registro de ações</h3>
+        <p className="hint dash__sub">Somente leitura: o banco recusa editar ou apagar. Senhas e códigos nunca entram aqui.</p>
+        <ol className="audit">
+          {audit.map((a) => (
+            <li key={a.id} className={`audit__row audit__row--${a.outcome}`}>
+              <time dateTime={a.at}>{fmtWhen(a.at)}</time>
+              <div>
+                <b>{a.actor_name ?? "Sem login"}</b> · {ACTION_LABEL[a.action] ?? a.action}
+                {a.target_label && <> · <span className="audit__target">{a.target_label}</span></>}
+                {a.outcome !== "ok" && <span className="audit__outcome"> ({a.outcome})</span>}
+                {typeof a.details?.motivo === "string" && a.action === "presenca_removida" && <div className="hint">Motivo: {a.details.motivo}</div>}
+              </div>
+            </li>
+          ))}
+          {!audit.length && <li className="hint">Nenhuma ação registrada ainda.</li>}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+function IssuedCode({ issued, onClose }: { issued: Issued; onClose: () => void }) {
+  return (
+    <div className="card dash__card issued" role="status">
+      <h3>{issued.reason}: {issued.name}</h3>
+      <p className="hint dash__sub">
+        Código de ativação de uso único, válido até {fmtWhen(issued.expiresAt)}. Entregue <b>pessoalmente</b> (não mande por
+        grupo). A pessoa abre <b>/pastor → Ativar conta</b>, usa o e-mail {issued.email}, cria a senha e cadastra o autenticador.
+      </p>
+      <code className="issued__code">{issued.code}</code>
+      <p className="hint">Este código não aparece de novo.</p>
+      <button className="btn btn--ghost" onClick={onClose}>Já entreguei, fechar</button>
+    </div>
+  );
+}
+
+function NewLeader({ onCreated, onUnauthorized }: { onCreated: (i: Issued) => void; onUnauthorized: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    const r = await send("POST", "/api/lider/contas", { name, email });
+    setBusy(false);
+    if (r.status === 401) return onUnauthorized();
+    if (r.status !== 200) return setError(r.data.errors ? Object.values(r.data.errors).join(" ") : r.data.error ?? "Não foi possível criar.");
+    onCreated({ name: r.data.name, email: r.data.email, code: r.data.setupCode, expiresAt: r.data.expiresAt, reason: "Conta criada" });
+    setName("");
+    setEmail("");
+    setOpen(false);
+  }
+
+  if (!open)
+    return <button className="add-email" onClick={() => setOpen(true)}>+ Adicionar líder</button>;
+  return (
+    <form className="card dash__card" onSubmit={submit} noValidate>
+      <h3>Novo líder</h3>
+      <p className="hint dash__sub">A pessoa recebe um código de ativação e cria a própria senha. Você não fica sabendo a senha dela.</p>
+      <label className="field">
+        <span>Nome completo</span>
+        <input autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} />
+      </label>
+      <label className="field">
+        <span>E-mail (usado para entrar)</span>
+        <input type="email" inputMode="email" autoCapitalize="none" spellCheck={false} autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} />
+      </label>
+      {error && <div className="alert" role="alert">{error}</div>}
+      <button className="btn" disabled={busy}>{busy ? "Criando…" : "Criar conta"}</button>
+      <button type="button" className="btn btn--ghost leaders__cancel" onClick={() => setOpen(false)}>Cancelar</button>
+    </form>
+  );
+}
+
+function MyRecoveryCodes({ onUnauthorized, onDone }: { onUnauthorized: () => void; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [codes, setCodes] = useState<string[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    const r = await send("POST", "/api/lider/recuperacao", { code });
+    setBusy(false);
+    setCode("");
+    if (r.status === 401) return onUnauthorized();
+    if (r.status !== 200) return setError(r.data.error ?? "Não foi possível gerar.");
+    setCodes(r.data.recoveryCodes);
+    onDone();
+  }
+
+  if (codes)
+    return (
+      <div className="card dash__card">
+        <h3>Seus novos códigos de recuperação</h3>
+        <p className="hint dash__sub">Os anteriores deixaram de valer. Guarde estes agora: eles não aparecem de novo.</p>
+        <ul className="codes">{codes.map((c) => <li key={c}><code>{c}</code></li>)}</ul>
+        <button className="btn btn--ghost" onClick={() => { setCodes(null); setOpen(false); }}>Guardei, fechar</button>
+      </div>
+    );
+  if (!open) return <button className="add-email" onClick={() => setOpen(true)}>↻ Gerar novos códigos de recuperação (minha conta)</button>;
+  return (
+    <form className="card dash__card" onSubmit={submit} noValidate>
+      <h3>Novos códigos de recuperação</h3>
+      <p className="hint dash__sub">Confirme com o código atual do seu app autenticador.</p>
+      <label className="field">
+        <span>Código de 6 dígitos</span>
+        <input className="otp" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+      </label>
+      {error && <div className="alert" role="alert">{error}</div>}
+      <button className="btn" disabled={busy || code.length !== 6}>{busy ? "Gerando…" : "Gerar códigos"}</button>
+      <button type="button" className="btn btn--ghost leaders__cancel" onClick={() => setOpen(false)}>Cancelar</button>
+    </form>
+  );
+}

@@ -318,3 +318,51 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .summary dt { color: var(--muted); flex-shrink: 0; }
 .summary dd { margin: 0; font-weight: 600; text-align: right; word-break: break-word; }
 .summary__note { margin: 12px 0 0; font-size: 13px; }
+
+/* ---------- Contas de líder: login em 2 etapas, autenticador, administração ---------- */
+.field input.otp { font-size: 26px; font-weight: 800; letter-spacing: .35em; text-align: center; font-variant-numeric: tabular-nums; }
+.field input.otp--text { font-size: 20px; letter-spacing: .12em; }
+.qr-box { display: block; width: 200px; height: 200px; margin: 0 auto 12px; border-radius: 12px; border: 1px solid var(--line); background: #fff; padding: 6px; }
+.secret { margin: 0 0 16px; font-size: 14px; }
+.secret summary { cursor: pointer; font-weight: 700; color: var(--flag-dark); text-align: center; }
+.secret code { display: block; font-size: 16px; font-weight: 700; letter-spacing: .08em; background: var(--flag-soft); border-radius: 10px; padding: 10px 12px; margin: 8px 0 10px; word-break: break-all; text-align: center; }
+.codes { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0; margin: 0 0 14px; }
+.codes code { display: block; text-align: center; font-size: 15px; font-weight: 700; letter-spacing: .06em; background: var(--flag-soft); border-radius: 10px; padding: 9px 4px; }
+.chip { font: inherit; font-size: 13px; font-weight: 700; color: var(--flag-dark); background: var(--card); border: 1.5px solid var(--line); border-radius: 999px; padding: 7px 12px; min-height: 36px; cursor: pointer; }
+.chip:hover { background: var(--flag-soft); }
+.chip:disabled { opacity: .6; cursor: progress; }
+.chip--danger { color: var(--danger); border-color: #f2c4c4; }
+.chip--danger:hover { background: var(--danger-soft); }
+
+.leader-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.leader { padding: 12px 0; border-top: 1px solid var(--line); }
+.leader:first-child { border-top: 0; padding-top: 0; }
+.leader--off .leader__who { opacity: .6; }
+.leader__who { display: flex; flex-direction: column; min-width: 0; }
+.leader__who strong { font-size: 15px; }
+.leader__who span { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leader__tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.leader__last { margin: 0 0 8px; font-size: 12px; }
+.leader__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.leaders__cancel { margin-top: 8px; }
+.leaders .info { margin-bottom: 14px; }
+
+.issued { border: 2px solid var(--ok); }
+.issued__code { display: block; font-size: 24px; font-weight: 900; letter-spacing: .1em; text-align: center; background: #e7f7ee; color: var(--ink); border-radius: 12px; padding: 14px 8px; margin: 4px 0 8px; }
+
+.audit { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; font-size: 13px; }
+.audit__row { display: grid; grid-template-columns: 74px 1fr; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); line-height: 1.4; }
+.audit__row:first-child { border-top: 0; }
+.audit__row time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.audit__target { color: var(--muted); word-break: break-word; }
+.audit__outcome { color: var(--danger); font-weight: 700; }
+.audit__row--bloqueado .audit__outcome { color: #8a5a00; }
+
+.post__fix { padding: 0 14px 14px; font-size: 13px; }
+.post__fix .linklike { color: var(--muted); font-weight: 600; font-size: 13px; }
+.post__fix--open { border-top: 1px solid var(--line); padding-top: 12px; }
+.post__fix-actions { display: flex; gap: 8px; }
+
+/* 4 abas cabem num celular de 360 px */
+.tabs { gap: 4px; }
+.tabs button { padding: 0 4px; font-size: 13px; gap: 5px; }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { withErrors } from "@/lib/server/http";
 import { db } from "@/lib/server/supabase";
 import { PHOTO_BUCKET } from "@/lib/server/env";
-import { isPastorRequest } from "@/lib/server/pastor";
+import { requireLeader, unauthorized } from "@/lib/server/leader";
 import { buildDashboard, type CheckinRow } from "@/lib/stats";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ async function allCheckins(): Promise<CheckinRow[]> {
 
 // GET /api/pastor/dashboard → indicadores, evolução por encontro e ranking de frequência.
 export const GET = withErrors(async (req: Request) => {
-  if (!isPastorRequest(req)) return NextResponse.json({ error: "Sessão expirada. Entre de novo." }, { status: 401 });
+  if (!(await requireLeader(req))) return unauthorized();
 
   const dash = buildDashboard(await allCheckins());
 

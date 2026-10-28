@@ -14,8 +14,7 @@ export const env = {
   get churchRadius() { return Number(process.env.CHURCH_RADIUS_METERS ?? 150); },
   /** Modo teste: GEOFENCE_DISABLED=true libera o check-in fora da igreja. Nunca deixe ligado em produção. */
   get geofenceDisabled() { return process.env.GEOFENCE_DISABLED === "true"; },
-  /** Senha da área do pastor (/pastor): feed ao vivo e cadastro sem senha do fiscal. */
-  get pastorPassword() { return required("PASTOR_PASSWORD"); },
+  /** Assina tokens e cookies, cifra o segredo do autenticador dos líderes e gera os hashes de códigos. */
   get checkinSecret() {
     const s = required("CHECKIN_SECRET");
     if (s.length < 32) throw new Error("CHECKIN_SECRET precisa ter pelo menos 32 caracteres");

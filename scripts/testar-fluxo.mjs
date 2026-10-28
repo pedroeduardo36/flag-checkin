@@ -3,6 +3,7 @@
 // E2E_EMAIL=voce@email.com envia o aviso de check-in para esse endereço.
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+import { createHmac } from "node:crypto";
 
 const BASE = (process.argv[2] || "http://localhost:3000").replace(/\/$/, "");
 const env = {
@@ -28,6 +29,30 @@ const telAleatorio = () => "619" + String(Math.floor(Math.random() * 1e8)).padSt
 const post = async (path, body, headers = {}) => {
   const r = await fetch(BASE + path, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
   return { status: r.status, data: await r.json().catch(() => ({})), headers: r.headers };
+};
+
+
+// ---------- Líderes: TOTP (RFC 6238) e código de ativação, iguais aos do servidor ----------
+const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+const b32 = (s) => {
+  let bits = 0, v = 0; const out = [];
+  for (const ch of s.toUpperCase().replace(/[^A-Z2-7]/g, "")) { v = (v << 5) | B32.indexOf(ch); bits += 5; if (bits >= 8) { out.push((v >>> (bits - 8)) & 255); bits -= 8; } }
+  return Buffer.from(out);
+};
+const totp = (secret, offset = 0) => {
+  const msg = Buffer.alloc(8); msg.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000) + offset));
+  const h = createHmac("sha1", b32(secret)).update(msg).digest(); const o = h[h.length - 1] & 0xf;
+  return String((h.readUInt32BE(o) & 0x7fffffff) % 1e6).padStart(6, "0");
+};
+const codigoAtivacao = (code) => createHmac("sha256", env.CHECKIN_SECRET).update(`ativacao:${code.replace(/-/g, "")}`).digest("base64url");
+const t0 = new Date().toISOString();
+const stamp = Date.now();
+const emailsLideres = [`e2e.lider.a.${stamp}@example.com`, `e2e.lider.b.${stamp}@example.com`, `e2e.lider.c.${stamp}@example.com`];
+const SENHA_A = "culto de jovens e2e " + stamp;
+const req = async (method, path, body, cookie) => {
+  const r = await fetch(BASE + path, { method, headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...(cookie ? { cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const sc = r.headers.get("set-cookie") ?? "";
+  return { status: r.status, data: await r.json().catch(() => ({})), cookie: sc.split(";")[0], setCookie: sc };
 };
 
 let falhas = 0;
@@ -182,15 +207,111 @@ try {
     check("visitante fora do local (403)", r.status === 403, r.data);
   }
 
-  // ---------- Área do pastor ----------
+  // ---------- P1: contas individuais de líder (senha + app autenticador) ----------
   const semSessao = await fetch(`${BASE}/api/pastor/feed`);
-  check("feed do pastor sem sessão é bloqueado (401)", semSessao.status === 401, semSessao.status);
-  const loginErrado = await post("/api/pastor/sessao", { password: "errada" });
-  check("senha do pastor errada é recusada (401)", loginErrado.status === 401, loginErrado.status);
-  const login = await post("/api/pastor/sessao", { password: env.PASTOR_PASSWORD });
-  const setCookie = login.headers.get("set-cookie") ?? "";
-  const pastorCookie = setCookie.split(";")[0];
-  check("login do pastor define cookie httpOnly", login.status === 200 && /httponly/i.test(setCookie), login.status);
+  check("feed dos líderes sem sessão é bloqueado (401)", semSessao.status === 401, semSessao.status);
+  r = await post("/api/pastor/sessao", { password: "qualquer-senha-compartilhada" });
+  check("P1: a senha compartilhada antiga não existe mais", r.status === 404 || r.status === 405, r.status);
+
+  // Primeiro líder: criado direto no banco (como o script npm run lider:criar), com código de ativação.
+  const ativacaoA = "E2E2-TEST-" + String(stamp).slice(-4).replace(/[01]/g, "7");
+  const { data: lA } = await sb.from("leaders").insert({ name: "E2E Líder A", email: emailsLideres[0], setup_code_hash: codigoAtivacao(ativacaoA), setup_expires_at: new Date(Date.now() + 3600e3).toISOString() }).select("id").single();
+  r = await req("POST", "/api/lider/ativar", { email: emailsLideres[0], setupCode: ativacaoA, password: "curta" });
+  check("P1: ativação recusa senha fraca (400)", r.status === 400, r.data);
+  r = await req("POST", "/api/lider/ativar", { email: emailsLideres[0], setupCode: "ABCD-EFGH-JKMN", password: SENHA_A });
+  check("P1: código de ativação errado é recusado (401)", r.status === 401, r.data);
+  r = await req("POST", "/api/lider/ativar", { email: emailsLideres[0], setupCode: ativacaoA, password: SENHA_A });
+  const ckCadastro = r.cookie;
+  check("P1: ativação leva OBRIGATORIAMENTE ao cadastro do autenticador", r.status === 200 && r.data.stage === "cadastro_totp" && /httponly/i.test(r.setCookie), r.data);
+  r = await req("POST", "/api/lider/ativar", { email: emailsLideres[0], setupCode: ativacaoA, password: SENHA_A });
+  check("P1: código de ativação vale uma vez só", r.status === 401, r.status);
+  r = await req("GET", "/api/pastor/feed", null, ckCadastro);
+  check("P1: sem autenticador cadastrado, nada de dados privados (401)", r.status === 401, r.status);
+  const setupA = await req("GET", "/api/lider/autenticador", null, ckCadastro);
+  check("P1: cadastro mostra QR code e chave do autenticador", setupA.status === 200 && setupA.data.qr?.startsWith("data:image/png") && setupA.data.uri?.startsWith("otpauth://totp/"), setupA.status);
+  r = await req("POST", "/api/lider/autenticador", { code: "000000" }, ckCadastro);
+  check("P1: código errado no cadastro do autenticador é recusado", r.status === 400, r.data);
+  const codigoCadastro = totp(setupA.data.secret);
+  r = await req("POST", "/api/lider/autenticador", { code: codigoCadastro }, ckCadastro);
+  const codigosRecA = r.data.recoveryCodes ?? [];
+  let ckA = r.cookie;
+  check("P1: autenticador cadastrado → 10 códigos de recuperação e sessão completa", r.status === 200 && r.data.stage === "completa" && codigosRecA.length === 10, r.data);
+  r = await req("GET", "/api/pastor/feed", null, ckCadastro);
+  check("P1: o cookie da etapa anterior deixa de valer (sessão trocada)", r.status === 401, r.status);
+
+  // Login normal: senha → código.
+  r = await req("POST", "/api/lider/entrar", { email: emailsLideres[0], password: SENHA_A + "x" });
+  check("P1: senha errada é recusada (401)", r.status === 401, r.data);
+  r = await req("POST", "/api/lider/entrar", { email: emailsLideres[0], password: SENHA_A });
+  let ckSenha = r.cookie;
+  check("P1: senha certa libera SÓ a etapa do código", r.status === 200 && r.data.stage === "senha", r.data);
+  r = await req("GET", "/api/pastor/feed", null, ckSenha);
+  check("P1: só a senha não abre o feed (401)", r.status === 401, r.status);
+  r = await req("POST", "/api/lider/verificar", { code: codigoCadastro }, ckSenha);
+  check("P1: código do autenticador já usado não vale de novo", r.status === 401, r.data);
+  const proximo = totp(setupA.data.secret, 1);
+  r = await req("POST", "/api/lider/verificar", { code: proximo }, ckSenha);
+  ckA = r.cookie;
+  check("P1: senha + código do autenticador → acesso completo", r.status === 200 && r.data.stage === "completa", r.data);
+  r = await req("POST", "/api/lider/entrar", { email: emailsLideres[0], password: SENHA_A });
+  r = await req("POST", "/api/lider/verificar", { code: proximo }, r.cookie);
+  check("P1: o mesmo código não serve para um segundo login", r.status === 401, r.status);
+  const pastorCookie = ckA;
+
+  // Limite de tentativas com requisições SIMULTÂNEAS (contador no banco, vale para qualquer instância).
+  const rajada = await Promise.all(Array.from({ length: 14 }, () => req("POST", "/api/lider/entrar", { email: emailsLideres[1], password: "chute qualquer 123" })));
+  const negados = rajada.filter((x) => x.status === 401).length, bloqueados = rajada.filter((x) => x.status === 429).length;
+  check("P1: 14 tentativas simultâneas → no máximo 8 conferidas, o resto bloqueado (429)", negados <= 8 && bloqueados >= 6 && negados + bloqueados === 14, { negados, bloqueados });
+  const rajadaCodigo = await (async () => {
+    const l = await req("POST", "/api/lider/entrar", { email: emailsLideres[0], password: SENHA_A });
+    return Promise.all(Array.from({ length: 8 }, () => req("POST", "/api/lider/verificar", { code: "123456" }, l.cookie)));
+  })();
+  check("P1: chutes simultâneos do código de 6 dígitos também são limitados (5 por 15 min)",
+    rajadaCodigo.filter((x) => /Código incorreto/.test(x.data.error ?? "")).length <= 5 && rajadaCodigo.some((x) => x.status === 429), rajadaCodigo.map((x) => x.status));
+  await sb.from("auth_rate_limits").delete().like("key", `%${lA.id}%`);
+
+  // Celular perdido: código de recuperação (uso único) → cadastra autenticador novo.
+  r = await req("POST", "/api/lider/entrar", { email: emailsLideres[0], password: SENHA_A });
+  r = await req("POST", "/api/lider/verificar", { recoveryCode: codigosRecA[0] }, r.cookie);
+  const ckRec = r.cookie;
+  check("P1: código de recuperação entra e EXIGE cadastrar um autenticador novo", r.status === 200 && r.data.stage === "cadastro_totp", r.data);
+  r = await req("GET", "/api/pastor/feed", null, ckA);
+  check("P1: usar código de recuperação encerra as outras sessões (o celular perdido pode estar logado)", r.status === 401, r.status);
+  const setupA2 = await req("GET", "/api/lider/autenticador", null, ckRec);
+  r = await req("POST", "/api/lider/autenticador", { code: totp(setupA2.data.secret) }, ckRec);
+  check("P1: novo autenticador cadastrado, códigos de recuperação renovados", r.status === 200 && r.data.recoveryCodes?.length === 10 && setupA2.data.secret !== setupA.data.secret, r.status);
+  ckA = r.cookie;
+  r = await req("POST", "/api/lider/entrar", { email: emailsLideres[0], password: SENHA_A });
+  r = await req("POST", "/api/lider/verificar", { recoveryCode: codigosRecA[1] }, r.cookie);
+  check("P1: códigos de recuperação antigos deixam de valer", r.status === 401, r.status);
+  await sb.from("auth_rate_limits").delete().like("key", `%${lA.id}%`);
+
+  // Administração: A cria C, C ativa; A desativa C → só as sessões de C caem.
+  r = await req("POST", "/api/lider/contas", { name: "E2E Líder C", email: emailsLideres[2] }, ckA);
+  check("P1: líder cria conta de outro líder (código de ativação de uso único)", r.status === 200 && /^[2-9A-Z]{4}-[2-9A-Z]{4}-[2-9A-Z]{4}$/.test(r.data.setupCode ?? ""), r.data);
+  const idC = r.data.id;
+  r = await req("POST", "/api/lider/ativar", { email: emailsLideres[2], setupCode: r.data.setupCode, password: "louvor e2e conta c " + stamp });
+  const setupC = await req("GET", "/api/lider/autenticador", null, r.cookie);
+  r = await req("POST", "/api/lider/autenticador", { code: totp(setupC.data.secret) }, r.cookie);
+  const ckC = r.cookie;
+  check("P1: líder C ativou e entrou", (await req("GET", "/api/pastor/feed", null, ckC)).status === 200);
+  r = await req("PATCH", "/api/lider/contas", { id: lA.id, action: "desativar" }, ckA);
+  check("P1: ninguém desativa a própria conta (403)", r.status === 403, r.data);
+  r = await req("PATCH", "/api/lider/contas", { id: idC, action: "desativar" }, ckA);
+  check("P1: desativar encerra as sessões abertas do líder", r.status === 200 && r.data.sessionsEnded >= 1, r.data);
+  r = await req("GET", "/api/pastor/feed", null, ckC);
+  check("P1: líder desativado perde o acesso NA HORA (401)", r.status === 401, r.status);
+  r = await req("GET", "/api/pastor/feed", null, ckA);
+  check("P1: os outros líderes continuam conectados", r.status === 200, r.status);
+  r = await req("GET", "/api/lider/contas", null, ckC);
+  check("P1: líder desativado não administra contas (401)", r.status === 401, r.status);
+
+  // Adolescente nunca vira líder.
+  r = await req("GET", "/api/lider/contas", null, cookieVisita);
+  const r2v = await req("GET", "/api/pastor/feed", null, cookieVisita);
+  const r3v = await req("DELETE", "/api/pastor/checkins", { id: "x", reason: "teste de acesso" }, cookieVisita);
+  check("P1: sessão da visita do adolescente não acessa funções de líder", r.status === 401 && r2v.status === 401 && r3v.status === 401, [r.status, r2v.status, r3v.status]);
+
   const feed = await fetch(`${BASE}/api/pastor/feed`, { headers: { cookie: pastorCookie } }).then((x) => x.json());
   const meu = feed.items?.find((i) => i.name === cad.name);
   check("check-in aparece no feed com foto criativa e foto do cadastro", !!meu?.selfieUrl && !!meu?.avatarUrl && meu.photoKind === "criativa", meu);
@@ -212,10 +333,38 @@ try {
   const cpf2 = cpfAleatorio();
   cpfsCriados.push(cpf2);
   const r2 = await post("/api/cadastro", { ...cad, cpf: cpf2, name: "Teste Automático Pastor" }, { cookie: pastorCookie });
-  check("pastor cadastra pelo mesmo formulário (200)", r2.status === 200, r2.data);
+  check("líder cadastra pelo mesmo formulário (200)", r2.status === 200, r2.data);
 
   const { data: pres } = await sb.from("presencas").select("nome, tipo, tipo_foto").in("nome", [cad.name, "Visitante Teste Sem Foto"]);
   check("view presencas mostra adolescente (criativa) e visitante", pres?.some((p) => p.tipo === "cadastrado" && p.tipo_foto === "criativa") && pres?.some((p) => p.tipo === "visitante"), pres);
+
+  // Correção de presença (com motivo) e trilha de auditoria.
+  r = await req("DELETE", "/api/pastor/checkins", { id: meu?.id, reason: "" }, ckA);
+  check("P1: correção de presença exige motivo (400)", r.status === 400, r.data);
+  r = await req("DELETE", "/api/pastor/checkins", { id: meu?.id, reason: "teste automático: presença registrada por engano" }, ckA);
+  const { data: aindaLa } = await sb.from("checkins").select("id").eq("id", meu?.id ?? "").maybeSingle();
+  check("P1: líder remove presença registrada por engano", r.status === 200 && !aindaLa, r.data);
+
+  const { data: trilha } = await sb.from("admin_audit").select("id, actor_id, action, target_id, outcome, details").gte("at", t0).order("id");
+  const tem = (action, outcome, f = () => true) => (trilha ?? []).some((a) => a.action === action && a.outcome === outcome && f(a));
+  check("P1: trilha registra ativação, autenticador, login, recuperação, criação e desativação",
+    tem("conta_ativada", "ok", (a) => a.target_id === lA.id) && tem("totp_cadastrado", "ok", (a) => a.actor_id === lA.id) &&
+    tem("login", "ok", (a) => a.actor_id === lA.id) && tem("login", "negado") && tem("login", "bloqueado") &&
+    tem("recuperacao_usada", "ok", (a) => a.actor_id === lA.id) && tem("conta_criada", "ok", (a) => a.actor_id === lA.id && a.target_id === idC) &&
+    tem("conta_desativada", "ok", (a) => a.actor_id === lA.id && a.target_id === idC) && tem("conta_desativada", "negado", (a) => a.target_id === lA.id),
+    [...new Set((trilha ?? []).map((a) => `${a.action}:${a.outcome}`))]);
+  check("P1: correção de presença registrada com quem, qual e por quê",
+    tem("presenca_removida", "ok", (a) => a.actor_id === lA.id && a.target_id === meu?.id && /engano/.test(a.details?.motivo ?? "")));
+  const textoTrilha = JSON.stringify(trilha);
+  const segredos = [SENHA_A, codigoCadastro, proximo, ...codigosRecA, ativacaoA, setupA.data.secret?.replace(/ /g, "")].filter(Boolean);
+  check("P1: trilha não contém senha, códigos nem chave do autenticador", !segredos.some((x) => textoTrilha.includes(x)));
+  const umId = trilha?.[0]?.id;
+  const edit = await sb.from("admin_audit").update({ outcome: "ok", action: "adulterado" }).eq("id", umId).select("id");
+  const del = await sb.from("admin_audit").delete().eq("id", umId).select("id");
+  const { data: intacto } = await sb.from("admin_audit").select("action").eq("id", umId).maybeSingle();
+  check("P1: auditoria não pode ser editada nem apagada, nem com a chave do servidor", !!edit.error && !!del.error && intacto?.action === trilha?.[0]?.action, { edit: edit.error?.message, del: del.error?.message });
+  const delEv = await sb.from("audit_events").delete().gte("at", t0).select("id");
+  check("P1: auditoria do check-in (P0) também é só de inserção", !!delEv.error, delEv.error?.message);
 } catch (e) {
   console.error("⚠️ ", e.message);
   falhas++;
@@ -233,6 +382,10 @@ try {
     await sb.storage.from("fotos").remove(vcks.map((c) => c.photo_path).filter(Boolean));
     await sb.from("checkins").delete().in("id", vcks.map((c) => c.id));
   }
+  // Líderes de teste (sessões e códigos vão em cascata). A trilha de auditoria fica: ela é imutável.
+  await sb.from("leaders").delete().in("email", emailsLideres);
+  await sb.from("auth_rate_limits").delete().like("key", "%e2e.lider.%");
+  await sb.from("auth_rate_limits").delete().gte("window_start", t0).or("key.like.entrar:ip:%,key.like.ativar:ip:%");
   console.log("🧹 dados de teste removidos");
 }
 console.log(falhas ? `\n${falhas} falha(s).` : "\nTudo funcionando! 🎉");

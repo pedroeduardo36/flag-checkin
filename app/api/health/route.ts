@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 // Diagnóstico da integração: confere variáveis, tabelas e bucket. Não expõe dados.
 export async function GET() {
   const checks: Record<string, boolean | string> = {};
-  const envs = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "CHURCH_LAT", "CHURCH_LNG", "PASTOR_PASSWORD", "CHECKIN_SECRET"];
+  const envs = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "CHURCH_LAT", "CHURCH_LNG", "CHECKIN_SECRET"];
   const missing = envs.filter((k) => !process.env[k]);
   checks.env = missing.length ? `faltando: ${missing.join(", ")}` : true;
   if (missing.length) return NextResponse.json({ ok: false, checks }, { status: 500 });
@@ -22,6 +22,8 @@ export async function GET() {
     checks.members = members.error ? members.error.message : true;
     const checkins = await db().from("checkins").select("id", { count: "exact", head: true });
     checks.checkins = checkins.error ? checkins.error.message : true;
+    const leaders = await db().from("leaders").select("id", { count: "exact", head: true }).eq("status", "ativo");
+    checks.lideres = leaders.error ? leaders.error.message : (leaders.count ?? 0) > 0 ? true : "nenhum líder ativo: rode npm run lider:criar";
     const view = await db().from("presencas").select("culto", { head: true });
     checks.presencas = view.error ? view.error.message : true;
     const bucket = await db().storage.getBucket(PHOTO_BUCKET);

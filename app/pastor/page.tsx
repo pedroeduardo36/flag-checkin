@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Brand } from "@/components/Brand";
 import { CadastroForm } from "@/components/CadastroForm";
 import { PastorDashboard } from "@/components/PastorDashboard";
+import { LeaderAuth, type AuthStep } from "@/components/LeaderAuth";
+import { LeadersAdmin } from "@/components/LeadersAdmin";
 
 type Item = {
   id: string;
@@ -20,8 +22,8 @@ type Item = {
   guardianEmailStatus: string | null;
 };
 
-type Auth = "checking" | "login" | "in";
-type Tab = "feed" | "dashboard" | "cadastro";
+type Auth = "checking" | "in" | AuthStep;
+type Tab = "feed" | "dashboard" | "cadastro" | "lideres";
 
 const POLL_MS = 4000;
 const FULL_RELOAD_MS = 30 * 60 * 1000; // renova as URLs assinadas das fotos (valem 1 h)
@@ -38,19 +40,29 @@ function ago(iso: string, now: number) {
   return `há ${h} h${m % 60 ? ` ${m % 60} min` : ""}`;
 }
 
+/** Etapa da sessão no servidor → tela. */
+const STEP_OF: Record<string, Auth> = { completa: "in", senha: "codigo", cadastro_totp: "cadastro" };
+
 export default function PastorPage() {
   const [auth, setAuth] = useState<Auth>("checking");
   const [tab, setTab] = useState<Tab>("feed");
+  const [name, setName] = useState("");
 
-  useEffect(() => {
-    fetch("/api/pastor/sessao")
+  const check = useCallback(() => {
+    fetch("/api/lider/sessao", { cache: "no-store" })
       .then((r) => r.json())
-      .then((d) => setAuth(d.ok ? "in" : "login"))
+      .then((d) => {
+        setName(d.leader?.name ?? "");
+        setAuth(STEP_OF[d.stage] ?? "login");
+      })
       .catch(() => setAuth("login"));
   }, []);
+  useEffect(check, [check]);
+
+  const expired = useCallback(() => setAuth("login"), []);
 
   async function logout() {
-    await fetch("/api/pastor/sessao", { method: "DELETE" }).catch(() => {});
+    await fetch("/api/lider/sessao", { method: "DELETE" }).catch(() => {});
     setAuth("login");
   }
 
@@ -62,81 +74,42 @@ export default function PastorPage() {
       </main>
     );
 
-  if (auth === "login") return <Login onOk={() => setAuth("in")} />;
+  if (auth !== "in") return <LeaderAuth key={auth} initial={auth} onDone={check} />;
 
   return (
     <main className="shell pastor">
       <div className="pastor__top">
         <Brand compact />
-        <button className="pastor__logout" onClick={logout}>Sair</button>
+        <button className="pastor__logout" onClick={logout} title={name ? `Conectado como ${name}` : undefined}>Sair</button>
       </div>
 
-      <nav className="tabs" role="tablist" aria-label="Área do pastor">
+      <nav className="tabs" role="tablist" aria-label="Área dos líderes">
         <button role="tab" aria-selected={tab === "feed"} className={tab === "feed" ? "on" : ""} onClick={() => setTab("feed")}>
           <span className="live-dot" aria-hidden /> Ao vivo
         </button>
         <button role="tab" aria-selected={tab === "dashboard"} className={tab === "dashboard" ? "on" : ""} onClick={() => setTab("dashboard")}>
-          📊 Dashboard
+          Dashboard
         </button>
         <button role="tab" aria-selected={tab === "cadastro"} className={tab === "cadastro" ? "on" : ""} onClick={() => setTab("cadastro")}>
-          ＋ Cadastrar
+          Cadastrar
+        </button>
+        <button role="tab" aria-selected={tab === "lideres"} className={tab === "lideres" ? "on" : ""} onClick={() => setTab("lideres")}>
+          Líderes
         </button>
       </nav>
 
-      {/* O feed continua montado (e atualizando) enquanto o pastor cadastra alguém. */}
+      {/* O feed continua montado (e atualizando) enquanto o líder usa as outras abas. */}
       <div hidden={tab !== "feed"}>
-        <Feed onUnauthorized={() => setAuth("login")} />
+        <Feed onUnauthorized={expired} />
       </div>
-      {tab === "dashboard" && <PastorDashboard onUnauthorized={() => setAuth("login")} />}
+      {tab === "dashboard" && <PastorDashboard onUnauthorized={expired} />}
       {tab === "cadastro" && (
         <section className="card">
-          <CadastroForm mode="pastor" onSessionExpired={() => setAuth("login")} />
+          <CadastroForm mode="pastor" onSessionExpired={expired} />
         </section>
       )}
-      <footer className="foot">Ministério Flag · Juventude O2 · área do pastor</footer>
-    </main>
-  );
-}
-
-function Login({ onOk }: { onOk: () => void }) {
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!password) return setError("Digite a senha.");
-    setBusy(true);
-    setError(null);
-    const r = await fetch("/api/pastor/sessao", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    }).catch(() => null);
-    setBusy(false);
-    if (r?.ok) return onOk();
-    setPassword("");
-    setError(r?.status === 401 ? "Senha incorreta." : "Não foi possível entrar. Tente de novo.");
-  }
-
-  return (
-    <main className="shell">
-      <Brand />
-      <section className="card">
-        <form onSubmit={submit} noValidate>
-          <div className="lock" aria-hidden>🔒</div>
-          <h1>Área do pastor</h1>
-          <p className="lead">Acompanhamento ao vivo dos check-ins e cadastro de adolescentes.</p>
-          <label className="field">
-            <span>Senha</span>
-            <input type="password" autoComplete="current-password" autoFocus value={password}
-              onChange={(e) => setPassword(e.target.value)} />
-          </label>
-          {error && <div className="alert" role="alert">{error}</div>}
-          <button className="btn" disabled={busy}>{busy ? "Entrando…" : "Entrar"}</button>
-        </form>
-      </section>
-      <footer className="foot">Ministério Flag · Juventude O2</footer>
+      {tab === "lideres" && <LeadersAdmin onUnauthorized={expired} />}
+      <footer className="foot">Ministério Flag · Juventude O2 · {name ? `conectado como ${name}` : "área dos líderes"}</footer>
     </main>
   );
 }
@@ -229,7 +202,9 @@ function Feed({ onUnauthorized }: { onUnauthorized: () => void }) {
 
       <ol className="feed" aria-live="polite">
         {items.map((it) => (
-          <Post key={it.id} it={it} now={now} isNew={fresh.has(it.id)} />
+          <Post key={it.id} it={it} now={now} isNew={fresh.has(it.id)}
+            onRemoved={() => { setItems((p) => p.filter((x) => x.id !== it.id)); setTotal((t) => Math.max(0, t - 1)); }}
+            onUnauthorized={onUnauthorized} />
         ))}
       </ol>
 
@@ -250,7 +225,9 @@ function Feed({ onUnauthorized }: { onUnauthorized: () => void }) {
 const fmtDay = (d: string) =>
   new Date(`${d}T12:00:00Z`).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", timeZone: "UTC" });
 
-function Post({ it, now, isNew = false, example = false }: { it: Item; now: number; isNew?: boolean; example?: boolean }) {
+type PostProps = { it: Item; now: number; isNew?: boolean; example?: boolean; onRemoved?: () => void; onUnauthorized?: () => void };
+
+function Post({ it, now, isNew = false, example = false, onRemoved, onUnauthorized }: PostProps) {
   return (
           <li className={`post ${isNew ? "post--new" : ""} ${example ? "post--example" : ""}`}>
             <header className="post__head">
@@ -283,6 +260,51 @@ function Post({ it, now, isNew = false, example = false }: { it: Item; now: numb
               {it.guardianEmailStatus === "enviado" && <span className="tag">✉️ Responsável avisado</span>}
               {it.guardianEmailStatus === "falhou" && <span className="tag tag--warn">✉️ E-mail falhou</span>}
             </footer>
+            {onRemoved && <Correction it={it} onRemoved={onRemoved} onUnauthorized={onUnauthorized!} />}
           </li>
+  );
+}
+
+/** Correção de presença: remove um check-in registrado por engano, com motivo (vai para o registro de ações). */
+function Correction({ it, onRemoved, onUnauthorized }: { it: Item; onRemoved: () => void; onUnauthorized: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function remove(e: React.FormEvent) {
+    e.preventDefault();
+    if (reason.trim().length < 5) return setError("Escreva o motivo (ex.: check-in feito por outra pessoa).");
+    setBusy(true);
+    setError(null);
+    const r = await fetch("/api/pastor/checkins", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: it.id, reason }),
+    }).catch(() => null);
+    setBusy(false);
+    if (r?.status === 401) return onUnauthorized();
+    if (r?.ok) return onRemoved();
+    setError((await r?.json().catch(() => null))?.error ?? "Não foi possível remover.");
+  }
+
+  if (!open)
+    return (
+      <div className="post__fix">
+        <button className="linklike" onClick={() => setOpen(true)}>Corrigir presença</button>
+      </div>
+    );
+  return (
+    <form className="post__fix post__fix--open" onSubmit={remove} noValidate>
+      <label className="field">
+        <span>Remover o check-in de {it.firstName}. Motivo:</span>
+        <input autoFocus value={reason} maxLength={200} placeholder="Ex.: feito por outra pessoa" onChange={(e) => setReason(e.target.value)} />
+      </label>
+      {error && <div className="alert" role="alert">{error}</div>}
+      <div className="post__fix-actions">
+        <button className="chip chip--danger" disabled={busy}>{busy ? "Removendo…" : "Remover presença"}</button>
+        <button type="button" className="chip" onClick={() => { setOpen(false); setError(null); }}>Cancelar</button>
+      </div>
+    </form>
   );
 }

@@ -5,7 +5,7 @@ import { env } from "./env";
 import { db } from "./supabase";
 
 /** IP vira um código irreversível (HMAC): dá para ver repetição/abuso sem guardar o IP em claro. */
-function ipHash(req: Request): string | null {
+export function ipHash(req: Request): string | null {
   const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || req.headers.get("x-real-ip");
   return ip ? createHmac("sha256", env.checkinSecret).update(`ip:${ip}`).digest("base64url").slice(0, 22) : null;
 }

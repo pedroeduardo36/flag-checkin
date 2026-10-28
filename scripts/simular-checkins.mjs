@@ -34,9 +34,6 @@ const post = async (path, body, cookie) => {
   return { status: r.status, data: await r.json().catch(() => ({})), setCookie: r.headers.get("set-cookie") };
 };
 
-const login = await post("/api/pastor/sessao", { password: env.PASTOR_PASSWORD });
-if (login.status !== 200) throw new Error("login do pastor falhou");
-const cookie = login.setCookie.split(";")[0];
 const local = { lat: Number(env.CHURCH_LAT), lng: Number(env.CHURCH_LNG), accuracy: 12 };
 
 const pessoas = [
@@ -48,7 +45,7 @@ for (const [i, p] of pessoas.entries()) {
   const c = await post("/api/cadastro", {
     name: p.name, cpf: doc, phone: "61999990000", birthDate: "2010-05-20", guardianName: "Responsável Simulação",
     guardianPhone: "61988880000", guardianEmail: env.SMTP_USER || "responsavel@example.com", consent: true,
-  }, cookie);
+  });
   console.log(`cadastro (sem foto): ${p.name} → ${c.status}`);
   const id = await post("/api/checkin/identificar", { ...local, name: p.name, birthDate: "2010-05-20" });
   const ok = await post("/api/checkin/confirmar", { token: id.data.token, photo: foto(p.cadastro) });

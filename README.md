@@ -55,7 +55,7 @@ Um **web app mobile-first**, sem instalar nada, em três momentos:
 
 ### Área do pastor — [`/pastor`](https://flag-checkin.vercel.app/pastor)
 
-Protegida por senha, com três abas:
+Cada líder entra com a **própria conta: senha + código do app autenticador** (veja Segurança). Quatro abas:
 - **Ao vivo:** feed no estilo Instagram com quem acabou de chegar (foto do cadastro, nome, horário e foto do
   check-in), contador de presentes do dia e selos "1º check-in", "foto criativa", "visitante", "rosto confere" e
   "responsável avisado". Novos check-ins aparecem
@@ -122,7 +122,9 @@ flowchart LR
 | **Foto embutida (CID), não link** | A foto do check-in vai como anexo *inline*. Não depende de URL assinada (que expira) nem de bucket público, e aparece direto no Gmail ou Outlook. |
 | **SMTP, não SDK de um fornecedor** | Nodemailer funciona com Gmail, Brevo ou Resend só trocando variáveis de ambiente. |
 | **Feed "ao vivo" por *polling* incremental** | A cada 4 s a página pergunta só pelo que chegou depois do último check-in visto (`?since=`). Não precisa de WebSocket nem de Realtime, que exigiria abrir o banco para a chave pública. Pausa com a aba escondida e renova as URLs das fotos a cada 30 min. |
-| **Sessão do pastor sem tabela** | O cookie `httpOnly` + `SameSite=strict` guarda `validade.assinatura` (HMAC). O servidor só confere a assinatura e o prazo de 12 h. |
+| **Sessão de líder no banco, não só no cookie** | O cookie `httpOnly` + `SameSite=strict` leva 32 bytes aleatórios; o banco guarda o hash. Assim, desativar uma conta ou encerrar sessões vale na hora, em qualquer instância. Cada etapa do login (senha → código → acesso) troca o valor do cookie. |
+| **TOTP sem dependência** | RFC 6238 em ~60 linhas de `node:crypto`, testado com os vetores oficiais da RFC. O segredo fica cifrado (AES-256-GCM) no banco e o último código aceito é gravado, então o mesmo código não vale duas vezes. |
+| **Limite de tentativas no Postgres** | `insert … on conflict do update returning hits` trava a linha: 14 requisições simultâneas contam 14, mesmo em funções serverless diferentes. A tentativa é contada **antes** de conferir a senha. |
 | **Dashboard calculado numa função pura** | `lib/stats.ts` recebe só `(data, membro, visitante)` de cada check-in e devolve indicadores, evolução e ranking, testada sem banco. O percentual de presença conta só os encontros **desde a 1ª vez** do adolescente, para não punir quem chegou depois. |
 | **Gráfico em SVG próprio, sem biblioteca** | Colunas empilhadas com um só eixo, rótulo só no maior e no último encontro, dica ao passar o dedo ou o mouse, alternativa em tabela e paleta (azul da marca + laranja) **validada por script** para daltonismo e contraste. |
 | **Data do culto em `America/Sao_Paulo`** | Um culto às 22h em Brasília já é o "dia seguinte" em UTC. O fuso é explícito e coberto por teste. |
@@ -204,8 +206,10 @@ para pessoas diferentes.
 | Check-in de casa | Cerca geográfica validada **no servidor**, duas vezes. A foto fica como prova para auditoria. |
 | "Faz o check-in por mim" | A foto criativa é comparada com a foto de registro (403 se ninguém na foto for o adolescente). A distância fica gravada para auditoria. |
 | Injeção de HTML no e-mail | Nome e responsável vêm do cadastro e são escapados antes de entrar no HTML (teste cobre `<b>`). |
-| Acesso ao feed (fotos de menores) | Senha do pastor conferida no servidor. O cookie de sessão é `httpOnly`, `SameSite=strict` e assinado; cookie forjado ou vencido recebe 401. A página não é indexada (`robots: noindex`). |
-| Força bruta na senha do pastor | Comparação em tempo constante e atraso de 0,8 s a cada senha errada. |
+| Acesso ao feed e ao dashboard (**P1 corrigido**, [relatório](docs/seguranca/P1-contas-de-lider.md)) | **Conta individual por líder**: senha (scrypt) **e** código de app autenticador (TOTP), obrigatório antes de qualquer dado privado. Sem alternativa por SMS ou e-mail. Sessão no banco, revogável na hora. A página não é indexada (`robots: noindex`). |
+| Celular do líder perdido | 10 **códigos de recuperação** de uso único (só o hash fica no banco); usar um encerra as outras sessões e exige cadastrar um autenticador novo. Sem códigos: **outro líder** redefine o acesso e entrega pessoalmente um código de ativação de 24 h. |
+| Força bruta e chutes em paralelo | Limite no banco, contado antes de conferir: 8 senhas por conta e 30 por rede a cada 15 min; 5 códigos por conta a cada 15 min e 20 por dia. Vale para requisições simultâneas e várias instâncias. |
+| Rastrear ações dos líderes | Tabela `admin_audit`: login, criação, desativação, sessões encerradas, autenticador cadastrado, recuperação, redefinição e **correção de presença** (quem, alvo, quando, resultado, motivo). Um gatilho no Postgres recusa editar ou apagar, até com a chave do servidor. Senhas, códigos e dados biométricos nunca entram. |
 | Foto de registro de qualquer coisa | A foto do 1º check-in precisa ter exatamente um rosto, de perto, verificado no servidor. |
 | Ver a foto ou o horário de outro adolescente (**P0 corrigido**, [relatório](docs/seguranca/P0-fotos-de-presenca.md)) | Nome, nascimento e coordenadas **não** autorizam ler dados privados. Foto e horário só voltam ao aparelho com a **sessão da visita** (cookie HMAC `httpOnly`, ligado ao adolescente e ao dia, emitido depois do rosto conferido) ou aos líderes logados. A resposta pública é idêntica para quem já fez ou não o check-in. |
 | Investigar abuso depois | Tabela `audit_events` com cada identificação e confirmação (resultado, adolescente, IP como HMAC, coordenadas), porque os planos gratuitos da Vercel e do Supabase quase não retêm logs. |
@@ -239,7 +243,9 @@ O **teste ponta a ponta** cobre o caminho feliz **e** os ataques: cadastro pelo 
 duplicado (409), posição fora do raio (403), nome ou data errados (404), identificação com o nome sem acento e sem o
 nome do meio, **foto de registro** sem rosto ou com duas pessoas (422), segundo check-in no mesmo dia (409), **foto
 criativa** de outra pessoa (403) e **em grupo com o adolescente** (200), visitante com e sem foto e repetido no dia,
-área do pastor (401, cookie `httpOnly`, feed com visitantes) e a view de presença.
+contas de líder (ativação, autenticador obrigatório, código repetido, recuperação, rajadas simultâneas, desativação
+que derruba só aquele líder, sessão de adolescente sem acesso de líder, auditoria imutável e sem segredos), feed com
+visitantes e a view de presença.
 
 As imagens de teste em `tests/fixtures/` são **rostos sintéticos** gerados por StyleGAN2 (thispersondoesnotexist.com):
 nenhuma pessoa real aparece no repositório.
@@ -261,18 +267,19 @@ A esteira de **CI no GitHub Actions** roda tipos, testes e build a cada push e P
 app/
   checkin/page.tsx            check-in (local → nome e nascimento ou visitante → foto de registro ou criativa → sucesso)
   cadastro/page.tsx           cadastro pelo responsável (sem foto, sem senha) com consentimento LGPD
-  pastor/page.tsx             área do pastor: login, feed ao vivo estilo Instagram e cadastro
+  pastor/page.tsx             área dos líderes: login em 2 etapas, feed ao vivo, dashboard, cadastro e aba Líderes
   api/checkin/local           GET: modo teste? · POST: confere a cerca
   api/checkin/identificar     nome + nascimento → token HMAC (4 h) e tipo de foto
   api/checkin/confirmar       foto de registro (1º) ou criativa → Storage + insert + e-mail
   api/checkin/visitante       visitante: nome + telefone (+ foto opcional)
   api/cadastro                novo adolescente
-  api/pastor/sessao           login (POST), sessão (GET) e saída (DELETE) do pastor
-  api/pastor/dashboard        indicadores, evolução por encontro e ranking (só com a sessão do pastor)
+  api/lider/*                 entrar, verificar (código ou recuperação), ativar, autenticador, sessao, contas, auditoria
+  api/pastor/checkins         correção de presença (DELETE com motivo, vai para a auditoria)
+  api/pastor/dashboard        indicadores, evolução por encontro e ranking (só com sessão de líder completa)
   api/pastor/feed             check-ins do dia com URLs assinadas das fotos (?since= para o incremental)
   api/health                  diagnóstico (variáveis, tabelas, view e bucket)
   api/qrcode · qrcode/        QR code gerado no servidor (PNG/SVG) e página para imprimir
-components/                   Brand (marca), Camera (getUserMedia + fallback), CadastroForm (responsável | pastor), PastorDashboard (indicadores, gráfico SVG, ranking)
+components/                   Brand, Camera, CadastroForm, PastorDashboard, LeaderAuth (login, ativação, autenticador), LeadersAdmin (contas e auditoria)
 lib/stats.ts                  cálculo do dashboard (função pura)
 lib/format.ts                 validações compartilhadas cliente/servidor
 lib/server/                   env, cliente Supabase, segurança, reconhecimento facial, tratamento de erros

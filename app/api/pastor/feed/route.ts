@@ -3,7 +3,7 @@ import { withErrors } from "@/lib/server/http";
 import { db } from "@/lib/server/supabase";
 import { PHOTO_BUCKET } from "@/lib/server/env";
 import { serviceDate } from "@/lib/server/security";
-import { isPastorRequest } from "@/lib/server/pastor";
+import { requireLeader, unauthorized } from "@/lib/server/leader";
 import { firstName } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +30,7 @@ type Row = {
  * acompanhamento em tempo real, que pergunta a cada poucos segundos.
  */
 export const GET = withErrors(async (req: Request) => {
-  if (!isPastorRequest(req)) return NextResponse.json({ error: "Sessão expirada. Entre de novo." }, { status: 401 });
+  if (!(await requireLeader(req))) return unauthorized();
 
   const url = new URL(req.url);
   const date = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get("date") ?? "") ? url.searchParams.get("date")! : serviceDate();
