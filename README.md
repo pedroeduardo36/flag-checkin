@@ -235,7 +235,7 @@ tentativas por IP; o próximo passo seria o Upstash Ratelimit nas rotas de ident
 ```bash
 npm test             # 80 testes unitários (Vitest): dashboard, busca por nome, máscaras, datas, Haversine, HMAC, geofence, upload, rostos, e-mail, TOTP (vetores da RFC 6238), senha, sessões, possíveis duplicados
 npm run typecheck    # TypeScript em modo strict
-npm run test:fluxo   # 87 verificações ponta a ponta (inclui as regressões do P0, das contas de líder e da remoção do CPF) contra o Supabase real, com limpeza dos dados no final
+npm run test:fluxo   # 98 verificações ponta a ponta (inclui as regressões do P0, das contas de líder e da remoção do CPF) contra o Supabase real, com limpeza dos dados no final
 npm run simular      # dois adolescentes sintéticos fazem check-in com 8 s de intervalo (para ver o feed ao vivo)
 ```
 

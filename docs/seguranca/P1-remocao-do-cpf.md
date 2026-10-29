@@ -91,3 +91,7 @@ diferente e a escolha do cadastro mais parecido.
 2. Publicar o código (merge do PR na `main`).
 3. Aplicar a etapa 2 (`20261029120000_remover_coluna_cpf.sql`).
 4. Anotar a data da etapa 1 e a janela de backup do plano. É nessa data que a última cópia do CPF expira.
+
+**Etapa 1 aplicada em produção em 29/10/2026.** Antes: 112 cadastros (112 com CPF), 48 com foto de referência e 59
+presenças. Depois: 112 cadastros (**0 com CPF**), 48 com foto e 59 presenças. O teste ponta a ponta (98 verificações)
+passou contra o banco de produção, com o código desta branch.
