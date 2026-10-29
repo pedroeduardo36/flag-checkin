@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { brDateToIso, isValidBirthDate, isValidCpf, isValidEmail, isValidPhone, maskCpf, maskDate, maskPhone, nameTokens } from "@/lib/format";
+import { brDateToIso, isValidBirthDate, isValidEmail, isValidPhone, maskDate, maskPhone, nameTokens } from "@/lib/format";
 
 type Form = {
   name: string;
-  cpf: string;
   phone: string;
   birthDate: string;
   guardianName: string;
@@ -16,12 +15,11 @@ type Form = {
   website: string; // armadilha para robôs (fica escondido)
 };
 
-const empty: Form = { name: "", cpf: "", phone: "", birthDate: "", guardianName: "", guardianPhone: "", guardianEmail: "", guardianEmail2: "", consent: false, website: "" };
+const empty: Form = { name: "", phone: "", birthDate: "", guardianName: "", guardianPhone: "", guardianEmail: "", guardianEmail2: "", consent: false, website: "" };
 
 function validate(f: Form) {
   const e: Record<string, string> = {};
   if (nameTokens(f.name).length < 2) e.name = "Informe nome e sobrenome do adolescente.";
-  if (!isValidCpf(f.cpf)) e.cpf = "CPF do adolescente inválido.";
   if (f.phone && !isValidPhone(f.phone)) e.phone = "Telefone do adolescente inválido.";
   if (!isValidBirthDate(brDateToIso(f.birthDate))) e.birthDate = "Data inválida. Use DD/MM/AAAA.";
   if (nameTokens(f.guardianName).length < 2) e.guardianName = "Informe seu nome e sobrenome.";
@@ -98,7 +96,6 @@ export function CadastroForm({ mode, onSessionExpired }: { mode: Mode; onSession
     const rows: [string, string][] = [
       ["Nome", f.name.trim()],
       ["Nascimento", f.birthDate],
-      ["CPF", f.cpf],
       ...(f.phone ? ([["Celular", f.phone]] as [string, string][]) : []),
     ];
     const guardianRows: [string, string][] = [
@@ -181,9 +178,6 @@ export function CadastroForm({ mode, onSessionExpired }: { mode: Mode; onSession
           {field("birthDate", "Data de nascimento do adolescente", (
             <input inputMode="numeric" autoComplete="off" placeholder="DD/MM/AAAA" maxLength={10} value={f.birthDate}
               onChange={(e) => set("birthDate", maskDate(e.target.value))} />
-          ))}
-          {field("cpf", "CPF do adolescente", (
-            <input inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" value={f.cpf} onChange={(e) => set("cpf", maskCpf(e.target.value))} />
           ))}
           {field("phone", "Celular do adolescente (opcional)", (
             <input type="tel" inputMode="tel" autoComplete="off" placeholder="(00) 00000-0000" value={f.phone}

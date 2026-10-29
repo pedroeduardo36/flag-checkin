@@ -215,7 +215,7 @@ para pessoas diferentes.
 | Investigar abuso depois | Tabela `audit_events` com cada identificação e confirmação (resultado, adolescente, IP como HMAC, coordenadas), porque os planos gratuitos da Vercel e do Supabase quase não retêm logs. |
 | Descobrir quem está cadastrado | Nome inexistente e data errada recebem **a mesma** resposta (sem *user enumeration*). |
 | Pular a etapa de identificação | A foto só é aceita com um token HMAC-SHA256 válido (4 h), comparado em tempo constante. |
-| Cadastro aberto (sem senha) | CPF único, validação completa no servidor e *honeypot* contra robôs. Mesmo um cadastro falso não faz check-in sem estar na igreja e sem um rosto real na foto de registro. |
+| Cadastro aberto (sem senha) | Validação completa no servidor e *honeypot* contra robôs. **Sem CPF** ([relatório](docs/seguranca/P1-remocao-do-cpf.md)): cadastro parecido (mesmo nascimento e nome compatível) entra marcado como **possível duplicado** e um líder decide se mescla. O reenvio do mesmo responsável não duplica e recebe a mesma resposta de um cadastro novo, então o formulário não revela quem está cadastrado. Mesmo um cadastro falso não faz check-in sem estar na igreja e sem um rosto real na foto de registro. |
 | Vazamento de chave pública | RLS sem políticas: a chave `anon` não lê nem grava nada (teste: `[]` e `401`). |
 | Fotos expostas | Bucket **privado**, com limite de 2 MB e só MIME de imagem. Acesso por URL assinada de 10 minutos. |
 | Upload malicioso | `decodePhoto` aceita apenas `data:image/jpeg;base64` entre 2 KB e 2 MB, decodificado por um leitor JPEG em JavaScript puro. |
@@ -233,14 +233,14 @@ tentativas por IP; o próximo passo seria o Upstash Ratelimit nas rotas de ident
 ## Testes
 
 ```bash
-npm test             # 78 testes unitários (Vitest): dashboard, busca por nome, máscaras, datas, Haversine, HMAC, geofence, upload, rostos, e-mail, TOTP (vetores da RFC 6238), senha, sessões
+npm test             # 80 testes unitários (Vitest): dashboard, busca por nome, máscaras, datas, Haversine, HMAC, geofence, upload, rostos, e-mail, TOTP (vetores da RFC 6238), senha, sessões, possíveis duplicados
 npm run typecheck    # TypeScript em modo strict
-npm run test:fluxo   # 87 verificações ponta a ponta (inclui as regressões do P0 e do P1) contra o Supabase real, com limpeza dos dados no final
+npm run test:fluxo   # 87 verificações ponta a ponta (inclui as regressões do P0, das contas de líder e da remoção do CPF) contra o Supabase real, com limpeza dos dados no final
 npm run simular      # dois adolescentes sintéticos fazem check-in com 8 s de intervalo (para ver o feed ao vivo)
 ```
 
-O **teste ponta a ponta** cobre o caminho feliz **e** os ataques: cadastro pelo responsável sem foto nem senha, CPF
-duplicado (409), posição fora do raio (403), nome ou data errados (404), identificação com o nome sem acento e sem o
+O **teste ponta a ponta** cobre o caminho feliz **e** os ataques: cadastro pelo responsável sem foto, sem senha e sem CPF
+(o servidor descarta um CPF enviado), reenvio que não duplica, possível duplicado revisado e mesclado por um líder, posição fora do raio (403), nome ou data errados (404), identificação com o nome sem acento e sem o
 nome do meio, **foto de registro** sem rosto ou com duas pessoas (422), segundo check-in no mesmo dia (409), **foto
 criativa** de outra pessoa (403) e **em grupo com o adolescente** (200), visitante com e sem foto e repetido no dia,
 contas de líder (ativação, autenticador obrigatório, código repetido, recuperação, rajadas simultâneas, desativação
@@ -273,7 +273,7 @@ app/
   api/checkin/confirmar       foto de registro (1º) ou criativa → Storage + insert + e-mail
   api/checkin/visitante       visitante: nome + telefone (+ foto opcional)
   api/cadastro                novo adolescente
-  api/lider/*                 entrar, verificar (código ou recuperação), ativar, autenticador, sessao, contas, auditoria
+  api/lider/*                 entrar, verificar (código ou recuperação), ativar, autenticador, sessao, contas, auditoria, duplicados
   api/pastor/checkins         correção de presença (DELETE com motivo, vai para a auditoria)
   api/pastor/dashboard        indicadores, evolução por encontro e ranking (só com sessão de líder completa)
   api/pastor/feed             check-ins do dia com URLs assinadas das fotos (?since= para o incremental)

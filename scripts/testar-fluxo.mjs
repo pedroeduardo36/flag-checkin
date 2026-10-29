@@ -15,15 +15,8 @@ const env = {
 };
 const sb = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-function cpfAleatorio() {
-  const n = Array.from({ length: 9 }, () => Math.floor(Math.random() * 10));
-  for (const len of [9, 10]) {
-    const s = n.reduce((acc, d, i) => acc + d * (len + 1 - i), 0);
-    const r = (s * 10) % 11;
-    n.push(r === 10 ? 0 : r);
-  }
-  return n.join("");
-}
+// Nascimento sorteado (2009–2013): os cadastros de teste não colidem com outros de mesmo nome.
+const nascAleatorio = () => new Date(Date.UTC(2009, 0, 1) + Math.floor(Math.random() * 5 * 365) * 86400_000).toISOString().slice(0, 10);
 const telAleatorio = () => "619" + String(Math.floor(Math.random() * 1e8)).padStart(8, "0");
 
 const post = async (path, body, headers = {}) => {
@@ -68,22 +61,23 @@ if (geoOff) console.log("⚠️  GEOFENCE_DISABLED=true — verificação de loc
 const dentro = { lat: Number(env.CHURCH_LAT), lng: Number(env.CHURCH_LNG), accuracy: 15 };
 const fora = { lat: dentro.lat + 0.05, lng: dentro.lng, accuracy: 15 };
 
-const cpf = cpfAleatorio();
-const cpfsCriados = [cpf];
 const telsVisitantes = [telAleatorio(), telAleatorio()];
-const nasc = "2010-05-20";
+const nasc = nascAleatorio();
+const NOME_DUPLICADO = "Teste Automatico Souza Flag"; // mesmo nome, escrito de outro jeito
+const nomesCriados = ["Teste Automático de Souza Flag", "Teste Automático Pastor", NOME_DUPLICADO];
 const cad = {
-  name: "Teste Automático de Souza Flag", cpf, phone: "", birthDate: nasc,
+  name: nomesCriados[0], phone: "", birthDate: nasc,
   guardianName: "Responsável Teste", guardianPhone: "61988880000",
   guardianEmail: env.E2E_EMAIL || env.SMTP_USER || "responsavel.teste@example.com",
   // Segundo e-mail: mesmo endereço com "+responsavel2" (o Gmail entrega na mesma caixa, sem devolução).
   guardianEmail2: (env.E2E_EMAIL || env.SMTP_USER || "responsavel.teste@example.com").replace("@", "+responsavel2@"),
   consent: true,
 };
-const esperaAviso = async (memberCpf) => {
+const cadastrosDeTeste = (name = cad.name) => sb.from("members").select("id, photo_path, face_descriptor, guardian_email2, possible_duplicate_of").eq("birth_date", nasc).eq("name", name);
+const esperaAviso = async (memberId) => {
   for (let i = 0; i < 20; i++) {
     await new Promise((res) => setTimeout(res, 1000));
-    const { data } = await sb.from("checkins").select("guardian_email_status, members!inner(cpf)").eq("members.cpf", memberCpf).maybeSingle();
+    const { data } = await sb.from("checkins").select("guardian_email_status").eq("member_id", memberId).maybeSingle();
     if (data?.guardian_email_status) return data.guardian_email_status;
   }
   return null;
@@ -101,12 +95,18 @@ try {
   check("segundo e-mail igual ao primeiro é recusado (400)", r.status === 400 && !!r.data.errors?.guardianEmail2, r.data);
   r = await post("/api/cadastro", { ...cad, guardianEmail: "email-invalido" });
   check("cadastro com e-mail do responsável inválido é recusado (400)", r.status === 400 && !!r.data.errors?.guardianEmail, r);
-  r = await post("/api/cadastro", cad);
-  check("responsável cadastra SEM foto e SEM senha do fiscal (200)", r.status === 200, r);
+  // Um cliente antigo ainda pode mandar CPF: o servidor descarta.
+  r = await post("/api/cadastro", { ...cad, cpf: "529.982.247-25" });
+  check("responsável cadastra SEM foto, SEM senha do fiscal e SEM CPF (200)", r.status === 200, r);
   check("cadastro informa o remetente para o aviso de spam", typeof r.data.sender === "string" && r.data.sender.includes("@"), r.data);
+  const primeiraResposta = JSON.stringify(Object.keys(r.data).sort());
   r = await post("/api/cadastro", cad);
-  check("CPF duplicado é recusado (409)", r.status === 409, r);
-  const { data: semFoto } = await sb.from("members").select("photo_path, face_descriptor, guardian_email2").eq("cpf", cpf).single();
+  const { data: soUm } = await cadastrosDeTeste();
+  check("P1 CPF: o mesmo responsável reenviando não duplica o cadastro (1 registro)", r.status === 200 && soUm?.length === 1, soUm?.length);
+  check("P1 CPF: reenvio responde igual a um cadastro novo (não revela quem já está cadastrado)", JSON.stringify(Object.keys(r.data).sort()) === primeiraResposta, r.data);
+  const semFoto = soUm[0];
+  const colunaCpf = await sb.from("members").select("cpf").eq("id", semFoto.id).maybeSingle();
+  check("P1 CPF: nenhum CPF gravado (coluna removida ou vazia)", colunaCpf.error?.code === "42703" || colunaCpf.data?.cpf === null, colunaCpf.error?.code ?? colunaCpf.data);
   check("cadastro fica sem foto até o primeiro check-in", !semFoto.photo_path && !semFoto.face_descriptor, semFoto);
   check("segundo e-mail do responsável é salvo", semFoto.guardian_email2 === cad.guardianEmail2, semFoto.guardian_email2);
 
@@ -139,7 +139,7 @@ try {
   check("registro com duas pessoas é recusado (422 VARIOS_ROSTOS)", f.status === 422 && f.data.code === "VARIOS_ROSTOS", f.data);
   f = await post("/api/checkin/confirmar", { token, photo: foto("pessoa-a-cadastro") });
   check("registro com um rosto completa o cadastro e pede a foto criativa", f.status === 200 && f.data.registered === true && f.data.next === "criativa", f.data);
-  const { data: comFoto } = await sb.from("members").select("id, photo_path, face_descriptor").eq("cpf", cpf).single();
+  const { data: comFoto } = await sb.from("members").select("id, photo_path, face_descriptor").eq("id", semFoto.id).single();
   check("foto de registro vira a foto do cadastro (com descritor)", !!comFoto.photo_path && comFoto.face_descriptor?.length === 128, !!comFoto.photo_path);
   const { count: aindaSem } = await sb.from("checkins").select("id", { count: "exact", head: true }).eq("member_id", comFoto.id);
   check("só a foto de registro ainda NÃO conclui o check-in", aindaSem === 0, aindaSem);
@@ -152,7 +152,7 @@ try {
   const cookieVisita = setVisita.split(";")[0];
   check("check-in concluído grava sessão da visita (httpOnly, SameSite=strict, só /api/checkin)",
     cookieVisita.startsWith("o2_visita=") && /httponly/i.test(setVisita) && /samesite=strict/i.test(setVisita) && /path=\/api\/checkin/i.test(setVisita), setVisita);
-  const aviso = await esperaAviso(cpf);
+  const aviso = await esperaAviso(semFoto.id);
   const esperado = env.E2E_EMAIL ? ["enviado"] : ["enviado", "falhou", "sem_config"];
   check(`aviso ao responsável registrado (${aviso})`, esperado.includes(aviso), aviso);
 
@@ -180,7 +180,7 @@ try {
 
   // ---------- Check-ins seguintes: foto criativa ----------
   // Simula "outro domingo": o check-in de hoje passa para a semana passada (o cadastro já tem a foto de referência).
-  const { data: m } = await sb.from("members").select("id").eq("cpf", cpf).single();
+  const m = semFoto;
   const semanaPassada = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10);
   await sb.from("checkins").update({ service_date: semanaPassada }).eq("member_id", m.id);
   r = await post("/api/checkin/identificar", { ...dentro, name: cad.name, birthDate: nasc });
@@ -330,10 +330,9 @@ try {
   check("ranking ordenado (até 10) e com o adolescente de teste quando há vaga",
     ordenado && rk.length <= 10 && (!temVaga || rk.some((r) => r.name === cad.name)), rk.map((r) => [r.name, r.presencas]));
 
-  const cpf2 = cpfAleatorio();
-  cpfsCriados.push(cpf2);
-  const r2 = await post("/api/cadastro", { ...cad, cpf: cpf2, name: "Teste Automático Pastor" }, { cookie: pastorCookie });
-  check("líder cadastra pelo mesmo formulário (200)", r2.status === 200, r2.data);
+  const r2 = await post("/api/cadastro", { ...cad, name: nomesCriados[1] }, { cookie: pastorCookie });
+  const { data: doPastor } = await cadastrosDeTeste(nomesCriados[1]);
+  check("líder cadastra pelo mesmo formulário (200), sem marcar nome diferente como duplicado", r2.status === 200 && doPastor?.[0]?.possible_duplicate_of === null, r2.data);
 
   const { data: pres } = await sb.from("presencas").select("nome, tipo, tipo_foto").in("nome", [cad.name, "Visitante Teste Sem Foto"]);
   check("view presencas mostra adolescente (criativa) e visitante", pres?.some((p) => p.tipo === "cadastrado" && p.tipo_foto === "criativa") && pres?.some((p) => p.tipo === "visitante"), pres);
@@ -345,6 +344,42 @@ try {
   const { data: aindaLa } = await sb.from("checkins").select("id").eq("id", meu?.id ?? "").maybeSingle();
   check("P1: líder remove presença registrada por engano", r.status === 200 && !aindaLa, r.data);
 
+  // ---------- P1 CPF: possíveis duplicados para revisão de um líder ----------
+  // Outro responsável cadastra o mesmo adolescente com o nome escrito de outro jeito.
+  r = await post("/api/cadastro", { ...cad, name: NOME_DUPLICADO, guardianEmail: cad.guardianEmail.replace("@", "+outro@"), guardianEmail2: "" });
+  const { data: [dup] = [] } = await cadastrosDeTeste(NOME_DUPLICADO);
+  check("P1 CPF: cadastro parecido é aceito e marcado como possível duplicado do original", r.status === 200 && dup?.possible_duplicate_of === m.id, dup);
+  r = await post("/api/checkin/identificar", { ...dentro, name: cad.name, birthDate: nasc });
+  check("P1 CPF: com dois cadastros iguais, o check-in pede o nome completo ou um líder (409)", r.status === 409 && r.data.code === "AMBIGUO", r.data);
+  r = await req("GET", "/api/lider/duplicados");
+  check("P1 CPF: lista de duplicados exige líder (401)", r.status === 401, r.status);
+  r = await req("GET", "/api/lider/duplicados", null, ckA);
+  const par = r.data.pairs?.find((p) => p.duplicate.id === dup?.id);
+  check("P1 CPF: líder vê o par (novo × existente, presenças, mesmo contato do responsável)",
+    r.status === 200 && par?.original.id === m.id && par.sameGuardian === true && par.original.checkins >= 1, par);
+  check("P1 CPF: a revisão não expõe e-mail, telefone nem CPF", !/@|61988880000|cpf/i.test(JSON.stringify(r.data.pairs)), r.data.pairs);
+  r = await req("PATCH", "/api/lider/duplicados", { id: dup?.id, action: "pessoas_diferentes" }, ckA);
+  const { data: [dupLimpo] = [] } = await cadastrosDeTeste(NOME_DUPLICADO);
+  check("P1 CPF: 'são pessoas diferentes' tira a marcação", r.status === 200 && dupLimpo?.possible_duplicate_of === null, r.data);
+
+  // Mesclar: o duplicado tem uma presença num culto que o original não tem e outra num culto que ele tem.
+  await sb.from("members").update({ possible_duplicate_of: m.id }).eq("id", dup.id);
+  const duasSemanas = new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10);
+  const { count: antes } = await sb.from("checkins").select("id", { count: "exact", head: true }).eq("member_id", m.id);
+  await sb.from("checkins").insert([
+    { member_id: dup.id, service_date: duasSemanas, photo_kind: "criativa" },
+    { member_id: dup.id, service_date: semanaPassada, photo_kind: "criativa" },
+  ]);
+  r = await req("PATCH", "/api/lider/duplicados", { id: dup.id, action: "mesclar" }, ckA);
+  const { data: depoisDup } = await sb.from("members").select("id").eq("id", dup.id).maybeSingle();
+  const { data: original } = await sb.from("members").select("id, photo_path, face_descriptor").eq("id", m.id).single();
+  const { data: hist } = await sb.from("checkins").select("service_date").eq("member_id", m.id);
+  check("P1 CPF: mesclar apaga o duplicado e mantém o id e o histórico do original (+1 culto, sem repetir dia)",
+    r.status === 200 && !depoisDup && original.id === m.id && hist.length === antes + 1 && hist.some((h) => h.service_date === duasSemanas) &&
+    new Set(hist.map((h) => h.service_date)).size === hist.length && original.face_descriptor?.length === 128, { status: r.status, hist });
+  r = await req("PATCH", "/api/lider/duplicados", { id: m.id, action: "mesclar" }, ckA);
+  check("P1 CPF: cadastro sem marcação não é mesclado (404)", r.status === 404, r.status);
+
   const { data: trilha } = await sb.from("admin_audit").select("id, actor_id, action, target_id, outcome, details").gte("at", t0).order("id");
   const tem = (action, outcome, f = () => true) => (trilha ?? []).some((a) => a.action === action && a.outcome === outcome && f(a));
   check("P1: trilha registra ativação, autenticador, login, recuperação, criação e desativação",
@@ -355,6 +390,9 @@ try {
     [...new Set((trilha ?? []).map((a) => `${a.action}:${a.outcome}`))]);
   check("P1: correção de presença registrada com quem, qual e por quê",
     tem("presenca_removida", "ok", (a) => a.actor_id === lA.id && a.target_id === meu?.id && /engano/.test(a.details?.motivo ?? "")));
+  check("P1 CPF: revisão de duplicados fica na trilha (pessoas diferentes e mescla)",
+    tem("duplicado_descartado", "ok", (a) => a.actor_id === lA.id && a.target_id === dup.id) &&
+    tem("cadastro_mesclado", "ok", (a) => a.actor_id === lA.id && a.target_id === m.id && a.details?.cadastro_apagado === dup.id));
   const textoTrilha = JSON.stringify(trilha);
   const segredos = [SENHA_A, codigoCadastro, proximo, ...codigosRecA, ativacaoA, setupA.data.secret?.replace(/ /g, "")].filter(Boolean);
   check("P1: trilha não contém senha, códigos nem chave do autenticador", !segredos.some((x) => textoTrilha.includes(x)));
@@ -370,9 +408,8 @@ try {
   falhas++;
 } finally {
   // Limpeza: adolescentes de teste (check-ins em cascata), visitantes de teste e todas as fotos.
-  for (const doc of cpfsCriados) {
-    const { data: m } = await sb.from("members").select("id, photo_path").eq("cpf", doc).maybeSingle();
-    if (!m) continue;
+  const { data: criados } = await sb.from("members").select("id, photo_path").eq("birth_date", nasc).in("name", nomesCriados);
+  for (const m of criados ?? []) {
     const { data: cks } = await sb.from("checkins").select("photo_path").eq("member_id", m.id);
     await sb.storage.from("fotos").remove([m.photo_path, ...(cks ?? []).map((c) => c.photo_path)].filter(Boolean));
     await sb.from("members").delete().eq("id", m.id);

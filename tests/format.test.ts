@@ -1,22 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { brDateToIso, isValidEmail, maskDate, nameMatchScore, nameTokens, distanceMeters, firstName, isValidBirthDate, isValidCpf, isValidPhone, maskCpf, maskPhone } from "@/lib/format";
-
-describe("CPF", () => {
-  it("aceita CPFs válidos, com ou sem máscara", () => {
-    expect(isValidCpf("529.982.247-25")).toBe(true);
-    expect(isValidCpf("52998224725")).toBe(true);
-  });
-  it("recusa dígito verificador errado, sequências repetidas e tamanho errado", () => {
-    expect(isValidCpf("529.982.247-24")).toBe(false);
-    expect(isValidCpf("111.111.111-11")).toBe(false);
-    expect(isValidCpf("123")).toBe(false);
-  });
-  it("aplica a máscara progressivamente", () => {
-    expect(maskCpf("529")).toBe("529");
-    expect(maskCpf("5299822")).toBe("529.982.2");
-    expect(maskCpf("52998224725999")).toBe("529.982.247-25");
-  });
-});
+import { brDateToIso, isValidEmail, maskDate, nameMatchScore, nameTokens, distanceMeters, firstName, isValidBirthDate, isValidPhone, maskPhone } from "@/lib/format";
 
 describe("Telefone", () => {
   it("formata celular e fixo", () => {

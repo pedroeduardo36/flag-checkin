@@ -8,7 +8,7 @@ App web (abre no navegador do celular, sem instalar nada) para o check-in dos ad
 
 ```
 Antes do culto ──► /cadastro (o RESPONSÁVEL preenche)
-   Dados do adolescente (nome, nascimento, CPF, celular opcional) +
+   Dados do adolescente (nome, nascimento, celular opcional; sem CPF) +
    dados do responsável (nome, telefone, e-mail e um 2º e-mail opcional) + autorização LGPD. Sem foto, sem senha.
 
 QR code / tag NFC ──► /checkin
@@ -169,7 +169,11 @@ próprio painel.
 - Nome inexistente e data errada dão a **mesma** mensagem, para não revelar quem está cadastrado.
 - O token entre a identificação e a foto é assinado (HMAC) e vale 4 h (a foto criativa é dentro do culto); um check-in
   por pessoa por dia, e um por telefone de visitante por dia.
-- O cadastro é aberto (sem senha), com CPF único, validação no servidor e um campo escondido contra robôs.
+- O cadastro é aberto (sem senha), com validação no servidor e um campo escondido contra robôs. Não pede CPF.
+- Cadastro parecido com um existente (mesmo nascimento e nome compatível) entra marcado como **possível duplicado**.
+  Na aba **Líderes → Possíveis cadastros duplicados**, um líder escolhe "mesclar" (as presenças vão para o cadastro
+  mais antigo e o novo é apagado) ou "são pessoas diferentes". Enquanto houver dois cadastros com o mesmo nome, o
+  check-in pede o nome completo ou um líder. As duas decisões ficam no registro de ações.
 - Cadastro exige marcar a autorização do responsável (dados de menores — LGPD art. 14); a data fica gravada.
 - **Limites conhecidos:** GPS de celular pode ser falsificado com apps de "fake GPS" — por isso existe a foto com
   reconhecimento facial, que os líderes também podem conferir no feed do pastor. Não há limite de tentativas por IP; se precisar, adicione
@@ -187,12 +191,13 @@ where bucket_id = 'fotos' and name like 'checkins/%' and created_at < now() - in
 app/checkin/page.tsx              fluxo de check-in (local → nome e nascimento ou visitante → foto → sucesso)
 app/cadastro/page.tsx             cadastro pelo responsável (sem foto, sem senha)
 app/api/checkin/local             confere a localização
-app/api/checkin/identificar       confere CPF + nascimento, emite token
+app/api/checkin/identificar       confere nome + nascimento, emite token
 app/api/checkin/confirmar         foto de registro (1º) ou criativa → grava o check-in
 app/api/cadastro                  grava novo adolescente
 components/Brand.tsx              cabeçalho Flag (destaque) + Juventude O2
 components/Camera.tsx             câmera frontal ao vivo com fallback
-lib/format.ts                     CPF, telefone, datas, distância (Haversine)
+lib/format.ts                     telefone, datas, nomes, distância (Haversine)
+lib/duplicates.ts                 possível cadastro duplicado (nome + nascimento + e-mail do responsável)
 lib/server/*                      Supabase, variáveis, token e validações (só servidor)
 supabase/migrations/              tabelas, view de presença e bucket
 app/api/health                    diagnóstico da conexão com o Supabase

@@ -24,11 +24,6 @@ if (args.includes("--limpar")) {
 }
 
 const foto = (n) => "data:image/jpeg;base64," + readFileSync(`tests/fixtures/${n}.jpg`).toString("base64");
-const cpf = () => {
-  const n = Array.from({ length: 9 }, () => Math.floor(Math.random() * 10));
-  for (const len of [9, 10]) { const s = n.reduce((a, d, i) => a + d * (len + 1 - i), 0); const r = (s * 10) % 11; n.push(r === 10 ? 0 : r); }
-  return n.join("");
-};
 const post = async (path, body, cookie) => {
   const r = await fetch(BASE + path, { method: "POST", headers: { "Content-Type": "application/json", ...(cookie ? { cookie } : {}) }, body: JSON.stringify(body) });
   return { status: r.status, data: await r.json().catch(() => ({})), setCookie: r.headers.get("set-cookie") };
@@ -41,9 +36,8 @@ const pessoas = [
   { name: `${PREFIXO} Bruno Lima`, cadastro: "pessoa-b", selfie: "pessoa-b" },
 ];
 for (const [i, p] of pessoas.entries()) {
-  const doc = cpf();
   const c = await post("/api/cadastro", {
-    name: p.name, cpf: doc, phone: "61999990000", birthDate: "2010-05-20", guardianName: "Responsável Simulação",
+    name: p.name, phone: "61999990000", birthDate: "2010-05-20", guardianName: "Responsável Simulação",
     guardianPhone: "61988880000", guardianEmail: env.SMTP_USER || "responsavel@example.com", consent: true,
   });
   console.log(`cadastro (sem foto): ${p.name} → ${c.status}`);
