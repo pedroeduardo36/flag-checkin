@@ -8,7 +8,6 @@ const dados = {
   guardianName: "Maria Souza",
   teenName: "Ana <b>Beatriz</b> Souza",
   checkedInAt: "2026-10-18T22:47:00Z", // 19:47 em Brasília
-  photo: Buffer.from("jpeg-falso"),
 };
 
 beforeEach(() => {
@@ -20,7 +19,7 @@ afterEach(() => vi.restoreAllMocks());
 const load = () => import("@/lib/server/email");
 
 describe("modelo do e-mail de check-in", () => {
-  it("traz nome, horário de Brasília e a foto embutida (cid)", async () => {
+  it("traz nome e horário de Brasília, SÓ TEXTO: nenhuma foto sai por e-mail", async () => {
     const { buildCheckinEmail } = await load();
     const e = buildCheckinEmail(dados);
     expect(e.subject).toContain("19:47");
@@ -28,8 +27,9 @@ describe("modelo do e-mail de check-in", () => {
     expect(e.text).toContain("Olá, Maria!");
     expect(e.text).toContain("Horário do check-in: 19:47");
     expect(e.html).toContain("19:47");
-    expect(e.html).toMatch(/<img src="cid:selfie-checkin@flag-o2"/);
-    expect(e.attachments[0]).toMatchObject({ cid: "selfie-checkin@flag-o2", contentType: "image/jpeg", content: dados.photo });
+    expect(e.html).not.toMatch(/<img|cid:/);
+    expect(e).not.toHaveProperty("attachments");
+    expect(e.text).toContain("exclusão dos dados");
   });
 
   it("escapa HTML vindo do cadastro", async () => {
@@ -82,22 +82,33 @@ describe("envio", () => {
   });
 });
 
-describe("e-mail de confirmação do cadastro", () => {
-  it("assunto com o primeiro nome, passo a passo do check-in e aviso de spam", async () => {
-    const { buildCadastroEmail } = await load();
-    const e = buildCadastroEmail({ guardianName: "Maria Souza", teenName: "Ana <i>Beatriz</i> Souza" });
-    expect(e.subject).toBe("✅ Cadastro de Ana na O2 · Flag confirmado");
-    expect(e.text).toContain("nome completo e data de nascimento");
-    expect(e.html).toContain("Não é spam");
+describe("e-mail de confirmação do cadastro (verificação do responsável)", () => {
+  const base = { guardianName: "Maria Souza", teenName: "Ana <i>Beatriz</i> Souza", link: "https://app.exemplo/confirmar#t=abc", validDays: 7 };
+
+  it("e-mail principal: pede para ler e confirmar, explica o prazo e escapa HTML", async () => {
+    const { buildVerificationEmail } = await load();
+    const e = buildVerificationEmail({ ...base, primary: true });
+    expect(e.subject).toBe("Confirme o cadastro de Ana na O2 · Flag");
+    expect(e.text).toContain("reconhecimento facial");
+    expect(e.text).toContain("https://app.exemplo/confirmar#t=abc");
+    expect(e.text).toContain("apagado em 7 dias");
+    expect(e.html).toContain('href="https://app.exemplo/confirmar#t=abc"');
     expect(e.html).not.toContain("<i>Beatriz</i>");
   });
 
-  it("envia para os dois e-mails do cadastro", async () => {
+  it("segundo e-mail: só confirma que quer os avisos", async () => {
+    const { buildVerificationEmail } = await load();
+    const e = buildVerificationEmail({ ...base, primary: false });
+    expect(e.subject).toContain("Confirme este e-mail");
+    expect(e.text).toContain("indicou este e-mail");
+  });
+
+  it("envia para um endereço por vez (cada um tem o próprio link)", async () => {
     Object.assign(process.env, SMTP);
     sendMail.mockResolvedValue({ messageId: "1" });
-    const { sendCadastroEmail } = await load();
-    expect(await sendCadastroEmail(["mae@exemplo.com", "pai@exemplo.com"], { guardianName: "Maria", teenName: "Ana Souza" })).toBe("enviado");
-    expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: "mae@exemplo.com, pai@exemplo.com" }));
+    const { sendVerificationEmail } = await load();
+    expect(await sendVerificationEmail("mae@exemplo.com", { ...base, primary: true })).toBe("enviado");
+    expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: "mae@exemplo.com" }));
   });
 
   it("extrai o endereço do remetente de EMAIL_FROM", async () => {

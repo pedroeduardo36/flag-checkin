@@ -5,6 +5,7 @@ import { PHOTO_BUCKET } from "@/lib/server/env";
 import { checkGeofence, createCheckinToken, parseCoords, serviceDate } from "@/lib/server/security";
 import { hasVisitSession } from "@/lib/server/visit";
 import { audit } from "@/lib/server/audit";
+import { checkinAllowed } from "@/lib/server/guardian";
 import { firstName, isValidBirthDate, nameMatchScore, nameTokens } from "@/lib/format";
 
 /** A identificação vale até a foto criativa, que é tirada já dentro do culto. */
@@ -18,7 +19,7 @@ export const POST = withErrors(async (req: Request) => {
   const birthDate = String(body?.birthDate ?? "");
 
   const geo = checkGeofence(coords);
-  const log = (outcome: string, memberId?: string) => audit(req, { event: "identificar", outcome, memberId, lat: coords?.lat, lng: coords?.lng });
+  const log = (outcome: string, memberId?: string) => audit(req, { event: "identificar", outcome, memberId, distance: geo.distance });
   if (!coords && !geo.disabled)
     return NextResponse.json({ error: "Localização ausente. Volte e ative a localização." }, { status: 400 });
   if (nameTokens(name).length < 2 || !isValidBirthDate(birthDate))
@@ -31,7 +32,7 @@ export const POST = withErrors(async (req: Request) => {
   // Todos os nascidos nesse dia; o nome decide (tolera acento, "de/da", nome do meio omitido e um erro de digitação).
   const { data: sameDay, error } = await db()
     .from("members")
-    .select("id, name, face_descriptor, photo_path")
+    .select("id, name, face_descriptor, photo_path, guardian_email_verified_at, biometric_consent_at, consent_version, verify_by")
     .eq("birth_date", birthDate);
   if (error) throw error;
 
@@ -58,6 +59,18 @@ export const POST = withErrors(async (req: Request) => {
     );
   }
   const member = ranked[0].m;
+
+  // Sem consentimento confirmado pelo dono do e-mail do responsável, nada de foto nem de rosto.
+  if (!checkinAllowed(member)) {
+    log("CADASTRO_PENDENTE", member.id);
+    return NextResponse.json(
+      {
+        error: "Seu cadastro ainda não foi confirmado pelo seu responsável. Peça para ele(a) abrir o e-mail de confirmação da O2 · Flag, ou procure um líder.",
+        code: "CADASTRO_PENDENTE",
+      },
+      { status: 403 },
+    );
+  }
 
   // Foto e horário de um check-in são dados privados de um menor. Nome + nascimento (+ coordenadas
   // informadas pelo próprio celular) NÃO autorizam lê-los. Só devolvemos esses detalhes ao aparelho
@@ -87,7 +100,7 @@ export const POST = withErrors(async (req: Request) => {
 
   log("token", member.id);
   const token = createCheckinToken(
-    { mid: member.id, lat: coords?.lat ?? null, lng: coords?.lng ?? null, acc: coords?.accuracy ?? null, dist: geo.distance },
+    { mid: member.id, acc: coords?.accuracy ?? null, dist: geo.distance },
     TOKEN_TTL_SECONDS,
   );
   return NextResponse.json({

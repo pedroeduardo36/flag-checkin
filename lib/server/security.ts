@@ -28,8 +28,8 @@ export function checkGeofence(c: Coords | null) {
   return { inside: distance <= env.churchRadius, distance, radius: env.churchRadius, disabled: false };
 }
 
-// Token curto (5 min) que liga a etapa "CPF + nascimento" à etapa "foto".
-type TokenPayload = { mid: string; lat: number | null; lng: number | null; acc: number | null; dist: number | null; exp: number };
+// Token que liga a etapa "nome + nascimento" à etapa "foto". Leva a distância até a igreja, não as coordenadas.
+type TokenPayload = { mid: string; acc: number | null; dist: number | null; exp: number };
 
 const sign = (data: string) => createHmac("sha256", env.checkinSecret).update(data).digest("base64url");
 

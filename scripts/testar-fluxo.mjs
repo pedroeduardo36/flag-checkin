@@ -64,7 +64,7 @@ const fora = { lat: dentro.lat + 0.05, lng: dentro.lng, accuracy: 15 };
 const telsVisitantes = [telAleatorio(), telAleatorio()];
 const nasc = nascAleatorio();
 const NOME_DUPLICADO = "Teste Automatico Souza Flag"; // mesmo nome, escrito de outro jeito
-const nomesCriados = ["Teste Automático de Souza Flag", "Teste Automático Pastor", NOME_DUPLICADO];
+const nomesCriados = ["Teste Automático de Souza Flag", "Teste Automático Pastor", NOME_DUPLICADO, "Teste Automático Recusa"];
 const cad = {
   name: nomesCriados[0], phone: "", birthDate: nasc,
   guardianName: "Responsável Teste", guardianPhone: "61988880000",
@@ -72,7 +72,18 @@ const cad = {
   // Segundo e-mail: mesmo endereço com "+responsavel2" (o Gmail entrega na mesma caixa, sem devolução).
   guardianEmail2: (env.E2E_EMAIL || env.SMTP_USER || "responsavel.teste@example.com").replace("@", "+responsavel2@"),
   consent: true,
+  consentBiometric: true,
 };
+// Link de confirmação conhecido pelo teste (o de verdade só existe no e-mail): mesmo hash que o servidor usa.
+const criaLink = async (memberId, email) => {
+  const token = "e2e-" + createHash("sha256").update(`${memberId}:${email}:${Math.random()}`).digest("base64url");
+  await sb.from("guardian_verifications").insert({
+    member_id: memberId, email, token_hash: createHash("sha256").update(`verificacao:${token}`).digest("hex"),
+    expires_at: new Date(Date.now() + 3600e3).toISOString(),
+  });
+  return token;
+};
+const verificar = (token, action, extra = {}) => post("/api/cadastro/verificar", { token, action, ...extra });
 const cadastrosDeTeste = (name = cad.name) => sb.from("members").select("id, photo_path, face_descriptor, guardian_email2, possible_duplicate_of").eq("birth_date", nasc).eq("name", name);
 const esperaAviso = async (memberId) => {
   for (let i = 0; i < 20; i++) {
@@ -95,6 +106,8 @@ try {
   check("segundo e-mail igual ao primeiro é recusado (400)", r.status === 400 && !!r.data.errors?.guardianEmail2, r.data);
   r = await post("/api/cadastro", { ...cad, guardianEmail: "email-invalido" });
   check("cadastro com e-mail do responsável inválido é recusado (400)", r.status === 400 && !!r.data.errors?.guardianEmail, r);
+  r = await post("/api/cadastro", { ...cad, consentBiometric: false });
+  check("P1 privacidade: cadastro sem a autorização específica do reconhecimento facial é recusado (400)", r.status === 400 && !!r.data.errors?.consentBiometric, r.data);
   // Um cliente antigo ainda pode mandar CPF: o servidor descarta.
   r = await post("/api/cadastro", { ...cad, cpf: "529.982.247-25" });
   check("responsável cadastra SEM foto, SEM senha do fiscal e SEM CPF (200)", r.status === 200, r);
@@ -109,6 +122,34 @@ try {
   check("P1 CPF: nenhum CPF gravado (coluna removida ou vazia)", colunaCpf.error?.code === "42703" || colunaCpf.data?.cpf === null, colunaCpf.error?.code ?? colunaCpf.data);
   check("cadastro fica sem foto até o primeiro check-in", !semFoto.photo_path && !semFoto.face_descriptor, semFoto);
   check("segundo e-mail do responsável é salvo", semFoto.guardian_email2 === cad.guardianEmail2, semFoto.guardian_email2);
+
+  // ---------- P1 privacidade: o dono do e-mail confirma e dá o consentimento ----------
+  let links = [];
+  for (let i = 0; i < 15 && links.length < 2; i++) {
+    await new Promise((res) => setTimeout(res, 1000));
+    ({ data: links = [] } = await sb.from("guardian_verifications").select("email, token_hash, expires_at").eq("member_id", semFoto.id));
+  }
+  check("P1 privacidade: um link de confirmação para cada e-mail, de 7 dias, e só o hash do token no banco",
+    new Set(links.map((l) => l.email)).size === 2 && links.every((l) => /^[0-9a-f]{64}$/.test(l.token_hash) && Date.parse(l.expires_at) - Date.now() > 6.9 * 86400e3),
+    links.map((l) => l.email));
+  r = await post("/api/checkin/identificar", { ...dentro, name: cad.name, birthDate: nasc });
+  check("P1 privacidade: sem a confirmação do responsável não há check-in (403 CADASTRO_PENDENTE)", r.status === 403 && r.data.code === "CADASTRO_PENDENTE" && !r.data.token, r.data);
+  const link1 = await criaLink(semFoto.id, cad.guardianEmail);
+  r = await verificar("e2e-link-que-nao-existe-" + stamp, "ver");
+  check("P1 privacidade: link inventado não vale (404)", r.status === 404, r.status);
+  r = await verificar(link1, "ver");
+  check("P1 privacidade: o link mostra só o primeiro nome do adolescente", r.status === 200 && r.data.primary === true && r.data.teenFirstName === "Teste" && !JSON.stringify(r.data).includes("Souza"), r.data);
+  r = await verificar(link1, "confirmar", { consent: true });
+  check("P1 privacidade: confirmar exige a autorização da biometria (400) e devolve o link", r.status === 400 && r.data.code === "SEM_CONSENTIMENTO", r.data);
+  r = await verificar(link1, "confirmar", { consent: true, consentBiometric: true });
+  check("P1 privacidade: responsável confirma pelo link (200)", r.status === 200 && r.data.ok, r.data);
+  r = await verificar(link1, "confirmar", { consent: true, consentBiometric: true });
+  check("P1 privacidade: o link vale uma vez só", r.status === 404, r.status);
+  const link2 = await criaLink(semFoto.id, cad.guardianEmail2);
+  r = await verificar(link2, "confirmar");
+  const { data: consent } = await sb.from("members").select("guardian_email_verified_at, guardian_email2_verified_at, biometric_consent_at, consent_version, verify_by").eq("id", semFoto.id).single();
+  check("P1 privacidade: consentimento gravado (e-mails confirmados, biometria, versão do texto)",
+    r.status === 200 && !!consent.guardian_email_verified_at && !!consent.guardian_email2_verified_at && !!consent.biometric_consent_at && !!consent.consent_version && consent.verify_by === null, consent);
 
   // ---------- Localização ----------
   r = await post("/api/checkin/local", fora);
@@ -152,6 +193,11 @@ try {
   const cookieVisita = setVisita.split(";")[0];
   check("check-in concluído grava sessão da visita (httpOnly, SameSite=strict, só /api/checkin)",
     cookieVisita.startsWith("o2_visita=") && /httponly/i.test(setVisita) && /samesite=strict/i.test(setVisita) && /path=\/api\/checkin/i.test(setVisita), setVisita);
+  const { data: ckLocal } = await sb.from("checkins").select("latitude, longitude, distance_m").eq("member_id", semFoto.id).single();
+  const { data: audLocal } = await sb.from("audit_events").select("lat, lng, distance_m").eq("member_id", semFoto.id).gte("at", t0);
+  check("P1 privacidade: check-in e auditoria guardam só a distância até a igreja, sem coordenadas",
+    ckLocal.latitude === null && ckLocal.longitude === null && typeof ckLocal.distance_m === "number" &&
+    audLocal.length > 0 && audLocal.every((a) => a.lat === null && a.lng === null) && audLocal.some((a) => typeof a.distance_m === "number"), { ckLocal, audLocal: audLocal.slice(0, 2) });
   const aviso = await esperaAviso(semFoto.id);
   const esperado = env.E2E_EMAIL ? ["enviado"] : ["enviado", "falhou", "sem_config"];
   check(`aviso ao responsável registrado (${aviso})`, esperado.includes(aviso), aviso);
@@ -202,6 +248,9 @@ try {
   check("visitante repetido no mesmo dia → já fez check-in", r.status === 200 && r.data.alreadyCheckedIn === true, r.data);
   r = await post("/api/checkin/visitante", { ...dentro, name: "Visitante Teste Com Foto", phone: telsVisitantes[1], photo: foto("pessoa-b") });
   check("visitante com foto criativa opcional (200)", r.status === 200 && r.data.ok, r.data);
+  const { data: fotoVis } = await sb.from("checkins").select("photo_path, latitude").eq("visitor_phone", telsVisitantes[1]).single();
+  check("P1 privacidade: foto de visitante sem o telefone no nome do arquivo e sem coordenadas",
+    !!fotoVis.photo_path && !fotoVis.photo_path.includes(telsVisitantes[1]) && fotoVis.latitude === null, fotoVis.photo_path);
   if (!geoOff) {
     r = await post("/api/checkin/visitante", { ...fora, name: "Visitante Longe", phone: telAleatorio() });
     check("visitante fora do local (403)", r.status === 403, r.data);
@@ -380,6 +429,54 @@ try {
   r = await req("PATCH", "/api/lider/duplicados", { id: m.id, action: "mesclar" }, ckA);
   check("P1 CPF: cadastro sem marcação não é mesclado (404)", r.status === 404, r.status);
 
+  // ---------- P1 privacidade: pedidos das famílias atendidos pelos líderes ----------
+  r = await req("GET", `/api/lider/cadastros?q=${encodeURIComponent(cad.name)}`);
+  check("P1 privacidade: busca de cadastros exige líder (401)", r.status === 401, r.status);
+  r = await req("GET", `/api/lider/cadastros?q=${encodeURIComponent("teste automatico flag")}`, null, ckA);
+  const achado = r.data.items?.find((i) => i.id === m.id);
+  check("P1 privacidade: líder encontra o cadastro (sem acento) e vê que está confirmado", r.status === 200 && achado?.confirmed === true && achado.canCheckin, achado);
+  r = await req("GET", `/api/lider/cadastros?exportar=${m.id}`, null, ckA);
+  check("P1 privacidade: exportação traz cadastro e presenças, sem os números do rosto",
+    r.status === 200 && r.data.cadastro?.id === m.id && r.data.cadastro.guardian_email === cad.guardianEmail && r.data.presencas?.length >= 1 &&
+    r.data.biometria?.dadosDoRosto === true && !("face_descriptor" in r.data.cadastro) && !JSON.stringify(r.data).includes("fotos/"), Object.keys(r.data));
+  r = await req("PATCH", "/api/lider/cadastros", { id: m.id, action: "revogar_biometria" }, ckA);
+  const { data: semBio } = await sb.from("members").select("photo_path, face_descriptor, biometric_consent_at, guardian_email_verified_at").eq("id", m.id).single();
+  const idBio = await post("/api/checkin/identificar", { ...dentro, name: cad.name, birthDate: nasc });
+  check("P1 privacidade: retirar a biometria apaga foto de registro e dados do rosto e bloqueia o check-in",
+    r.status === 200 && !semBio.photo_path && !semBio.face_descriptor && !semBio.biometric_consent_at && idBio.status === 403 && idBio.data.code === "CADASTRO_PENDENTE", { semBio, id: idBio.status });
+  r = await req("PATCH", "/api/lider/cadastros", { id: m.id, action: "reenviar" }, ckA);
+  check("P1 privacidade: líder reenvia o link de confirmação", r.status === 200 && r.data.sent >= 1, r.data);
+  const { data: [doPastor2] = [] } = await cadastrosDeTeste(nomesCriados[1]);
+  r = await req("DELETE", "/api/lider/cadastros", { id: doPastor2?.id, reason: "" }, ckA);
+  check("P1 privacidade: apagar cadastro exige motivo (400)", r.status === 400, r.data);
+  r = await req("DELETE", "/api/lider/cadastros", { id: doPastor2?.id, reason: "teste automático: pedido de exclusão" }, ckA);
+  const { data: apagado } = await sb.from("members").select("id").eq("id", doPastor2?.id ?? "").maybeSingle();
+  check("P1 privacidade: líder apaga o cadastro a pedido da família", r.status === 200 && !apagado, r.data);
+
+  // O responsável recusa pelo link: o cadastro some na hora.
+  await post("/api/cadastro", { ...cad, name: nomesCriados[3], guardianEmail2: "" });
+  const { data: [recusa] = [] } = await cadastrosDeTeste(nomesCriados[3]);
+  r = await verificar(await criaLink(recusa.id, cad.guardianEmail), "recusar");
+  const { data: recusado } = await sb.from("members").select("id").eq("id", recusa.id).maybeSingle();
+  check("P1 privacidade: 'não autorizo' no link apaga o cadastro", r.status === 200 && r.data.removed === "cadastro" && !recusado, r.data);
+
+  // Retenção: a simulação conta e não muda nada; só o servidor chama; o cron exige o segredo.
+  const { count: antesExp } = await sb.from("members").select("id", { count: "exact", head: true });
+  const sim = await sb.rpc("expurgar_dados", { p_simular: true });
+  const { count: depoisExp } = await sb.from("members").select("id", { count: "exact", head: true });
+  check("P1 privacidade: simulação da retenção conta o que sairia e não apaga nada",
+    !sim.error && sim.data?.simulacao === true && typeof sim.data.fotos_checkin === "number" && antesExp === depoisExp, sim.error?.message ?? sim.data);
+  if (env.SUPABASE_ANON_KEY) {
+    const anon = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+    const a = await anon.rpc("expurgar_dados", { p_simular: true });
+    check("P1 privacidade: a chave pública não executa a retenção", !!a.error, a.error?.message);
+  }
+  r = await req("GET", "/api/cron/retencao");
+  check("P1 privacidade: rota do cron sem o segredo é recusada (401)", r.status === 401, r.status);
+  const pag = await fetch(`${BASE}/privacidade`).then(async (x) => ({ status: x.status, html: await x.text() }));
+  check("P1 privacidade: página /privacidade explica biometria, fotos e prazos",
+    pag.status === 200 && /reconhecimento facial/i.test(pag.html) && /128 números/.test(pag.html) && /só texto/i.test(pag.html) && /30 dias/.test(pag.html), pag.status);
+
   const { data: trilha } = await sb.from("admin_audit").select("id, actor_id, action, target_id, outcome, details").gte("at", t0).order("id");
   const tem = (action, outcome, f = () => true) => (trilha ?? []).some((a) => a.action === action && a.outcome === outcome && f(a));
   check("P1: trilha registra ativação, autenticador, login, recuperação, criação e desativação",
@@ -393,6 +490,10 @@ try {
   check("P1 CPF: revisão de duplicados fica na trilha (pessoas diferentes e mescla)",
     tem("duplicado_descartado", "ok", (a) => a.actor_id === lA.id && a.target_id === dup.id) &&
     tem("cadastro_mesclado", "ok", (a) => a.actor_id === lA.id && a.target_id === m.id && a.details?.cadastro_apagado === dup.id));
+  check("P1 privacidade: consentimento, exportação, biometria retirada, reenvio e exclusões ficam na trilha",
+    tem("consentimento_registrado", "ok", (a) => a.target_id === semFoto.id && !a.actor_id) && tem("dados_exportados", "ok", (a) => a.actor_id === lA.id && a.target_id === m.id) &&
+    tem("biometria_revogada", "ok", (a) => a.target_id === m.id) && tem("confirmacao_reenviada", "ok", (a) => a.target_id === m.id) &&
+    tem("cadastro_apagado", "ok", (a) => a.actor_id === lA.id && a.target_id === doPastor2?.id) && tem("cadastro_apagado", "ok", (a) => a.target_id === recusa.id && a.details?.origem === "responsavel_recusou"));
   const textoTrilha = JSON.stringify(trilha);
   const segredos = [SENHA_A, codigoCadastro, proximo, ...codigosRecA, ativacaoA, setupA.data.secret?.replace(/ /g, "")].filter(Boolean);
   check("P1: trilha não contém senha, códigos nem chave do autenticador", !segredos.some((x) => textoTrilha.includes(x)));

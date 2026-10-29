@@ -370,3 +370,26 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 /* 4 abas cabem num celular de 360 px */
 .tabs { gap: 4px; }
 .tabs button { padding: 0 4px; font-size: 13px; gap: 5px; }
+
+/* Privacidade e consentimento */
+.check--strong { color: var(--ink); }
+.consent-info { margin-top: 14px; }
+.privacy h2 { margin-top: 22px; }
+.privacy p, .privacy li { font-size: 15px; line-height: 1.55; }
+.privacy ol, .privacy ul { padding-left: 20px; margin: 6px 0 10px; }
+.privacy li + li { margin-top: 6px; }
+.privacy a { color: var(--flag-dark); }
+.table-wrap { overflow-x: auto; margin: 8px 0; }
+.privacy-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.privacy-table th, .privacy-table td { text-align: left; vertical-align: top; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+.privacy-table th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--flag-dark); }
+.foot a { color: inherit; }
+.search-row { display: flex; gap: 8px; margin: 8px 0; }
+.search-row input { flex: 1; min-width: 0; }
+@media (max-width: 520px) {
+  .privacy-table thead { display: none; }
+  .privacy-table tr { display: block; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .privacy-table td { display: block; border: 0; padding: 1px 0; }
+  .privacy-table td:first-child { font-weight: 700; color: var(--ink); }
+  .privacy-table td:last-child { color: var(--flag-dark); font-weight: 600; }
+}

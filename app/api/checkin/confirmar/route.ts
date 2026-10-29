@@ -5,6 +5,7 @@ import { PHOTO_BUCKET } from "@/lib/server/env";
 import { decodePhoto, readCheckinToken, serviceDate } from "@/lib/server/security";
 import { analyzeFace, matchCreativePhoto, parseDescriptor } from "@/lib/server/face";
 import { sendCheckinEmail } from "@/lib/server/email";
+import { checkinAllowed, noticeRecipients } from "@/lib/server/guardian";
 import { audit } from "@/lib/server/audit";
 import { VISIT_COOKIE, createVisitSession, visitCookieOptions } from "@/lib/server/visit";
 
@@ -27,7 +28,7 @@ async function referenceDescriptor(m: { id: string; face_descriptor: unknown; ph
 export const POST = withErrors(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const t = readCheckinToken(body?.token);
-  const log = (outcome: string) => audit(req, { event: "confirmar", outcome, memberId: t?.mid, lat: t?.lat, lng: t?.lng });
+  const log = (outcome: string) => audit(req, { event: "confirmar", outcome, memberId: t?.mid, distance: t?.dist });
   if (!t) return log("TOKEN"), NextResponse.json({ error: "Sua identificação expirou. Comece o check-in de novo.", code: "TOKEN" }, { status: 401 });
 
   const photo = decodePhoto(body?.photo);
@@ -35,10 +36,13 @@ export const POST = withErrors(async (req: Request) => {
 
   const { data: m, error: mErr } = await db()
     .from("members")
-    .select("id, name, face_descriptor, photo_path, guardian_name, guardian_email, guardian_email2")
+    .select("id, name, face_descriptor, photo_path, guardian_name, guardian_email, guardian_email2, guardian_email_verified_at, guardian_email2_verified_at, biometric_consent_at, consent_version, verify_by")
     .eq("id", t.mid)
     .single();
   if (mErr || !m) throw mErr ?? new Error("Membro não encontrado");
+  // O consentimento pode ter sido retirado depois da identificação (o token vale 4 h).
+  if (!checkinAllowed(m))
+    return log("CADASTRO_PENDENTE"), NextResponse.json({ error: "Seu cadastro ainda não foi confirmado pelo seu responsável.", code: "CADASTRO_PENDENTE" }, { status: 403 });
 
   const reference = await referenceDescriptor(m);
 
@@ -73,8 +77,6 @@ export const POST = withErrors(async (req: Request) => {
     .insert({
       member_id: m.id,
       service_date: date,
-      latitude: t.lat,
-      longitude: t.lng,
       accuracy_m: t.acc,
       distance_m: t.dist,
       photo_path: path,
@@ -110,11 +112,11 @@ export const POST = withErrors(async (req: Request) => {
 
   // Aviso ao responsável depois da resposta: o adolescente não espera o servidor de e-mail.
   after(async () => {
-    const status = await sendCheckinEmail([m.guardian_email, m.guardian_email2], {
+    // Só texto, e só para e-mails confirmados: a foto criativa não sai do app.
+    const status = await sendCheckinEmail(noticeRecipients(m), {
       guardianName: m.guardian_name ?? "",
       teenName: m.name,
       checkedInAt: data.checked_in_at,
-      photo: photo.buffer,
     });
     await db().from("checkins").update({ guardian_email_status: status, guardian_email_at: new Date().toISOString() }).eq("id", data.id);
   });

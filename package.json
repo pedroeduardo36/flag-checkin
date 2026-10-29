@@ -13,8 +13,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "simular": "node scripts/simular-checkins.mjs",
-    "email:confirmacao": "tsx --conditions=react-server scripts/enviar-confirmacao-cadastro.mts",
-    "lider:criar": "tsx --conditions=react-server scripts/criar-lider.mts"
+    "lider:criar": "tsx --conditions=react-server scripts/criar-lider.mts",
+    "retencao": "tsx --conditions=react-server scripts/retencao.mts",
+    "verificacao:enviar": "tsx --conditions=react-server scripts/enviar-verificacao.mts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

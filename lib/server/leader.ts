@@ -116,7 +116,9 @@ export type AdminAction =
   | "conta_criada" | "conta_ativada" | "conta_desativada" | "conta_reativada"
   | "acesso_redefinido" | "sessoes_revogadas"
   | "totp_cadastrado" | "recuperacao_usada" | "codigos_recuperacao_gerados"
-  | "presenca_removida" | "duplicado_descartado" | "cadastro_mesclado";
+  | "presenca_removida" | "duplicado_descartado" | "cadastro_mesclado"
+  | "consentimento_registrado" | "cadastro_apagado" | "biometria_revogada" | "dados_exportados" | "confirmacao_reenviada"
+  | "expurgo_retencao";
 
 /**
  * Registro de ação administrativa ou de autenticação (tabela só de inserção: o banco recusa
@@ -128,7 +130,7 @@ export async function adminAudit(
   e: {
     actor?: Leader | null;
     action: AdminAction;
-    outcome: "ok" | "negado" | "bloqueado";
+    outcome: "ok" | "negado" | "bloqueado" | "erro";
     targetType?: "lider" | "checkin" | "sessao" | "cadastro";
     targetId?: string | null;
     targetLabel?: string | null;

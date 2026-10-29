@@ -35,8 +35,10 @@ Um **web app mobile-first**, sem instalar nada, em três momentos:
 
 1. **Antes do culto, o responsável cadastra o filho** em [`/cadastro`](https://flag-checkin.vercel.app/cadastro): sem foto e
    sem senha, com seções separadas para os dados do adolescente e os do responsável, e até **dois e-mails** para os
-   avisos (o segundo é opcional, pelo botão "+ Adicionar outro e-mail"). Ao terminar, vê o resumo dos dados, recebe um
-   e-mail de confirmação e um aviso em destaque para conferir o spam.
+   avisos (o segundo é opcional, pelo botão "+ Adicionar outro e-mail"). Antes de enviar, lê como funciona o
+   reconhecimento facial e marca **duas autorizações** (a geral e a específica da biometria). Depois, recebe um **link de
+   confirmação**: só quando o dono do e-mail abre e confirma é que o check-in passa a funcionar
+   ([privacidade](docs/privacidade/README.md)).
 2. **Na entrada:** um QR code ou tag NFC abre o check-in. O app confere a **localização** e o adolescente informa **nome
    completo e data de nascimento**. No **primeiro check-in da vida**, ele tira uma **foto de registro**, que precisa ter um
    rosto só e vira a referência do cadastro, e em seguida vê uma explicação rápida da foto criativa.
@@ -68,7 +70,7 @@ Cada líder entra com a **própria conta: senha + código do app autenticador** 
   de encontros seguidos.
 - **Cadastrar:** o mesmo formulário do responsável, com o botão "Cadastrar outro" para cadastrar em sequência.
 
-E o responsável recebe na hora, **nos dois e-mails cadastrados**, um aviso com o horário e a foto do check-in.
+E o responsável recebe na hora, **nos e-mails confirmados**, um aviso **só com o horário**. A foto criativa pode ter outros adolescentes, então não sai do app.
 
 Três fatores tornam a fraude cara:
 
@@ -160,7 +162,7 @@ sequenceDiagram
   S->>D: upload no bucket privado + insert em checkins (com a distância)
   S-->>W: nome + horário → tela de sucesso
   Note over S: after() — depois da resposta
-  S-)R: e-mail SMTP com horário + foto embutida (cid)
+  S-)R: e-mail SMTP só com o horário (sem foto)
   S->>D: grava o status do aviso (enviado / falhou / sem_config)
 ```
 
@@ -220,7 +222,7 @@ para pessoas diferentes.
 | Fotos expostas | Bucket **privado**, com limite de 2 MB e só MIME de imagem. Acesso por URL assinada de 10 minutos. |
 | Upload malicioso | `decodePhoto` aceita apenas `data:image/jpeg;base64` entre 2 KB e 2 MB, decodificado por um leitor JPEG em JavaScript puro. |
 | Segredo no cliente | `import "server-only"` em `lib/server/*`: o build falha se algo do servidor for importado no navegador. |
-| LGPD (art. 14, menores) | Consentimento do responsável obrigatório e gravado com data (`guardian_consent_at`), e coleta mínima. |
+| LGPD (art. 11 e 14, menores e biometria) (**P1**, [relatório](docs/privacidade/README.md)) | Consentimento geral e **específico da biometria**, confirmado pelo dono do e-mail por link de uso único, com versão do texto gravada. Página [`/privacidade`](https://flag-checkin.vercel.app/privacidade) em linguagem simples. Prazos de retenção aplicados todo dia (`expurgar_dados()`), só a distância (não as coordenadas) guardada, aviso ao responsável só texto, pedidos das famílias atendidos pela aba Líderes. |
 
 Também foram adicionados os cabeçalhos `Permissions-Policy` (câmera e GPS só na própria origem),
 `X-Content-Type-Options` e `Referrer-Policy`.
@@ -233,9 +235,9 @@ tentativas por IP; o próximo passo seria o Upstash Ratelimit nas rotas de ident
 ## Testes
 
 ```bash
-npm test             # 80 testes unitários (Vitest): dashboard, busca por nome, máscaras, datas, Haversine, HMAC, geofence, upload, rostos, e-mail, TOTP (vetores da RFC 6238), senha, sessões, possíveis duplicados
+npm test             # 86 testes unitários (Vitest): dashboard, busca por nome, máscaras, datas, Haversine, HMAC, geofence, upload, rostos, e-mail, TOTP (vetores da RFC 6238), senha, sessões, possíveis duplicados, consentimento do responsável
 npm run typecheck    # TypeScript em modo strict
-npm run test:fluxo   # 98 verificações ponta a ponta (inclui as regressões do P0, das contas de líder e da remoção do CPF) contra o Supabase real, com limpeza dos dados no final
+npm run test:fluxo   # 98 verificações ponta a ponta (inclui as regressões do P0, das contas de líder, da remoção do CPF e da privacidade) contra o Supabase real, com limpeza dos dados no final
 npm run simular      # dois adolescentes sintéticos fazem check-in com 8 s de intervalo (para ver o feed ao vivo)
 ```
 
@@ -256,7 +258,7 @@ A esteira de **CI no GitHub Actions** roda tipos, testes e build a cada push e P
 
 **Front:** Next.js 15 (App Router) · React 19 · TypeScript strict · CSS puro com design tokens (sem framework de UI)
 **Back:** Route Handlers serverless · `node:crypto` (HMAC e comparação em tempo constante) · Supabase JS
-**E-mail:** Nodemailer (SMTP) · HTML responsivo em tabelas (compatível com Gmail e Outlook) · imagem inline via CID
+**E-mail:** Nodemailer (SMTP) · HTML responsivo em tabelas (compatível com Gmail e Outlook) · avisos só texto
 **Visão computacional:** face-api (TensorFlow.js 4, backend WebAssembly) · SSD MobileNet v1 · FaceRecognitionNet · jpeg-js
 **Dados:** Postgres 17 (Supabase) · migrations versionadas com o Supabase CLI · Storage privado
 **Infra:** Vercel · GitHub Actions · QR code gerado no servidor (`/api/qrcode`) · tags NFC NTAG213
@@ -267,13 +269,17 @@ A esteira de **CI no GitHub Actions** roda tipos, testes e build a cada push e P
 app/
   checkin/page.tsx            check-in (local → nome e nascimento ou visitante → foto de registro ou criativa → sucesso)
   cadastro/page.tsx           cadastro pelo responsável (sem foto, sem senha) com consentimento LGPD
+  confirmar/page.tsx          link do e-mail: o responsável lê, autoriza (ou recusa) e o cadastro passa a valer
+  privacidade/page.tsx        explicação para famílias e adolescentes
   pastor/page.tsx             área dos líderes: login em 2 etapas, feed ao vivo, dashboard, cadastro e aba Líderes
   api/checkin/local           GET: modo teste? · POST: confere a cerca
   api/checkin/identificar     nome + nascimento → token HMAC (4 h) e tipo de foto
-  api/checkin/confirmar       foto de registro (1º) ou criativa → Storage + insert + e-mail
+  api/checkin/confirmar       foto de registro (1º) ou criativa → Storage + insert + aviso só texto
   api/checkin/visitante       visitante: nome + telefone (+ foto opcional)
-  api/cadastro                novo adolescente
-  api/lider/*                 entrar, verificar (código ou recuperação), ativar, autenticador, sessao, contas, auditoria, duplicados
+  api/cadastro                novo adolescente (+ link de confirmação)
+  api/cadastro/verificar      confirmação ou recusa pelo responsável
+  api/cron/retencao           prazos de retenção (Vercel Cron, todo dia)
+  api/lider/*                 entrar, verificar (código ou recuperação), ativar, autenticador, sessao, contas, auditoria, duplicados, cadastros (pedidos das famílias)
   api/pastor/checkins         correção de presença (DELETE com motivo, vai para a auditoria)
   api/pastor/dashboard        indicadores, evolução por encontro e ranking (só com sessão de líder completa)
   api/pastor/feed             check-ins do dia com URLs assinadas das fotos (?since= para o incremental)

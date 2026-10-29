@@ -9,14 +9,15 @@ App web (abre no navegador do celular, sem instalar nada) para o check-in dos ad
 ```
 Antes do culto ──► /cadastro (o RESPONSÁVEL preenche)
    Dados do adolescente (nome, nascimento, celular opcional; sem CPF) +
-   dados do responsável (nome, telefone, e-mail e um 2º e-mail opcional) + autorização LGPD. Sem foto, sem senha.
+   dados do responsável (nome, telefone, e-mail e um 2º e-mail opcional) + autorização geral e da biometria.
+   Sem foto, sem senha. O responsável confirma pelo link do e-mail; antes disso não há check-in.
 
 QR code / tag NFC ──► /checkin
    1. Localização  → confere se o celular está dentro do raio da igreja
    2. "Tenho cadastro": nome completo + nascimento   |   "Sou visitante": nome + telefone (+ foto opcional)
    3. 1º check-in: foto de REGISTRO (1 rosto, vira a foto do cadastro) → explicação → foto CRIATIVA
       Demais: explicação → foto CRIATIVA dentro do culto (pode ter amigos; um rosto precisa ser o dele)
-   4. Tela de sucesso + e-mail ao responsável com horário e foto
+   4. Tela de sucesso + e-mail ao responsável só com o horário
 ```
 
 ## Stack
@@ -38,8 +39,8 @@ QR code / tag NFC ──► /checkin
 | Turso | SQLite distribuído, 5 GB | sem armazenamento de arquivos |
 | MongoDB Atlas | 512 MB | NoSQL, sem armazenamento de arquivos |
 
-Estimativa: 200 adolescentes × 52 cultos × ~80 KB por selfie ≈ 830 MB/ano em fotos. Apague selfies antigas
-(ex.: com mais de 6 meses) para continuar no plano grátis — veja "Manutenção".
+Estimativa: 200 adolescentes × 52 cultos × ~80 KB por selfie ≈ 830 MB/ano em fotos, mas a retenção
+apaga as fotos de check-in em 30 dias — veja "Manutenção".
 
 ## Passo a passo para colocar no ar
 
@@ -104,8 +105,8 @@ Gera `qrcode-checkin.png` (impressão) e `qrcode-checkin.svg` (gráfica/banner),
 
 ## E-mail para o responsável
 
-A cada check-in, o responsável recebe um e-mail com o **horário** e a **foto do check-in** (veja
-[a prévia](previa-email-checkin.html)). Escolha **um** provedor SMTP gratuito:
+O responsável recebe um **link de confirmação** no cadastro e, a cada check-in, um e-mail **só com o horário** (sem
+foto). Escolha **um** provedor SMTP gratuito:
 
 | Provedor | Limite grátis | Precisa de domínio próprio? | Configuração |
 | --- | --- | --- | --- |
@@ -123,10 +124,10 @@ A cada check-in, o responsável recebe um e-mail com o **horário** e a **foto d
 
 O status de cada aviso aparece na coluna `aviso_responsavel` da view `presencas`.
 
-**Confirmação de cadastro em lote** (para quem se cadastrou antes de existir o e-mail de confirmação):
-`npm run email:confirmacao` só simula e mostra quantos e-mails sairiam; `npm run email:confirmacao -- --enviar` envia
-um por adolescente, com 1,5 s de intervalo. O registro fica em `logs/confirmacao-cadastro.json` (fora do git): rodar
-de novo pula quem já recebeu.
+**Confirmação em lote dos cadastros antigos** (anteriores ao consentimento que explica a biometria):
+`npm run verificacao:enviar` só simula; `npm run verificacao:enviar -- --enviar` manda o link de confirmação, com 1,5 s
+de intervalo. O registro fica em `logs/verificacao.json` (fora do git, só ids): rodar de novo pula quem já recebeu.
+Quem não confirmar até 30/11/2026 tem o cadastro apagado.
 
 ## Área do pastor
 
@@ -174,17 +175,16 @@ próprio painel.
   Na aba **Líderes → Possíveis cadastros duplicados**, um líder escolhe "mesclar" (as presenças vão para o cadastro
   mais antigo e o novo é apagado) ou "são pessoas diferentes". Enquanto houver dois cadastros com o mesmo nome, o
   check-in pede o nome completo ou um líder. As duas decisões ficam no registro de ações.
-- Cadastro exige marcar a autorização do responsável (dados de menores — LGPD art. 14); a data fica gravada.
+- Cadastro exige a autorização geral e a específica da biometria (LGPD art. 11 e 14), confirmadas pelo dono do e-mail.
+  Detalhes, prazos e pedidos das famílias: [docs/privacidade](privacidade/README.md).
 - **Limites conhecidos:** GPS de celular pode ser falsificado com apps de "fake GPS" — por isso existe a foto com
   reconhecimento facial, que os líderes também podem conferir no feed do pastor. Não há limite de tentativas por IP; se precisar, adicione
   Upstash Ratelimit (grátis) nas rotas `/api/checkin/identificar` e `/api/cadastro`.
 
 ## Manutenção
-Apagar selfies de check-in com mais de 6 meses (SQL Editor):
-```sql
-delete from storage.objects
-where bucket_id = 'fotos' and name like 'checkins/%' and created_at < now() - interval '6 months';
-```
+Os prazos de retenção ([inventário](privacidade/inventario-de-dados.md)) são aplicados todo dia às 03:00 pelo Vercel
+Cron (`/api/cron/retencao`, exige `CRON_SECRET` na Vercel). Para conferir ou rodar à mão:
+`npm run retencao` (simula) e `npm run retencao -- --aplicar`.
 
 ## Estrutura
 ```
