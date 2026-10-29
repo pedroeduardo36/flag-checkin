@@ -1,8 +1,9 @@
 // Cálculos do dashboard do pastor (função pura, testada sem banco).
 
-export type CheckinRow = { service_date: string; member_id: string | null; visitor_phone: string | null };
+export type CheckinRow = { service_date: string; member_id: string | null; visitor_phone: string | null; checked_out_at?: string | null };
 
-export type Encontro = { date: string; cadastrados: number; visitantes: number; total: number };
+/** saidas: presenças com a saída confirmada (pelo participante ou por um líder). */
+export type Encontro = { date: string; cadastrados: number; visitantes: number; total: number; saidas: number };
 
 export type RankingRow = {
   memberId: string;
@@ -21,7 +22,7 @@ export function buildDashboard(rows: CheckinRow[], { rankingSize = 10, evolucaoS
   const visitantes = new Set<string>();
 
   for (const r of rows) {
-    const e = byDate.get(r.service_date) ?? { date: r.service_date, cadastrados: 0, visitantes: 0, total: 0 };
+    const e = byDate.get(r.service_date) ?? { date: r.service_date, cadastrados: 0, visitantes: 0, total: 0, saidas: 0 };
     if (r.member_id) {
       e.cadastrados++;
       const s = byMember.get(r.member_id) ?? new Set<string>();
@@ -32,6 +33,7 @@ export function buildDashboard(rows: CheckinRow[], { rankingSize = 10, evolucaoS
       if (r.visitor_phone) visitantes.add(r.visitor_phone);
     }
     e.total++;
+    if (r.checked_out_at) e.saidas++;
     byDate.set(r.service_date, e);
   }
 

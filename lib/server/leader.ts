@@ -116,7 +116,7 @@ export type AdminAction =
   | "conta_criada" | "conta_ativada" | "conta_desativada" | "conta_reativada"
   | "acesso_redefinido" | "sessoes_revogadas"
   | "totp_cadastrado" | "recuperacao_usada" | "codigos_recuperacao_gerados"
-  | "presenca_removida" | "duplicado_descartado" | "cadastro_mesclado"
+  | "presenca_removida" | "saida_registrada" | "saida_desfeita" | "duplicado_descartado" | "cadastro_mesclado"
   | "consentimento_registrado" | "cadastro_apagado" | "biometria_revogada" | "dados_exportados" | "confirmacao_reenviada"
   | "expurgo_retencao";
 

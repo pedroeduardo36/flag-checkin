@@ -117,3 +117,35 @@ describe("e-mail de confirmação do cadastro (verificação do responsável)", 
     expect(senderAddress()).toBe("checkin@exemplo.com");
   });
 });
+
+describe("aviso de saída", () => {
+  const saida = { guardianName: "Maria Souza", teenName: "Ana <b>Beatriz</b> Souza", checkedOutAt: "2026-10-19T00:15:00Z", by: "participante" as const };
+
+  it("só texto, com o horário de Brasília e quem confirmou", async () => {
+    const { buildCheckoutEmail } = await load();
+    const e = buildCheckoutEmail(saida);
+    expect(e.subject).toContain("saiu do culto");
+    expect(e.subject).toContain("21:15");
+    expect(e.text).toContain("Horário da saída: 21:15");
+    expect(e.text).toContain("confirmou a saída pelo celular");
+    expect(e.html).not.toMatch(/<img|cid:/);
+    expect(e.html).toContain("&lt;b&gt;Beatriz&lt;/b&gt;");
+    expect(buildCheckoutEmail({ ...saida, by: "lider" }).text).toContain("registrada por um líder");
+  });
+
+  it("CHECKOUT_NOTICE=false desliga o aviso de saída", async () => {
+    Object.assign(process.env, SMTP, { CHECKOUT_NOTICE: "false" });
+    const { sendCheckoutEmail } = await load();
+    expect(await sendCheckoutEmail("mae@exemplo.com", saida)).toBe("desligado");
+    expect(sendMail).not.toHaveBeenCalled();
+    delete process.env.CHECKOUT_NOTICE;
+  });
+
+  it("configurado → envia para os e-mails do responsável", async () => {
+    Object.assign(process.env, SMTP);
+    sendMail.mockResolvedValue({ messageId: "1" });
+    const { sendCheckoutEmail } = await load();
+    expect(await sendCheckoutEmail(["mae@exemplo.com", "MAE@exemplo.com", null], saida)).toBe("enviado");
+    expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: "mae@exemplo.com" }));
+  });
+});

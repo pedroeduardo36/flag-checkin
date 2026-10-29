@@ -31,7 +31,7 @@ querem saber se o filho chegou.
 
 ## A solução
 
-Um **web app mobile-first**, sem instalar nada, em três momentos:
+Um **web app mobile-first**, sem instalar nada, em quatro momentos:
 
 1. **Antes do culto, o responsável cadastra o filho** em [`/cadastro`](https://flag-checkin.vercel.app/cadastro): sem foto e
    sem senha, com seções separadas para os dados do adolescente e os do responsável, e até **dois e-mails** para os
@@ -44,6 +44,9 @@ Um **web app mobile-first**, sem instalar nada, em três momentos:
    rosto só e vira a referência do cadastro, e em seguida vê uma explicação rápida da foto criativa.
 3. **Dentro do culto:** a **foto criativa** (amigos, pose, careta) conclui o check-in, inclusive no primeiro. Basta um
    dos rostos da foto ser o do adolescente. A identificação da entrada fica guardada no celular por 4 h.
+4. **Na saída:** o botão **"Estou indo embora"**, o QR code da saída ou uma tag NFC na porta abre a confirmação da saída,
+   com **um toque** e sem digitar nada de novo. O responsável recebe o horário. Sem confirmação, a saída fica "não
+   registrada" e um líder pode corrigir.
 
 **Visitantes** fazem check-in só com nome e telefone, com foto criativa opcional.
 
@@ -164,7 +167,21 @@ sequenceDiagram
   Note over S: after() — depois da resposta
   S-)R: e-mail SMTP só com o horário (sem foto)
   S->>D: grava o status do aviso (enviado / falhou / sem_config)
+  S-->>W: cookie da sessão da visita (httpOnly, só este check-in, até o fim do dia)
+  Note over A,W: na hora de ir embora
+  A->>W: "Estou indo embora", QR code da saída ou NFC → /checkout
+  W->>S: POST /api/checkin/checkout (um toque, sem digitar nada)
+  S->>D: grava checked_out_at UMA vez (update … where checked_out_at is null)
+  S-)R: aviso de saída, só texto
 ```
+
+**Saída (checkout, [detalhes](docs/funcionalidades/P2-checkout.md)).** A sessão da visita que o check-in grava no
+celular permite confirmar a saída com um toque, pelo botão da tela de sucesso, pelo QR code da saída
+([`/qrcode?tipo=saida`](https://flag-checkin.vercel.app/qrcode?tipo=saida)) ou por uma tag NFC na porta. A saída fica
+na mesma linha do check-in, em colunas próprias: a presença não muda e confirmar de novo não duplica nada. Fechar o
+navegador, perder a conexão ou acabar o culto **não** registra a saída: até alguém confirmar, ela aparece como "saída não
+registrada". Os líderes registram uma saída esquecida (com o horário) ou desfazem uma confirmada por engano, sempre com
+motivo no registro de ações.
 
 O cadastro (`/cadastro`) segue o mesmo padrão: validação no cliente para dar resposta rápida e **a mesma validação
 repetida no servidor**, mais um campo invisível que só robôs preenchem (*honeypot*). O visitante (`/api/checkin/visitante`)
@@ -235,9 +252,9 @@ tentativas por IP; o próximo passo seria o Upstash Ratelimit nas rotas de ident
 ## Testes
 
 ```bash
-npm test             # 86 testes unitários (Vitest): dashboard, busca por nome, máscaras, datas, Haversine, HMAC, geofence, upload, rostos, e-mail, TOTP (vetores da RFC 6238), senha, sessões, possíveis duplicados, consentimento do responsável
+npm test             # 98 testes unitários (Vitest): dashboard, busca por nome, máscaras, datas, Haversine, HMAC, geofence, upload, rostos, e-mail, TOTP (vetores da RFC 6238), senha, sessões, possíveis duplicados, consentimento do responsável, horário da saída
 npm run typecheck    # TypeScript em modo strict
-npm run test:fluxo   # 98 verificações ponta a ponta (inclui as regressões do P0, das contas de líder, da remoção do CPF e da privacidade) contra o Supabase real, com limpeza dos dados no final
+npm run test:fluxo   # verificações ponta a ponta (inclui as regressões do P0, das contas de líder, da remoção do CPF, da privacidade e do checkout) contra o Supabase real, com limpeza dos dados no final
 npm run simular      # dois adolescentes sintéticos fazem check-in com 8 s de intervalo (para ver o feed ao vivo)
 ```
 
@@ -268,6 +285,7 @@ A esteira de **CI no GitHub Actions** roda tipos, testes e build a cada push e P
 ```
 app/
   checkin/page.tsx            check-in (local → nome e nascimento ou visitante → foto de registro ou criativa → sucesso)
+  checkout/page.tsx           saída do culto com um toque (sessão da visita; QR da saída ou NFC)
   cadastro/page.tsx           cadastro pelo responsável (sem foto, sem senha) com consentimento LGPD
   confirmar/page.tsx          link do e-mail: o responsável lê, autoriza (ou recusa) e o cadastro passa a valer
   privacidade/page.tsx        explicação para famílias e adolescentes
@@ -276,17 +294,19 @@ app/
   api/checkin/identificar     nome + nascimento → token HMAC (4 h) e tipo de foto
   api/checkin/confirmar       foto de registro (1º) ou criativa → Storage + insert + aviso só texto
   api/checkin/visitante       visitante: nome + telefone (+ foto opcional)
+  api/checkin/checkout        GET: visita deste celular · POST: confirma a saída (uma vez, horário do servidor)
   api/cadastro                novo adolescente (+ link de confirmação)
   api/cadastro/verificar      confirmação ou recusa pelo responsável
   api/cron/retencao           prazos de retenção (Vercel Cron, todo dia)
   api/lider/*                 entrar, verificar (código ou recuperação), ativar, autenticador, sessao, contas, auditoria, duplicados, cadastros (pedidos das famílias)
-  api/pastor/checkins         correção de presença (DELETE com motivo, vai para a auditoria)
+  api/pastor/checkins         correção de presença (DELETE) e da saída (PATCH registrar/desfazer), com motivo na auditoria
   api/pastor/dashboard        indicadores, evolução por encontro e ranking (só com sessão de líder completa)
-  api/pastor/feed             check-ins do dia com URLs assinadas das fotos (?since= para o incremental)
+  api/pastor/feed             check-ins do dia e saídas, com URLs assinadas das fotos (?since=cursor para o incremental)
   api/health                  diagnóstico (variáveis, tabelas, view e bucket)
-  api/qrcode · qrcode/        QR code gerado no servidor (PNG/SVG) e página para imprimir
+  api/qrcode · qrcode/        QR codes da entrada e da saída (PNG/SVG), gerados no servidor, e página para imprimir
 components/                   Brand, Camera, CadastroForm, PastorDashboard, LeaderAuth (login, ativação, autenticador), LeadersAdmin (contas e auditoria)
 lib/stats.ts                  cálculo do dashboard (função pura)
+lib/checkout.ts               horário da saída corrigida pelo líder e texto da situação (funções puras)
 lib/format.ts                 validações compartilhadas cliente/servidor
 lib/server/                   env, cliente Supabase, segurança, reconhecimento facial, tratamento de erros
 supabase/migrations/          schema, RLS, view de presença e bucket

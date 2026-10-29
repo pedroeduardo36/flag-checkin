@@ -50,3 +50,14 @@ describe("dashboard do pastor", () => {
     expect(empty.ranking).toEqual([]);
   });
 });
+
+describe("saídas no dashboard", () => {
+  it("conta por encontro as presenças com saída confirmada", () => {
+    const d = buildDashboard([
+      { ...m("ana", "2026-10-25"), checked_out_at: "2026-10-26T00:15:00Z" },
+      m("bia", "2026-10-25"),
+      { ...v("61911111111", "2026-10-25"), checked_out_at: "2026-10-26T00:20:00Z" },
+    ]);
+    expect(d.kpis.ultimo).toMatchObject({ total: 3, saidas: 2 });
+  });
+});

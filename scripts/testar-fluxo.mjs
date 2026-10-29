@@ -48,6 +48,10 @@ const req = async (method, path, body, cookie) => {
   return { status: r.status, data: await r.json().catch(() => ({})), cookie: sc.split(";")[0], setCookie: sc };
 };
 
+const hhmmBrasilia = (d = new Date()) =>
+  d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Sao_Paulo" });
+const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+
 let falhas = 0;
 const check = (nome, cond, extra) => {
   console.log(`${cond ? "✅" : "❌"} ${nome}${!cond && extra !== undefined ? ` → ${JSON.stringify(extra).slice(0, 300)}` : ""}`);
@@ -239,13 +243,56 @@ try {
   f = await post("/api/checkin/confirmar", { token, photo: foto("duas-pessoas") });
   check("foto criativa EM GRUPO com o adolescente é aceita (200, não é o 1º)", f.status === 200 && f.data.photoKind === "criativa" && f.data.isFirst === false, f.data);
 
+  // ---------- P2: checkout pelo navegador (sessão da visita, um toque) ----------
+  const cookieSaida = (f.headers.get("set-cookie") ?? "").split(";")[0];
+  const { data: antesSaida } = await sb.from("checkins").select("id, checked_in_at, photo_path, distance_m, face_distance").eq("member_id", m.id).eq("service_date", hoje).single();
+  let s = await req("GET", "/api/checkin/checkout");
+  check("P2 checkout: sem a sessão da visita, nenhuma visita aparece", s.status === 200 && s.data.visit === null, s.data);
+  s = await req("POST", "/api/checkin/checkout", {});
+  check("P2 checkout: sem a sessão da visita, a saída é recusada (401 SEM_VISITA)", s.status === 401 && s.data.code === "SEM_VISITA", s.data);
+  s = await req("POST", "/api/checkin/checkout", {}, "o2_visita=eyJtaWQiOm51bGx9.assinaturafalsa");
+  check("P2 checkout: cookie de visita forjado não registra saída (401)", s.status === 401, s.status);
+  s = await req("GET", "/api/checkin/checkout", null, cookieVisita);
+  check("P2 checkout: a sessão de um check-in que mudou de dia não serve para hoje", s.data.visit === null, s.data);
+  s = await req("GET", "/api/checkin/checkout", null, cookieSaida);
+  check("P2 checkout: a sessão da visita abre a saída sem pedir dados de novo ('não registrada')",
+    s.status === 200 && s.data.visit?.name === cad.name && s.data.visit.checkedOutAt === null && s.data.visit.checkedInAt === antesSaida.checked_in_at, s.data);
+  const antesToque = Date.now();
+  s = await req("POST", "/api/checkin/checkout", dentro, cookieSaida);
+  const horaSaida = s.data.checkedOutAt;
+  check("P2 checkout: um toque registra a saída com o horário do servidor",
+    s.status === 200 && s.data.alreadyCheckedOut === false && Math.abs(Date.parse(horaSaida) - antesToque) < 60_000 && s.data.checkoutBy === "participante", s.data);
+  const repetidas = await Promise.all(Array.from({ length: 3 }, () => req("POST", "/api/checkin/checkout", {}, cookieSaida)));
+  check("P2 checkout: confirmar de novo (3 ao mesmo tempo) devolve a mesma saída, sem duplicar",
+    repetidas.every((x) => x.status === 200 && x.data.alreadyCheckedOut === true && x.data.checkedOutAt === horaSaida), repetidas.map((x) => [x.status, x.data.checkedOutAt]));
+  const { data: depoisSaida } = await sb.from("checkins").select("id, checked_in_at, photo_path, distance_m, face_distance, checked_out_at, checkout_by, checkout_leader_id, checkout_distance_m, latitude").eq("member_id", m.id).eq("service_date", hoje);
+  check("P2 checkout: uma linha só, e a presença original (chegada, foto, distância, rosto) não muda",
+    depoisSaida.length === 1 && depoisSaida[0].id === antesSaida.id && depoisSaida[0].checked_in_at === antesSaida.checked_in_at &&
+    depoisSaida[0].photo_path === antesSaida.photo_path && depoisSaida[0].distance_m === antesSaida.distance_m && depoisSaida[0].face_distance === antesSaida.face_distance, depoisSaida);
+  check("P2 checkout: gravado como confirmado pelo participante, com só a distância (opcional)",
+    depoisSaida[0].checkout_by === "participante" && depoisSaida[0].checkout_leader_id === null && typeof depoisSaida[0].checkout_distance_m === "number" && depoisSaida[0].latitude === null, depoisSaida[0]);
+  r = await post("/api/checkin/identificar", { ...dentro, name: cad.name, birthDate: nasc }, { cookie: cookieSaida });
+  check("P2 checkout: reabrir o check-in no mesmo celular mostra a saída", r.data.alreadyCheckedIn === true && r.data.checkedOutAt === horaSaida, r.data);
+  let avisoSaida = null;
+  for (let i = 0; i < 20 && !avisoSaida; i++) {
+    await new Promise((res) => setTimeout(res, 1000));
+    ({ data: { checkout_email_status: avisoSaida } } = await sb.from("checkins").select("checkout_email_status").eq("id", antesSaida.id).single());
+  }
+  check(`P2 checkout: aviso de saída ao responsável registrado (${avisoSaida})`, esperado.includes(avisoSaida) || avisoSaida === "desligado", avisoSaida);
+
   // ---------- Visitante ----------
   r = await post("/api/checkin/visitante", { ...dentro, name: "Visitante Teste", phone: "123" });
   check("visitante com telefone inválido é recusado (400)", r.status === 400 && !!r.data.errors?.phone, r.data);
   r = await post("/api/checkin/visitante", { ...dentro, name: "Visitante Teste Sem Foto", phone: telsVisitantes[0] });
   check("visitante só com nome e telefone (200)", r.status === 200 && r.data.ok && !r.data.alreadyCheckedIn, r.data);
+  const cookieVisitante = (r.headers.get("set-cookie") ?? "").split(";")[0];
   r = await post("/api/checkin/visitante", { ...dentro, name: "Visitante Teste Sem Foto", phone: telsVisitantes[0] });
   check("visitante repetido no mesmo dia → já fez check-in", r.status === 200 && r.data.alreadyCheckedIn === true, r.data);
+  check("P2 checkout: repetir nome e telefone do visitante NÃO dá a sessão da visita (quem sabe o telefone não fecha a visita)",
+    !(r.headers.get("set-cookie") ?? "").includes("o2_visita="), r.headers.get("set-cookie"));
+  s = await req("POST", "/api/checkin/checkout", {}, cookieVisitante);
+  check("P2 checkout: visitante também confirma a saída pelo celular do check-in",
+    cookieVisitante.startsWith("o2_visita=") && s.status === 200 && s.data.isVisitor === true && !!s.data.checkedOutAt, s.data);
   r = await post("/api/checkin/visitante", { ...dentro, name: "Visitante Teste Com Foto", phone: telsVisitantes[1], photo: foto("pessoa-b") });
   check("visitante com foto criativa opcional (200)", r.status === 200 && r.data.ok, r.data);
   const { data: fotoVis } = await sb.from("checkins").select("photo_path, latitude").eq("visitor_phone", telsVisitantes[1]).single();
@@ -366,13 +413,16 @@ try {
   check("check-in aparece no feed com foto criativa e foto do cadastro", !!meu?.selfieUrl && !!meu?.avatarUrl && meu.photoKind === "criativa", meu);
   const vis = feed.items?.filter((i) => i.isVisitor && i.name.startsWith("Visitante Teste")) ?? [];
   check("visitantes aparecem no feed marcados como visitante", vis.length === 2, vis.length);
-  const desde = await fetch(`${BASE}/api/pastor/feed?since=${encodeURIComponent(feed.items?.[0]?.checkedInAt ?? "")}`, { headers: { cookie: pastorCookie } }).then((x) => x.json());
+  const desde = await fetch(`${BASE}/api/pastor/feed?since=${encodeURIComponent(feed.cursor ?? "")}`, { headers: { cookie: pastorCookie } }).then((x) => x.json());
   check("feed incremental (since) não repete o que já foi visto", Array.isArray(desde.items) && desde.items.length === 0, desde.items?.length);
+  check("P2 checkout: feed mostra a saída confirmada pelo adolescente e conta as saídas do dia",
+    meu?.checkedOutAt === horaSaida && meu?.checkoutBy === "participante" && feed.checkedOut >= 2 && typeof feed.cursor === "string", { meu: meu?.checkedOutAt, checkedOut: feed.checkedOut });
   const dashSem = await fetch(`${BASE}/api/pastor/dashboard`);
   check("dashboard sem sessão é bloqueado (401)", dashSem.status === 401, dashSem.status);
   const dash = await fetch(`${BASE}/api/pastor/dashboard`, { headers: { cookie: pastorCookie } }).then((x) => x.json());
-  const hoje = dash.evolucao?.at(-1);
-  check("dashboard conta o encontro de hoje (adolescente + 2 visitantes)", hoje?.cadastrados >= 1 && hoje?.visitantes >= 2 && dash.kpis?.encontros >= 1, hoje);
+  const encHoje = dash.evolucao?.at(-1);
+  check("dashboard conta o encontro de hoje (adolescente + 2 visitantes)", encHoje?.cadastrados >= 1 && encHoje?.visitantes >= 2 && dash.kpis?.encontros >= 1, encHoje);
+  check("P2 checkout: dashboard conta as saídas confirmadas do encontro", encHoje?.saidas >= 2 && dash.kpis?.ultimo?.saidas === encHoje?.saidas, encHoje);
   const rk = dash.ranking ?? [];
   const ordenado = rk.every((r, i) => i === 0 || rk[i - 1].presencas >= r.presencas);
   const temVaga = rk.length < 10;
@@ -385,6 +435,32 @@ try {
 
   const { data: pres } = await sb.from("presencas").select("nome, tipo, tipo_foto").in("nome", [cad.name, "Visitante Teste Sem Foto"]);
   check("view presencas mostra adolescente (criativa) e visitante", pres?.some((p) => p.tipo === "cadastrado" && p.tipo_foto === "criativa") && pres?.some((p) => p.tipo === "visitante"), pres);
+
+  // ---------- P2 checkout: correção da saída pelos líderes (com motivo) ----------
+  r = await req("PATCH", "/api/pastor/checkins", { id: meu?.id, action: "desfazer_saida", reason: "x" }, cookieSaida);
+  check("P2 checkout: sessão da visita do adolescente não corrige saídas (401)", r.status === 401, r.status);
+  r = await req("PATCH", "/api/pastor/checkins", { id: meu?.id, action: "desfazer_saida", reason: "" }, ckA);
+  check("P2 checkout: correção da saída exige motivo (400)", r.status === 400, r.data);
+  r = await req("PATCH", "/api/pastor/checkins", { id: meu?.id, action: "registrar_saida", time: hhmmBrasilia(), reason: "teste automático" }, ckA);
+  check("P2 checkout: líder não sobrescreve uma saída que já existe (409)", r.status === 409 && r.data.code === "JA_SAIU", r.data);
+  r = await req("PATCH", "/api/pastor/checkins", { id: meu?.id, action: "desfazer_saida", reason: "teste automático: confirmou sem querer" }, ckA);
+  const { data: desfeita } = await sb.from("checkins").select("checked_in_at, checked_out_at, checkout_by").eq("id", meu?.id ?? "").single();
+  check("P2 checkout: líder desfaz a saída e a presença continua", r.status === 200 && desfeita.checked_out_at === null && desfeita.checkout_by === null && desfeita.checked_in_at === antesSaida.checked_in_at, desfeita);
+  const feedMudou = await req("GET", `/api/pastor/feed?since=${encodeURIComponent(feed.cursor ?? "")}`, null, ckA);
+  check("P2 checkout: feed ao vivo recebe a mudança da saída no item que já estava na tela",
+    feedMudou.data.items?.length === 1 && feedMudou.data.items[0].id === meu?.id && feedMudou.data.items[0].checkedOutAt === null, feedMudou.data.items);
+  s = await req("GET", "/api/checkin/checkout", null, cookieSaida);
+  check("P2 checkout: depois de desfeita, o celular volta a mostrar 'saída não registrada'", s.data.visit?.checkedOutAt === null, s.data.visit);
+  r = await req("PATCH", "/api/pastor/checkins", { id: meu?.id, action: "registrar_saida", time: hhmmBrasilia(new Date(Date.now() + 2 * 3600e3)), reason: "teste automático" }, ckA);
+  check("P2 checkout: saída num horário que ainda não chegou é recusada (400)", r.status === 400, r.data);
+  r = await req("PATCH", "/api/pastor/checkins", { id: meu?.id, action: "registrar_saida", time: hhmmBrasilia(), reason: "teste automático: esqueceu de confirmar" }, ckA);
+  const { data: peloLider } = await sb.from("checkins").select("checked_out_at, checkout_by, checkout_leader_id, checkout_distance_m").eq("id", meu?.id ?? "").single();
+  check("P2 checkout: líder registra a saída esquecida, marcada como do líder",
+    r.status === 200 && r.data.checkoutBy === "lider" && peloLider.checkout_by === "lider" && peloLider.checkout_leader_id === lA.id && peloLider.checkout_distance_m === null, { r: r.data, peloLider });
+  s = await req("POST", "/api/checkin/checkout", {}, cookieSaida);
+  check("P2 checkout: confirmar depois do líder não muda a saída registrada", s.status === 200 && s.data.alreadyCheckedOut === true && s.data.checkoutBy === "lider", s.data);
+  const { data: presSaida } = await sb.from("presencas").select("saida, saida_confirmada_por").eq("nome", cad.name).eq("culto", hoje).single();
+  check("P2 checkout: view presencas mostra a saída e quem confirmou", /^\d{2}:\d{2}$/.test(presSaida?.saida ?? "") && presSaida?.saida_confirmada_por === "lider", presSaida);
 
   // Correção de presença (com motivo) e trilha de auditoria.
   r = await req("DELETE", "/api/pastor/checkins", { id: meu?.id, reason: "" }, ckA);
@@ -485,6 +561,12 @@ try {
     tem("recuperacao_usada", "ok", (a) => a.actor_id === lA.id) && tem("conta_criada", "ok", (a) => a.actor_id === lA.id && a.target_id === idC) &&
     tem("conta_desativada", "ok", (a) => a.actor_id === lA.id && a.target_id === idC) && tem("conta_desativada", "negado", (a) => a.target_id === lA.id),
     [...new Set((trilha ?? []).map((a) => `${a.action}:${a.outcome}`))]);
+  check("P2 checkout: correções da saída ficam na trilha (quem, qual, motivo e a saída anterior)",
+    tem("saida_desfeita", "ok", (a) => a.actor_id === lA.id && a.target_id === meu?.id && /sem querer/.test(a.details?.motivo ?? "") && a.details?.saida_anterior === horaSaida) &&
+    tem("saida_registrada", "ok", (a) => a.actor_id === lA.id && a.target_id === meu?.id && /esqueceu/.test(a.details?.motivo ?? "")));
+  const { data: evSaida } = await sb.from("audit_events").select("outcome").eq("event", "checkout").gte("at", t0);
+  check("P2 checkout: tentativas de saída ficam na auditoria do check-in (ok, repetida, sem sessão)",
+    ["ok", "repetido", "SEM_VISITA"].every((o) => evSaida?.some((e) => e.outcome === o)), evSaida?.map((e) => e.outcome));
   check("P1: correção de presença registrada com quem, qual e por quê",
     tem("presenca_removida", "ok", (a) => a.actor_id === lA.id && a.target_id === meu?.id && /engano/.test(a.details?.motivo ?? "")));
   check("P1 CPF: revisão de duplicados fica na trilha (pessoas diferentes e mescla)",

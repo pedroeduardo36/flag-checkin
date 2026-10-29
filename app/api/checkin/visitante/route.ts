@@ -5,6 +5,7 @@ import { db } from "@/lib/server/supabase";
 import { PHOTO_BUCKET } from "@/lib/server/env";
 import { checkGeofence, decodePhoto, parseCoords, serviceDate } from "@/lib/server/security";
 import { isValidPhone, nameTokens, onlyDigits } from "@/lib/format";
+import { VISIT_COOKIE, createVisitSession, visitCookieOptions } from "@/lib/server/visit";
 
 // Check-in de visitante: só nome e telefone; a foto criativa é opcional.
 export const POST = withErrors(async (req: Request) => {
@@ -56,12 +57,17 @@ export const POST = withErrors(async (req: Request) => {
       guardian_email_status: "sem_email",
       user_agent: req.headers.get("user-agent")?.slice(0, 300) ?? null,
     })
-    .select("checked_in_at")
+    .select("id, checked_in_at")
     .single();
   if (error) {
     if (path) await db().storage.from(PHOTO_BUCKET).remove([path]);
     if (error.code === "23505") return NextResponse.json({ ok: true, alreadyCheckedIn: true, name }, { status: 200 });
     throw error;
   }
-  return NextResponse.json({ ok: true, alreadyCheckedIn: false, name, checkedInAt: data.checked_in_at });
+  // Sessão da visita: só este aparelho confirma a saída deste visitante. Repetir nome e telefone em
+  // outro aparelho (acima, "já fez check-in") não dá a sessão: quem sabe o telefone não fecha a visita.
+  const visit = createVisitSession(null, date, Date.now(), data.id);
+  const res = NextResponse.json({ ok: true, alreadyCheckedIn: false, name, checkedInAt: data.checked_in_at });
+  res.cookies.set(VISIT_COOKIE, visit.value, visitCookieOptions(visit.maxAge));
+  return res;
 });

@@ -393,3 +393,20 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
   .privacy-table td:first-child { font-weight: 700; color: var(--ink); }
   .privacy-table td:last-child { color: var(--flag-dark); font-weight: 600; }
 }
+
+/* P2: checkout (saída do culto) */
+.exit { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.exit .btn { margin-top: 8px; }
+.exit .hint { margin: 8px 0 0; font-size: 13px; }
+.checkin__other { margin-top: 14px; font-size: 13px; color: var(--muted); }
+.checkout .tag { margin: 4px 0 6px; }
+.checkout .btn { margin-top: 14px; }
+.checkout .hint { margin: 10px 0 0; }
+.checkout__photo, .checkout__photo img, .checkout__photo .success__noimg { width: 128px; height: 128px; }
+.checkout__photo img, .checkout__photo .success__noimg { border-color: var(--flag); }
+.tag--out { background: #eef1f4; color: var(--muted); }
+.feed-stats__out { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.kpi--wide { grid-column: 1 / -1; }
+.qr__tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.qr__tabs a { text-decoration: none; }
+.qr__tabs .on { background: var(--flag-soft); border-color: var(--flag); }

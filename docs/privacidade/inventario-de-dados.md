@@ -40,6 +40,9 @@ A coluna **base legal** é a hipótese que propomos. Quem confirma é a revisão
 | `face_distance` | Auditoria da conferência do rosto (só um número, não é biometria) | Enquanto o cadastro existir |
 | `user_agent` | Investigar abuso | 30 dias |
 | `guardian_email_status`, `guardian_email_at` | Saber se o aviso foi entregue | Enquanto o cadastro existir |
+| `checked_out_at`, `checkout_by`, `checkout_leader_id`, `checkout_recorded_at` | Saída do culto (checkout): horário, se foi o adolescente ou um líder que registrou, e quando | Enquanto o cadastro existir |
+| `checkout_distance_m` | Distância até a igreja na hora da saída, só se o celular já tinha permissão de localização. Não bloqueia a saída | Enquanto o cadastro existir |
+| `checkout_email_status` | Saber se o aviso de saída foi entregue | Enquanto o cadastro existir |
 | Visitante: `visitor_name`, `visitor_phone`, foto opcional | Registrar a visita | **180 dias** |
 
 ## Registros técnicos

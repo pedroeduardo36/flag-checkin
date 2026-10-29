@@ -26,6 +26,25 @@ describe("sessão da visita (quem pode rever foto e horário do check-in)", () =
     expect(readVisitSession(`${forged}.${sig}`)).toBeNull(); // trocar o adolescente invalida a assinatura
   });
 
+  it("guarda o check-in (para a saída) e vale também para visitante, sem dar acesso de adolescente", async () => {
+    const { VISIT_COOKIE, createVisitSession, hasVisitSession, readVisitSession, visitFromRequest } = await load();
+    const ana = createVisitSession("ana", "2026-10-25", Date.now(), "ck-1");
+    expect(readVisitSession(ana.value)).toMatchObject({ mid: "ana", cid: "ck-1", date: "2026-10-25" });
+    const vis = createVisitSession(null, "2026-10-25", Date.now(), "ck-2");
+    const c = `${VISIT_COOKIE}=${encodeURIComponent(vis.value)}`;
+    expect(visitFromRequest(req(c))).toMatchObject({ mid: null, cid: "ck-2" });
+    expect(hasVisitSession(req(c), "ana", "2026-10-25")).toBe(false);
+    // Trocar o check-in no cookie invalida a assinatura: não dá para fechar a visita de outra pessoa.
+    const [, sig] = ana.value.split(".");
+    const forged = Buffer.from(JSON.stringify({ mid: "ana", cid: "ck-9", date: "2026-10-25", exp: Date.now() + 1e6 })).toString("base64url");
+    expect(readVisitSession(`${forged}.${sig}`)).toBeNull();
+  });
+
+  it("cookie antigo, sem o check-in, continua válido", async () => {
+    const { createVisitSession, readVisitSession } = await load();
+    expect(readVisitSession(createVisitSession("ana", "2026-10-25").value)).toMatchObject({ mid: "ana", date: "2026-10-25" });
+  });
+
   it("expira", async () => {
     const { createVisitSession, readVisitSession } = await load();
     const now = Date.now();

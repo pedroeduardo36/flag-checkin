@@ -95,15 +95,18 @@ export const POST = withErrors(async (req: Request) => {
     // ser o adolescente, então pode ver o próprio check-in (e este aparelho ganha a sessão da visita).
     const { data: existing } = await db()
       .from("checkins")
-      .select("checked_in_at, photo_path")
+      .select("id, checked_in_at, checked_out_at, photo_path")
       .eq("member_id", m.id)
       .eq("service_date", date)
       .single();
     const signed = existing?.photo_path ? (await db().storage.from(PHOTO_BUCKET).createSignedUrl(existing.photo_path, 300)).data : null;
     log("DUPLICADO");
-    const visit = createVisitSession(m.id, date);
+    const visit = createVisitSession(m.id, date, Date.now(), existing?.id);
     const dup = NextResponse.json(
-      { error: "Você já fez check-in hoje.", code: "DUPLICADO", name: m.name, checkedInAt: existing?.checked_in_at ?? null, photoUrl: signed?.signedUrl ?? null },
+      {
+        error: "Você já fez check-in hoje.", code: "DUPLICADO", name: m.name, checkedInAt: existing?.checked_in_at ?? null,
+        checkedOutAt: existing?.checked_out_at ?? null, photoUrl: signed?.signedUrl ?? null,
+      },
       { status: 409 },
     );
     dup.cookies.set(VISIT_COOKIE, visit.value, visitCookieOptions(visit.maxAge));
@@ -122,8 +125,9 @@ export const POST = withErrors(async (req: Request) => {
   });
 
   log("ok");
-  // Este aparelho provou ser o adolescente (rosto conferido): só ele pode rever a foto e o horário hoje.
-  const visit = createVisitSession(m.id, date);
+  // Este aparelho provou ser o adolescente (rosto conferido): só ele pode rever a foto e o horário
+  // hoje, e confirmar a saída com um toque.
+  const visit = createVisitSession(m.id, date, Date.now(), data.id);
   const res = NextResponse.json({ ok: true, name: m.name, checkedInAt: data.checked_in_at, photoKind, isFirst: !anteriores });
   res.cookies.set(VISIT_COOKIE, visit.value, visitCookieOptions(visit.maxAge));
   return res;
