@@ -1,4 +1,4 @@
--- Segundo e-mail (opcional) do responsável: os dois recebem o aviso de check-in.
+-- Guardian's (optional) second email: both receive the check-in notice.
 alter table public.members add column if not exists guardian_email2 text
   check (guardian_email2 is null or guardian_email2 ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$');
 

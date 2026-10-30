@@ -6,7 +6,7 @@ import { PHOTO_BUCKET } from "@/lib/server/env";
 import { checkGeofence, decodePhoto, parseCoords, serviceDate } from "@/lib/server/security";
 import { isValidPhone, nameTokens, onlyDigits } from "@/lib/format";
 
-// Check-in de visitante: só nome e telefone; a foto criativa é opcional.
+// Visitor check-in: only name and phone; the creative photo is optional.
 export const POST = withErrors(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const coords = parseCoords(body);
@@ -37,7 +37,7 @@ export const POST = withErrors(async (req: Request) => {
 
   let path: string | null = null;
   if (photo) {
-    path = `checkins/${date}/visitante-${randomUUID()}.jpg`; // sem o telefone no nome do arquivo
+    path = `checkins/${date}/visitante-${randomUUID()}.jpg`; // no phone number in the file name
     const up = await db().storage.from(PHOTO_BUCKET).upload(path, photo.buffer, { contentType: photo.contentType });
     if (up.error) throw up.error;
   }

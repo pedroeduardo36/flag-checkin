@@ -66,7 +66,7 @@ async function send(method: string, path: string, body?: unknown) {
   return { status: r?.status ?? 0, data: (r ? await r.json().catch(() => ({})) : {}) as Record<string, any> };
 }
 
-/** Aba "Líderes": contas, sessões, códigos de ativação/recuperação e o registro de ações. */
+/** "Líderes" tab: accounts, sessions, activation/recovery codes and the action log. */
 export function LeadersAdmin({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [me, setMe] = useState<{ id: string } | null>(null);
   const [leaders, setLeaders] = useState<LeaderRow[]>([]);
@@ -194,8 +194,8 @@ export function LeadersAdmin({ onUnauthorized }: { onUnauthorized: () => void })
 const fmtDate = (iso: string) => iso.slice(0, 10).split("-").reverse().join("/");
 
 /**
- * Pedidos das famílias: ver (exportar), reenviar a confirmação, retirar a biometria e apagar.
- * Antes de atender, confirme que quem pede é o responsável (docs/privacidade/pedidos-das-familias.md).
+ * Family requests: view (export), resend the confirmation, withdraw biometrics and delete.
+ * Before acting, confirm the requester is the guardian (docs/privacy/family-requests.md).
  */
 function FamilyRequests({ onUnauthorized, onDone }: { onUnauthorized: () => void; onDone: () => void }) {
   const [q, setQ] = useState("");
@@ -301,7 +301,7 @@ function FamilyRequests({ onUnauthorized, onDone }: { onUnauthorized: () => void
   );
 }
 
-/** Cadastros parecidos (mesmo nascimento e nome compatível) esperando a decisão de um líder. */
+/** Similar registrations (same birth date and a compatible name) waiting for a leader's decision. */
 function Duplicates({ onUnauthorized, onDone }: { onUnauthorized: () => void; onDone: () => void }) {
   const [pairs, setPairs] = useState<DupPair[] | null>(null);
   const [error, setError] = useState<string | null>(null);

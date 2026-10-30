@@ -7,17 +7,17 @@ beforeEach(() => {
 const load = () => import("@/lib/server/visit");
 const req = (cookie?: string) => new Request("http://x/api/checkin/identificar", { method: "POST", headers: cookie ? { cookie } : {} });
 
-describe("sessão da visita (quem pode rever foto e horário do check-in)", () => {
-  it("vale só para o adolescente e o dia em que o check-in foi concluído", async () => {
+describe("visit session (who can see the check-in photo and time again)", () => {
+  it("only valid for the teen and the day the check-in was completed", async () => {
     const { VISIT_COOKIE, createVisitSession, hasVisitSession } = await load();
     const { value } = createVisitSession("ana", "2026-10-25");
     const c = `${VISIT_COOKIE}=${encodeURIComponent(value)}`;
     expect(hasVisitSession(req(c), "ana", "2026-10-25")).toBe(true);
     expect(hasVisitSession(req(c), "bruno", "2026-10-25")).toBe(false); // outro adolescente
-    expect(hasVisitSession(req(c), "ana", "2026-11-01")).toBe(false); // outro culto
+    expect(hasVisitSession(req(c), "ana", "2026-11-01")).toBe(false); // another service
   });
 
-  it("sem cookie, cookie forjado ou adulterado → sem acesso", async () => {
+  it("no cookie, forged or tampered cookie → no access", async () => {
     const { VISIT_COOKIE, createVisitSession, hasVisitSession, readVisitSession } = await load();
     expect(hasVisitSession(req(), "ana", "2026-10-25")).toBe(false);
     expect(hasVisitSession(req(`${VISIT_COOKIE}=abc.def`), "ana", "2026-10-25")).toBe(false);
@@ -26,7 +26,7 @@ describe("sessão da visita (quem pode rever foto e horário do check-in)", () =
     expect(readVisitSession(`${forged}.${sig}`)).toBeNull(); // trocar o adolescente invalida a assinatura
   });
 
-  it("expira", async () => {
+  it("expires", async () => {
     const { createVisitSession, readVisitSession } = await load();
     const now = Date.now();
     const { value } = createVisitSession("ana", "2026-10-25", now);
@@ -34,7 +34,7 @@ describe("sessão da visita (quem pode rever foto e horário do check-in)", () =
     expect(readVisitSession(value, now + 19 * 3600_000)).toBeNull();
   });
 
-  it("cookie httpOnly, SameSite=strict e restrito às rotas de check-in", async () => {
+  it("httpOnly, SameSite=strict cookie scoped to the check-in routes", async () => {
     const { visitCookieOptions } = await load();
     expect(visitCookieOptions(60)).toMatchObject({ httpOnly: true, sameSite: "strict", path: "/api/checkin" });
   });

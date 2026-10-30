@@ -8,12 +8,12 @@ import { nameMatchScore, nameTokens } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 /**
- * Pedidos das famílias (docs/privacidade/pedidos-das-familias.md), atendidos por um líder logado:
- *   GET ?q=nome            → busca (até 20) · GET ?pendentes=1 → aguardando confirmação do responsável
- *   GET ?exportar=<id>     → todos os dados do cadastro em JSON (pedido de acesso)
- *   PATCH { id, action }   → reenviar (novo link de confirmação) | revogar_biometria
- *   DELETE { id, reason }  → apaga o cadastro inteiro (exclusão ou retirada do consentimento)
- * Tudo vai para o registro de ações, sem o nome do adolescente (o id basta).
+ * Family requests (docs/privacy/family-requests.md), handled by a signed-in leader:
+ *   GET ?q=name            → search (up to 20) · GET ?pendentes=1 → awaiting guardian confirmation
+ *   GET ?exportar=<id>     → all of the registration's data as JSON (access request)
+ *   PATCH { id, action }   → reenviar (new confirmation link) | revogar_biometria
+ *   DELETE { id, reason }  → deletes the whole registration (erasure or consent withdrawal)
+ * Everything goes to the action log, without the teen's name (the id is enough).
  */
 
 const LIST_COLS =
@@ -78,7 +78,7 @@ export const GET = withErrors(async (req: Request) => {
   const q = String(url.searchParams.get("q") ?? "").trim().slice(0, 80);
   if (nameTokens(q).length < 1) return NextResponse.json({ items: [] }, noStore);
   const first = nameTokens(q)[0];
-  // Poucas centenas de cadastros: a comparação de nomes (sem acento, "de/da") é feita aqui, não no banco.
+  // A few hundred registrations: name matching (no accents, "de/da") happens here, not in the database.
   const { data, error } = await db().from("members").select(LIST_COLS).limit(5000);
   if (error) throw error;
   const items = (data as Row[])
@@ -110,7 +110,7 @@ export const PATCH = withErrors(async (req: Request) => {
     .maybeSingle();
   if (!m) return NextResponse.json({ error: "Cadastro não encontrado." }, { status: 404 });
   const sent = await sendVerifications(m, appUrl(req));
-  // Cadastro novo que perdeu o prazo de 7 dias ganha mais 7 a partir do reenvio.
+  // A new registration that missed its 7-day window gets 7 more days from the resend.
   if (sent && m.consent_version && !m.guardian_email_verified_at)
     await db().from("members").update({ verify_by: new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10) }).eq("id", m.id);
   await adminAudit(req, { actor: s.leader, action: "confirmacao_reenviada", outcome: sent ? "ok" : "erro", targetType: "cadastro", targetId: m.id, details: { emails: sent } });

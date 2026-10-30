@@ -11,7 +11,7 @@ import { VISIT_COOKIE, createVisitSession, visitCookieOptions } from "@/lib/serv
 
 export const maxDuration = 30;
 
-/** Rosto de referência do cadastro. Cadastros antigos com foto mas sem descritor são calculados agora. */
+/** The registration's reference face. Older registrations with a photo but no descriptor are computed now. */
 async function referenceDescriptor(m: { id: string; face_descriptor: unknown; photo_path: string | null }) {
   const saved = parseDescriptor(m.face_descriptor);
   if (saved || !m.photo_path) return saved;
@@ -23,8 +23,8 @@ async function referenceDescriptor(m: { id: string; face_descriptor: unknown; ph
   return face.descriptor;
 }
 
-// Etapa 3. No 1º check-in são duas chamadas: a foto de REGISTRO (completa o cadastro, sem check-in)
-// e depois a foto CRIATIVA (conclui o check-in). Nos seguintes, só a criativa.
+// Step 3. On the first check-in there are two calls: the REGISTRATION photo (completes the registration, no check-in)
+// and then the CREATIVE photo (completes the check-in). Later check-ins only send the creative one.
 export const POST = withErrors(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const t = readCheckinToken(body?.token);
@@ -39,15 +39,15 @@ export const POST = withErrors(async (req: Request) => {
     .select("id, name, face_descriptor, photo_path, guardian_name, guardian_email, guardian_email2, guardian_email_verified_at, guardian_email2_verified_at, biometric_consent_at, consent_version, verify_by")
     .eq("id", t.mid)
     .single();
-  if (mErr || !m) throw mErr ?? new Error("Membro não encontrado");
-  // O consentimento pode ter sido retirado depois da identificação (o token vale 4 h).
+  if (mErr || !m) throw mErr ?? new Error("Member not found");
+  // Consent may have been withdrawn after identification (the token is valid for 4 h).
   if (!checkinAllowed(m))
     return log("CADASTRO_PENDENTE"), NextResponse.json({ error: "Seu cadastro ainda não foi confirmado pelo seu responsável.", code: "CADASTRO_PENDENTE" }, { status: 403 });
 
   const reference = await referenceDescriptor(m);
 
   if (!reference) {
-    // FOTO DE REGISTRO: um rosto só, de perto. Vira a foto do cadastro; o check-in vem com a criativa.
+    // REGISTRATION PHOTO: a single face, close up. It becomes the registration photo; the check-in comes with the creative one.
     const face = await analyzeFace(photo.buffer);
     if (!face.ok) return log(face.code), NextResponse.json({ error: face.message, code: face.code }, { status: 422 });
     const regPath = `membros/${m.id}-${Date.now()}.jpg`;
@@ -59,7 +59,7 @@ export const POST = withErrors(async (req: Request) => {
     return NextResponse.json({ ok: true, registered: true, next: "criativa", name: m.name });
   }
 
-  // FOTO CRIATIVA (amigos, pose, careta): basta um rosto conferir com o registro.
+  // CREATIVE PHOTO (friends, poses, funny faces): one face matching the registration is enough.
   const match = await matchCreativePhoto(photo.buffer, reference);
   if (!match.ok)
     return log(match.code), NextResponse.json({ error: match.message, code: match.code }, { status: match.code === "ROSTO_NAO_CONFERE" ? 403 : 422 });
@@ -68,7 +68,7 @@ export const POST = withErrors(async (req: Request) => {
   const path = `checkins/${date}/${m.id}-${Date.now()}.jpg`;
   const up = await db().storage.from(PHOTO_BUCKET).upload(path, photo.buffer, { contentType: photo.contentType });
   if (up.error) throw up.error;
-  const { count: anteriores } = await db().from("checkins").select("id", { count: "exact", head: true }).eq("member_id", m.id);
+  const { count: previousCheckins } = await db().from("checkins").select("id", { count: "exact", head: true }).eq("member_id", m.id);
   const photoKind = "criativa" as const;
   const faceDistance = Number(match.distance.toFixed(4));
 
@@ -81,7 +81,7 @@ export const POST = withErrors(async (req: Request) => {
       distance_m: t.dist,
       photo_path: path,
       photo_kind: photoKind,
-      is_first: !anteriores,
+      is_first: !previousCheckins,
       face_distance: faceDistance,
       user_agent: req.headers.get("user-agent")?.slice(0, 300) ?? null,
     })
@@ -91,8 +91,8 @@ export const POST = withErrors(async (req: Request) => {
   if (error) {
     await db().storage.from(PHOTO_BUCKET).remove([path]);
     if (error.code !== "23505") throw error;
-    // Já havia check-in hoje. Só chegamos aqui DEPOIS de o rosto conferir: quem está no aparelho provou
-    // ser o adolescente, então pode ver o próprio check-in (e este aparelho ganha a sessão da visita).
+    // There was already a check-in today. We only get here AFTER the face matched: whoever holds the device proved
+    // to be the teen, so they can see their own check-in (and this device gets the visit session).
     const { data: existing } = await db()
       .from("checkins")
       .select("checked_in_at, photo_path")
@@ -110,9 +110,9 @@ export const POST = withErrors(async (req: Request) => {
     return dup;
   }
 
-  // Aviso ao responsável depois da resposta: o adolescente não espera o servidor de e-mail.
+  // Guardian notice after the response: the teen doesn't wait for the mail server.
   after(async () => {
-    // Só texto, e só para e-mails confirmados: a foto criativa não sai do app.
+    // Text only, and only to confirmed emails: the creative photo never leaves the app.
     const status = await sendCheckinEmail(noticeRecipients(m), {
       guardianName: m.guardian_name ?? "",
       teenName: m.name,
@@ -122,9 +122,9 @@ export const POST = withErrors(async (req: Request) => {
   });
 
   log("ok");
-  // Este aparelho provou ser o adolescente (rosto conferido): só ele pode rever a foto e o horário hoje.
+  // This device proved to be the teen (face matched): only it can see the photo and time again today.
   const visit = createVisitSession(m.id, date);
-  const res = NextResponse.json({ ok: true, name: m.name, checkedInAt: data.checked_in_at, photoKind, isFirst: !anteriores });
+  const res = NextResponse.json({ ok: true, name: m.name, checkedInAt: data.checked_in_at, photoKind, isFirst: !previousCheckins });
   res.cookies.set(VISIT_COOKIE, visit.value, visitCookieOptions(visit.maxAge));
   return res;
 });

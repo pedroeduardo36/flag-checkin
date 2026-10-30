@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 
-/** Garante resposta JSON mesmo quando algo inesperado explode (ex.: variável de ambiente ausente). */
+/** Always returns JSON, even when something unexpected throws (e.g. a missing environment variable). The message is for the user, so it stays in Portuguese. */
 export function withErrors(fn: (req: Request) => Promise<Response>) {
   return async (req: Request) => {
     try {

@@ -7,9 +7,9 @@ import { PRIVACY_OWNER, REQUEST_DAYS, RETENTION as R } from "@/lib/privacy";
 
 export const metadata: Metadata = { title: "Privacidade · Check-in Flag O2" };
 
-// Explicação para as famílias e os adolescentes. Linguagem simples; os detalhes técnicos ficam em docs/privacidade.
+// Explanation for families and teens. Plain language; the technical details live in docs/privacy.
 export default function PrivacidadePage() {
-  const contato = process.env.PRIVACY_EMAIL || senderAddress();
+  const contact = process.env.PRIVACY_EMAIL || senderAddress();
   const rows: [string, string, string][] = [
     ["Nome e data de nascimento do adolescente", "Encontrar o cadastro no check-in", "Enquanto o cadastro existir"],
     ["Celular do adolescente (opcional)", "Falar com o adolescente, se preciso", "Enquanto o cadastro existir"],
@@ -42,7 +42,7 @@ export default function PrivacidadePage() {
         <h2>Quem cuida dos dados</h2>
         <p>
           O <b>Ministério Flag (Juventude O2)</b>. Pedidos e dúvidas: <b>{PRIVACY_OWNER}</b>
-          {contato ? <>, pelo e-mail <a href={`mailto:${contato}`}>{contato}</a></> : null}.
+          {contact ? <>, pelo e-mail <a href={`mailto:${contact}`}>{contact}</a></> : null}.
         </p>
 
         <h2>Reconhecimento facial, explicado</h2>
@@ -114,7 +114,7 @@ export default function PrivacidadePage() {
         <p>
           A qualquer momento, o responsável pode pedir para <b>ver</b> os dados, <b>corrigir</b> algo, <b>apagar</b> o
           cadastro ou <b>retirar a autorização</b>, inteira ou só a do reconhecimento facial. Basta escrever para{" "}
-          {contato ? <a href={`mailto:${contato}`}>{contato}</a> : "a liderança da O2"} ou falar com um líder. Antes,
+          {contact ? <a href={`mailto:${contact}`}>{contact}</a> : "a liderança da O2"} ou falar com um líder. Antes,
           confirmamos que quem pede é mesmo o responsável. Respondemos em até <b>{REQUEST_DAYS} dias</b>.
         </p>
 

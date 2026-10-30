@@ -7,7 +7,7 @@ import { brDateToIso, isValidBirthDate, isValidPhone, maskDate, maskPhone, nameT
 
 type Coords = { lat: number; lng: number; accuracy: number };
 type PhotoKind = "registro" | "criativa";
-/** Identificação feita na entrada, guardada no celular até a foto (que pode ser já dentro do culto). */
+/** Identification done at the entrance, kept on the phone until the photo (which may be taken once inside). */
 type Pending = { token: string; firstName: string; photoKind: PhotoKind; expiresAt: string };
 
 type Step =
@@ -63,7 +63,7 @@ export default function CheckinPage() {
 
   useEffect(() => {
     (async () => {
-      // Já se identificou na entrada? Vai direto para a foto.
+      // Already identified at the entrance? Go straight to the photo.
       const pending = loadPending();
       if (pending) return setStep({ name: "photo", pending });
 
@@ -127,7 +127,7 @@ export default function CheckinPage() {
     const pending: Pending = { token: r.data.token, firstName: r.data.firstName, photoKind: r.data.photoKind, expiresAt: r.data.expiresAt };
     savePending(pending);
     setPhoto(null);
-    // 1º check-in: foto de registro primeiro. Demais: explica a foto criativa antes da câmera.
+    // First check-in: registration photo first. Otherwise: explain the creative photo before the camera.
     setStep(pending.photoKind === "registro" ? { name: "photo", pending } : { name: "explain", pending, justRegistered: false });
   }
 
@@ -144,7 +144,7 @@ export default function CheckinPage() {
         return setStep({ name: "intro" });
       }
       if (r.data.code === "DUPLICADO") {
-        // Rosto conferido e já havia check-in hoje: mostra o check-in existente.
+        // Face matched and there was already a check-in today: show the existing check-in.
         savePending(null);
         return setStep({ name: "success", who: r.data.name, photo: r.data.photoUrl, at: r.data.checkedInAt, repeat: true, kind: "criativa" });
       }
@@ -152,7 +152,7 @@ export default function CheckinPage() {
       return setError({ msg: r.data.error ?? "Erro inesperado.", code: r.data.code });
     }
     if (r.data.registered) {
-      // Foto de registro salva no cadastro. Falta a foto criativa para concluir o check-in.
+      // Registration photo saved. The creative photo is still needed to complete the check-in.
       const next: Pending = { ...pending, photoKind: "criativa" };
       savePending(next);
       setPhoto(null);

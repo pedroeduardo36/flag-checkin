@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Brand } from "@/components/Brand";
-import { CadastroForm } from "@/components/CadastroForm";
+import { RegistrationForm } from "@/components/RegistrationForm";
 import { PastorDashboard } from "@/components/PastorDashboard";
 import { LeaderAuth, type AuthStep } from "@/components/LeaderAuth";
 import { LeadersAdmin } from "@/components/LeadersAdmin";
@@ -23,10 +23,10 @@ type Item = {
 };
 
 type Auth = "checking" | "in" | AuthStep;
-type Tab = "feed" | "dashboard" | "cadastro" | "lideres";
+type Tab = "feed" | "dashboard" | "registration" | "leaders";
 
 const POLL_MS = 4000;
-const FULL_RELOAD_MS = 30 * 60 * 1000; // renova as URLs assinadas das fotos (valem 1 h)
+const FULL_RELOAD_MS = 30 * 60 * 1000; // refreshes the photos' signed URLs (valid for 1 h)
 
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
@@ -40,8 +40,8 @@ function ago(iso: string, now: number) {
   return `há ${h} h${m % 60 ? ` ${m % 60} min` : ""}`;
 }
 
-/** Etapa da sessão no servidor → tela. */
-const STEP_OF: Record<string, Auth> = { completa: "in", senha: "codigo", cadastro_totp: "cadastro" };
+/** Server-side session stage → screen. */
+const STEP_OF: Record<string, Auth> = { completa: "in", senha: "code", cadastro_totp: "enroll" };
 
 export default function PastorPage() {
   const [auth, setAuth] = useState<Auth>("checking");
@@ -90,25 +90,25 @@ export default function PastorPage() {
         <button role="tab" aria-selected={tab === "dashboard"} className={tab === "dashboard" ? "on" : ""} onClick={() => setTab("dashboard")}>
           Dashboard
         </button>
-        <button role="tab" aria-selected={tab === "cadastro"} className={tab === "cadastro" ? "on" : ""} onClick={() => setTab("cadastro")}>
+        <button role="tab" aria-selected={tab === "registration"} className={tab === "registration" ? "on" : ""} onClick={() => setTab("registration")}>
           Cadastrar
         </button>
-        <button role="tab" aria-selected={tab === "lideres"} className={tab === "lideres" ? "on" : ""} onClick={() => setTab("lideres")}>
+        <button role="tab" aria-selected={tab === "leaders"} className={tab === "leaders" ? "on" : ""} onClick={() => setTab("leaders")}>
           Líderes
         </button>
       </nav>
 
-      {/* O feed continua montado (e atualizando) enquanto o líder usa as outras abas. */}
+      {/* The feed stays mounted (and updating) while the leader uses the other tabs. */}
       <div hidden={tab !== "feed"}>
         <Feed onUnauthorized={expired} />
       </div>
       {tab === "dashboard" && <PastorDashboard onUnauthorized={expired} />}
-      {tab === "cadastro" && (
+      {tab === "registration" && (
         <section className="card">
-          <CadastroForm mode="pastor" onSessionExpired={expired} />
+          <RegistrationForm mode="pastor" onSessionExpired={expired} />
         </section>
       )}
-      {tab === "lideres" && <LeadersAdmin onUnauthorized={expired} />}
+      {tab === "leaders" && <LeadersAdmin onUnauthorized={expired} />}
       <footer className="foot">Ministério Flag · Juventude O2 · {name ? `conectado como ${name}` : "área dos líderes"}</footer>
     </main>
   );
@@ -265,7 +265,7 @@ function Post({ it, now, isNew = false, example = false, onRemoved, onUnauthoriz
   );
 }
 
-/** Correção de presença: remove um check-in registrado por engano, com motivo (vai para o registro de ações). */
+/** Attendance correction: removes a check-in made by mistake, with a reason (it goes to the action log). */
 function Correction({ it, onRemoved, onUnauthorized }: { it: Item; onRemoved: () => void; onUnauthorized: () => void }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");

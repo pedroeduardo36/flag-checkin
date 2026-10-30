@@ -24,7 +24,7 @@ function toJpeg(source: CanvasImageSource, w: number, h: number, mirror: boolean
   return canvas.toDataURL("image/jpeg", 0.82);
 }
 
-/** Câmera frontal ao vivo; se o navegador não permitir, cai para o seletor nativo da câmera. */
+/** Live front camera; if the browser doesn't allow it, falls back to the native camera picker. */
 export function Camera({ value, onChange, label = "Tirar foto" }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);

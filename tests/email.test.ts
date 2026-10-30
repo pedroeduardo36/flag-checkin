@@ -7,7 +7,7 @@ const SMTP = { SMTP_HOST: "smtp.exemplo.com", SMTP_USER: "user", SMTP_PASS: "pas
 const dados = {
   guardianName: "Maria Souza",
   teenName: "Ana <b>Beatriz</b> Souza",
-  checkedInAt: "2026-10-18T22:47:00Z", // 19:47 em Brasília
+  checkedInAt: "2026-10-18T22:47:00Z", // 19:47 Brasília time
 };
 
 beforeEach(() => {
@@ -18,8 +18,8 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 const load = () => import("@/lib/server/email");
 
-describe("modelo do e-mail de check-in", () => {
-  it("traz nome e horário de Brasília, SÓ TEXTO: nenhuma foto sai por e-mail", async () => {
+describe("check-in email template", () => {
+  it("includes the name and Brasília time, TEXT ONLY: no photo leaves by email", async () => {
     const { buildCheckinEmail } = await load();
     const e = buildCheckinEmail(dados);
     expect(e.subject).toContain("19:47");
@@ -32,7 +32,7 @@ describe("modelo do e-mail de check-in", () => {
     expect(e.text).toContain("exclusão dos dados");
   });
 
-  it("escapa HTML vindo do cadastro", async () => {
+  it("escapes HTML coming from the registration", async () => {
     const { buildCheckinEmail } = await load();
     const { html } = buildCheckinEmail(dados);
     expect(html).not.toContain("<b>Beatriz</b>");
@@ -40,19 +40,19 @@ describe("modelo do e-mail de check-in", () => {
   });
 });
 
-describe("envio", () => {
-  it("sem e-mail cadastrado → sem_email", async () => {
+describe("sending", () => {
+  it("no registered email → sem_email", async () => {
     const { sendCheckinEmail } = await load();
     expect(await sendCheckinEmail(null, dados)).toBe("sem_email");
   });
 
-  it("SMTP não configurado → sem_config (não tenta enviar)", async () => {
+  it("SMTP not configured → sem_config (doesn't try to send)", async () => {
     const { sendCheckinEmail } = await load();
     expect(await sendCheckinEmail("mae@exemplo.com", dados)).toBe("sem_config");
     expect(sendMail).not.toHaveBeenCalled();
   });
 
-  it("configurado → envia do remetente para o responsável", async () => {
+  it("configured → sends from the sender to the guardian", async () => {
     Object.assign(process.env, SMTP);
     sendMail.mockResolvedValue({ messageId: "1" });
     const { sendCheckinEmail } = await load();
@@ -60,7 +60,7 @@ describe("envio", () => {
     expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: "mae@exemplo.com", from: SMTP.EMAIL_FROM }));
   });
 
-  it("envia para os dois e-mails do responsável, sem repetir e ignorando vazios", async () => {
+  it("sends to both guardian emails, without duplicates and ignoring blanks", async () => {
     Object.assign(process.env, SMTP);
     sendMail.mockResolvedValue({ messageId: "1" });
     const { sendCheckinEmail } = await load();
@@ -68,12 +68,12 @@ describe("envio", () => {
     expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: "mae@exemplo.com, pai@exemplo.com" }));
   });
 
-  it("lista sem nenhum e-mail → sem_email", async () => {
+  it("list without any email → sem_email", async () => {
     const { sendCheckinEmail } = await load();
     expect(await sendCheckinEmail([null, ""], dados)).toBe("sem_email");
   });
 
-  it("erro do servidor SMTP → falhou (o check-in não quebra)", async () => {
+  it("SMTP server error → falhou (the check-in doesn't break)", async () => {
     Object.assign(process.env, SMTP);
     sendMail.mockRejectedValue(new Error("535 auth failed"));
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -82,10 +82,10 @@ describe("envio", () => {
   });
 });
 
-describe("e-mail de confirmação do cadastro (verificação do responsável)", () => {
+describe("registration confirmation email (guardian verification)", () => {
   const base = { guardianName: "Maria Souza", teenName: "Ana <i>Beatriz</i> Souza", link: "https://app.exemplo/confirmar#t=abc", validDays: 7 };
 
-  it("e-mail principal: pede para ler e confirmar, explica o prazo e escapa HTML", async () => {
+  it("primary email: asks to read and confirm, explains the deadline and escapes HTML", async () => {
     const { buildVerificationEmail } = await load();
     const e = buildVerificationEmail({ ...base, primary: true });
     expect(e.subject).toBe("Confirme o cadastro de Ana na O2 · Flag");
@@ -96,14 +96,14 @@ describe("e-mail de confirmação do cadastro (verificação do responsável)", 
     expect(e.html).not.toContain("<i>Beatriz</i>");
   });
 
-  it("segundo e-mail: só confirma que quer os avisos", async () => {
+  it("second email: only confirms it wants the notices", async () => {
     const { buildVerificationEmail } = await load();
     const e = buildVerificationEmail({ ...base, primary: false });
     expect(e.subject).toContain("Confirme este e-mail");
     expect(e.text).toContain("indicou este e-mail");
   });
 
-  it("envia para um endereço por vez (cada um tem o próprio link)", async () => {
+  it("sends to one address at a time (each has its own link)", async () => {
     Object.assign(process.env, SMTP);
     sendMail.mockResolvedValue({ messageId: "1" });
     const { sendVerificationEmail } = await load();
@@ -111,7 +111,7 @@ describe("e-mail de confirmação do cadastro (verificação do responsável)", 
     expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: "mae@exemplo.com" }));
   });
 
-  it("extrai o endereço do remetente de EMAIL_FROM", async () => {
+  it("extracts the sender address from EMAIL_FROM", async () => {
     Object.assign(process.env, SMTP);
     const { senderAddress } = await load();
     expect(senderAddress()).toBe("checkin@exemplo.com");

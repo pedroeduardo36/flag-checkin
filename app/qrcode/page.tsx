@@ -4,7 +4,7 @@ import { Shell } from "@/components/Brand";
 
 export const metadata: Metadata = { title: "QR code do check-in · Flag" };
 
-// Página para imprimir ou projetar na entrada do culto.
+// Page to print or project at the service entrance.
 export default async function QrCodePage() {
   const h = await headers();
   const base = (process.env.PUBLIC_APP_URL || `https://${h.get("host")}`).replace(/\/$/, "");
