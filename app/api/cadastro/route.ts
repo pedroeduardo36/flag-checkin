@@ -1,19 +1,19 @@
 import { withErrors } from "@/lib/server/http";
 import { NextResponse, after } from "next/server";
 import { db } from "@/lib/server/supabase";
-import { emailConfigured, sendCadastroEmail, senderAddress } from "@/lib/server/email";
+import { emailConfigured, sendRegistrationEmail, senderAddress } from "@/lib/server/email";
 import { isValidBirthDate, isValidCpf, isValidEmail, isValidPhone, nameTokens, onlyDigits } from "@/lib/format";
 
 const clean = (v: unknown, max = 120) => String(v ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
 /**
- * Cadastro feito pelo RESPONSÁVEL antes do culto (página /cadastro) ou pelo pastor.
- * Sem foto e sem senha do fiscal: a foto de referência é tirada no primeiro check-in.
+ * Registration made by the GUARDIAN before the service (/cadastro page) or by the pastor.
+ * No photo and no door-keeper password: the reference photo is taken at the first check-in.
  */
 export const POST = withErrors(async (req: Request) => {
   const b = await req.json().catch(() => null);
   if (!b) return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
-  // Campo invisível para pessoas: só robôs o preenchem.
+  // Field invisible to people: only bots fill it in.
   if (b.website) return NextResponse.json({ ok: true });
 
   const data = {
@@ -47,8 +47,8 @@ export const POST = withErrors(async (req: Request) => {
       return NextResponse.json({ error: "Este CPF já está cadastrado. O adolescente já pode fazer o check-in.", code: "CPF_EXISTE" }, { status: 409 });
     throw error;
   }
-  // Confirmação por e-mail depois da resposta: o responsável já confere se caiu no spam.
-  after(() => sendCadastroEmail([data.guardian_email, data.guardian_email2], { guardianName: data.guardian_name, teenName: data.name }));
+  // Confirmation email after the response: the guardian can already check their spam folder.
+  after(() => sendRegistrationEmail([data.guardian_email, data.guardian_email2], { guardianName: data.guardian_name, teenName: data.name }));
 
   return NextResponse.json({ ok: true, confirmationSent: emailConfigured(), sender: senderAddress() });
 });

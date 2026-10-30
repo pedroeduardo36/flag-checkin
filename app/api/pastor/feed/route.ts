@@ -25,9 +25,9 @@ type Row = {
 };
 
 /**
- * GET /api/pastor/feed?date=AAAA-MM-DD&since=ISO
- * Check-ins do dia (mais recentes primeiro). Com "since", só os que chegaram depois — usado no
- * acompanhamento em tempo real, que pergunta a cada poucos segundos.
+ * GET /api/pastor/feed?date=YYYY-MM-DD&since=ISO
+ * The day's check-ins (newest first). With "since", only those that arrived afterwards — used by the
+ * live view, which polls every few seconds.
  */
 export const GET = withErrors(async (req: Request) => {
   if (!(await requireLeader(req))) return unauthorized();
@@ -44,7 +44,7 @@ export const GET = withErrors(async (req: Request) => {
     .limit(300);
   if (since && !Number.isNaN(Date.parse(since))) q = q.gt("checked_in_at", since);
 
-  // Check-ins de exemplo (is_example): vêm só na carga completa, fora do contador do dia.
+  // Example check-ins (is_example): only in the full load, not counted in the day's total.
   const examplesQuery = since
     ? Promise.resolve({ data: [], error: null })
     : db().from("checkins").select(COLUMNS).eq("is_example", true).neq("service_date", date).order("checked_in_at", { ascending: false }).limit(5);
@@ -61,7 +61,7 @@ export const GET = withErrors(async (req: Request) => {
   const exampleRows = (ex.data ?? []) as Row[];
   const member = (r: Row) => (Array.isArray(r.members) ? r.members[0] : r.members);
 
-  // Uma chamada só para assinar todas as fotos (selfie + foto do cadastro).
+  // One call to sign every photo (selfie + registration photo).
   const paths = [...new Set([...rows, ...exampleRows].flatMap((r) => [r.photo_path, member(r)?.photo_path].filter(Boolean) as string[]))];
   const signed = paths.length ? (await db().storage.from(PHOTO_BUCKET).createSignedUrls(paths, PHOTO_URL_TTL)).data ?? [] : [];
   const urlOf = new Map(signed.map((s) => [s.path, s.signedUrl]));

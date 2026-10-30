@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Brand } from "@/components/Brand";
 
-export type AuthStep = "login" | "codigo" | "ativar" | "cadastro" | "codigos";
+export type AuthStep = "login" | "code" | "activate" | "enroll" | "recoveryCodes";
 
 type Props = { initial: AuthStep; onDone: () => void };
 
@@ -21,9 +21,9 @@ const errorOf = (r: { status: number; data: Record<string, any> }) =>
   r.status === 0 ? "Sem conexão. Tente de novo." : r.data.error ?? "Não foi possível continuar. Tente de novo.";
 
 /**
- * Acesso dos líderes: e-mail + senha → código do app autenticador. Primeiro acesso (ou acesso
- * redefinido por outro líder): código de ativação → senha nova → cadastro do autenticador →
- * códigos de recuperação. Não existe alternativa por SMS ou e-mail.
+ * Leader access: email + password → authenticator app code. First access (or access reset by another
+ * leader): activation code → new password → authenticator enrollment → recovery codes.
+ * There is no SMS or email fallback.
  */
 export function LeaderAuth({ initial, onDone }: Props) {
   const [step, setStep] = useState<AuthStep>(initial);
@@ -31,18 +31,18 @@ export function LeaderAuth({ initial, onDone }: Props) {
 
   const enrolled = (codes: string[]) => {
     setRecoveryCodes(codes);
-    setStep("codigos");
+    setStep("recoveryCodes");
   };
 
   return (
     <main className="shell">
       <Brand />
       <section className="card">
-        {step === "login" && <Login onNext={() => setStep("codigo")} onActivate={() => setStep("ativar")} />}
-        {step === "codigo" && <Code onOk={onDone} onEnroll={() => setStep("cadastro")} onRestart={() => setStep("login")} />}
-        {step === "ativar" && <Activate onNext={() => setStep("cadastro")} onBack={() => setStep("login")} />}
-        {step === "cadastro" && <Enroll onDone={enrolled} onExpired={() => setStep("login")} />}
-        {step === "codigos" && <RecoveryCodes codes={recoveryCodes} onContinue={onDone} />}
+        {step === "login" && <Login onNext={() => setStep("code")} onActivate={() => setStep("activate")} />}
+        {step === "code" && <Code onOk={onDone} onEnroll={() => setStep("enroll")} onRestart={() => setStep("login")} />}
+        {step === "activate" && <Activate onNext={() => setStep("enroll")} onBack={() => setStep("login")} />}
+        {step === "enroll" && <Enroll onDone={enrolled} onExpired={() => setStep("login")} />}
+        {step === "recoveryCodes" && <RecoveryCodes codes={recoveryCodes} onContinue={onDone} />}
       </section>
       <footer className="foot">Ministério Flag · Juventude O2 · área dos líderes</footer>
     </main>
@@ -92,7 +92,7 @@ function Login({ onNext, onActivate }: { onNext: () => void; onActivate: () => v
 }
 
 function Code({ onOk, onEnroll, onRestart }: { onOk: () => void; onEnroll: () => void; onRestart: () => void }) {
-  const [mode, setMode] = useState<"app" | "recuperacao">("app");
+  const [mode, setMode] = useState<"app" | "recovery">("app");
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -151,14 +151,14 @@ function Code({ onOk, onEnroll, onRestart }: { onOk: () => void; onEnroll: () =>
       </button>
       <p className="hint center-text">
         {mode === "app" ? (
-          <button type="button" className="linklike" onClick={() => { setMode("recuperacao"); setCode(""); setError(null); }}>Perdi o celular</button>
+          <button type="button" className="linklike" onClick={() => { setMode("recovery"); setCode(""); setError(null); }}>Perdi o celular</button>
         ) : (
           <button type="button" className="linklike" onClick={() => { setMode("app"); setCode(""); setError(null); }}>Usar o app autenticador</button>
         )}
         {" · "}
         <button type="button" className="linklike" onClick={restart}>Voltar</button>
       </p>
-      {mode === "recuperacao" && (
+      {mode === "recovery" && (
         <p className="hint">Sem códigos de recuperação? Peça a outro líder para <b>redefinir o seu acesso</b> na aba Líderes.</p>
       )}
     </form>

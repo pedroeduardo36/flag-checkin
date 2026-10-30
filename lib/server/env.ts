@@ -2,7 +2,7 @@ import "server-only";
 
 function required(name: string): string {
   const v = process.env[name];
-  if (!v) throw new Error(`Variável de ambiente ausente: ${name}`);
+  if (!v) throw new Error(`Missing environment variable: ${name}`);
   return v;
 }
 
@@ -12,12 +12,12 @@ export const env = {
   get churchLat() { return Number(required("CHURCH_LAT")); },
   get churchLng() { return Number(required("CHURCH_LNG")); },
   get churchRadius() { return Number(process.env.CHURCH_RADIUS_METERS ?? 150); },
-  /** Modo teste: GEOFENCE_DISABLED=true libera o check-in fora da igreja. Nunca deixe ligado em produção. */
+  /** Test mode: GEOFENCE_DISABLED=true allows check-in away from the church. Never leave it on in production. */
   get geofenceDisabled() { return process.env.GEOFENCE_DISABLED === "true"; },
-  /** Assina tokens e cookies, cifra o segredo do autenticador dos líderes e gera os hashes de códigos. */
+  /** Signs tokens and cookies, encrypts the leaders' authenticator secret and derives code hashes. */
   get checkinSecret() {
     const s = required("CHECKIN_SECRET");
-    if (s.length < 32) throw new Error("CHECKIN_SECRET precisa ter pelo menos 32 caracteres");
+    if (s.length < 32) throw new Error("CHECKIN_SECRET must be at least 32 characters long");
     return s;
   },
 };

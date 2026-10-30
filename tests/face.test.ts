@@ -2,30 +2,30 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { analyzeFace, faceDistance, matchCreativePhoto, matchThreshold, parseDescriptor } from "@/lib/server/face";
 
-// Rostos sintéticos (StyleGAN2, thispersondoesnotexist.com): nenhuma pessoa real.
-const foto = (nome: string) => readFileSync(`tests/fixtures/${nome}.jpg`);
+// Synthetic faces (StyleGAN2, thispersondoesnotexist.com): no real people.
+const photo = (name: string) => readFileSync(`tests/fixtures/${name}.jpg`);
 
-async function descritor(nome: string) {
-  const r = await analyzeFace(foto(nome));
-  if (!r.ok) throw new Error(`${nome}: ${r.code}`);
+async function descriptorOf(name: string) {
+  const r = await analyzeFace(photo(name));
+  if (!r.ok) throw new Error(`${name}: ${r.code}`);
   return r.descriptor;
 }
 
-describe("reconhecimento facial (servidor)", { timeout: 60_000 }, () => {
-  it("recusa foto sem rosto", async () => {
-    expect(await analyzeFace(foto("sem-rosto"))).toMatchObject({ ok: false, code: "SEM_ROSTO" });
+describe("face recognition (server)", { timeout: 60_000 }, () => {
+  it("rejects a photo without a face", async () => {
+    expect(await analyzeFace(photo("no-face"))).toMatchObject({ ok: false, code: "SEM_ROSTO" });
   });
 
-  it("recusa foto com duas pessoas", async () => {
-    expect(await analyzeFace(foto("duas-pessoas"))).toMatchObject({ ok: false, code: "VARIOS_ROSTOS" });
+  it("rejects a photo with two people", async () => {
+    expect(await analyzeFace(photo("two-people"))).toMatchObject({ ok: false, code: "VARIOS_ROSTOS" });
   });
 
-  it("recusa arquivo que não é JPEG válido", async () => {
+  it("rejects a file that isn't a valid JPEG", async () => {
     expect(await analyzeFace(Buffer.from("não é uma imagem"))).toMatchObject({ ok: false, code: "IMAGEM_INVALIDA" });
   });
 
-  it("aceita um rosto e gera descritor de 128 dimensões", async () => {
-    const r = await analyzeFace(foto("pessoa-a-cadastro"));
+  it("accepts a single face and produces a 128-dimension descriptor", async () => {
+    const r = await analyzeFace(photo("person-a-registration"));
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.descriptor).toHaveLength(128);
@@ -33,44 +33,44 @@ describe("reconhecimento facial (servidor)", { timeout: 60_000 }, () => {
     }
   });
 
-  it("mesma pessoa (espelhada, girada, mais escura) fica abaixo do limite", async () => {
-    const d = faceDistance(await descritor("pessoa-a-cadastro"), await descritor("pessoa-a-selfie"));
+  it("the same person (mirrored, rotated, darker) stays under the threshold", async () => {
+    const d = faceDistance(await descriptorOf("person-a-registration"), await descriptorOf("person-a-selfie"));
     expect(d).toBeLessThan(matchThreshold());
   });
 
-  it("pessoas diferentes ficam acima do limite", async () => {
-    const d = faceDistance(await descritor("pessoa-a-cadastro"), await descritor("pessoa-b"));
+  it("different people land above the threshold", async () => {
+    const d = faceDistance(await descriptorOf("person-a-registration"), await descriptorOf("person-b"));
     expect(d).toBeGreaterThan(matchThreshold());
   });
 });
 
-describe("foto criativa (check-ins seguintes)", { timeout: 60_000 }, () => {
-  it("aceita foto em grupo quando um dos rostos é o do adolescente", async () => {
-    const r = await matchCreativePhoto(foto("duas-pessoas"), await descritor("pessoa-a-cadastro"));
+describe("creative photo (later check-ins)", { timeout: 60_000 }, () => {
+  it("accepts a group photo when one of the faces is the teen's", async () => {
+    const r = await matchCreativePhoto(photo("two-people"), await descriptorOf("person-a-registration"));
     expect(r).toMatchObject({ ok: true, faces: 2 });
   });
-  it("aceita a mesma pessoa em outro ângulo e luz", async () => {
-    expect((await matchCreativePhoto(foto("pessoa-a-selfie"), await descritor("pessoa-a-cadastro"))).ok).toBe(true);
+  it("accepts the same person at another angle and lighting", async () => {
+    expect((await matchCreativePhoto(photo("person-a-selfie"), await descriptorOf("person-a-registration"))).ok).toBe(true);
   });
-  it("recusa quando ninguém da foto é o adolescente", async () => {
-    expect(await matchCreativePhoto(foto("duas-pessoas"), await descritor("pessoa-b"))).toMatchObject({ ok: false, code: "ROSTO_NAO_CONFERE" });
+  it("rejects when nobody in the photo is the teen", async () => {
+    expect(await matchCreativePhoto(photo("two-people"), await descriptorOf("person-b"))).toMatchObject({ ok: false, code: "ROSTO_NAO_CONFERE" });
   });
-  it("recusa foto criativa sem nenhum rosto", async () => {
-    expect(await matchCreativePhoto(foto("sem-rosto"), await descritor("pessoa-b"))).toMatchObject({ ok: false, code: "SEM_ROSTO" });
+  it("rejects a creative photo with no face", async () => {
+    expect(await matchCreativePhoto(photo("no-face"), await descriptorOf("person-b"))).toMatchObject({ ok: false, code: "SEM_ROSTO" });
   });
 });
 
-describe("descritores", () => {
-  it("distância euclidiana", () => {
+describe("descriptors", () => {
+  it("Euclidean distance", () => {
     expect(faceDistance([0, 0], [3, 4])).toBe(5);
     expect(() => faceDistance([1], [1, 2])).toThrow();
   });
-  it("parseDescriptor só aceita 128 números", () => {
+  it("parseDescriptor only accepts 128 numbers", () => {
     expect(parseDescriptor(Array(128).fill(0.1))).toHaveLength(128);
     expect(parseDescriptor(Array(127).fill(0.1))).toBeNull();
     expect(parseDescriptor(null)).toBeNull();
   });
-  it("limite padrão 0,65 (foto criativa) e configurável por FACE_MATCH_THRESHOLD", () => {
+  it("default threshold 0.65 (creative photo), configurable through FACE_MATCH_THRESHOLD", () => {
     expect(matchThreshold()).toBe(0.65);
     process.env.FACE_MATCH_THRESHOLD = "0.5";
     expect(matchThreshold()).toBe(0.5);

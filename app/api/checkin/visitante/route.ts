@@ -5,7 +5,7 @@ import { PHOTO_BUCKET } from "@/lib/server/env";
 import { checkGeofence, decodePhoto, parseCoords, serviceDate } from "@/lib/server/security";
 import { isValidPhone, nameTokens, onlyDigits } from "@/lib/format";
 
-// Check-in de visitante: só nome e telefone; a foto criativa é opcional.
+// Visitor check-in: only name and phone; the creative photo is optional.
 export const POST = withErrors(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const coords = parseCoords(body);

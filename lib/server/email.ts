@@ -3,10 +3,11 @@ import nodemailer, { type Transporter } from "nodemailer";
 import { firstName } from "@/lib/format";
 
 /**
- * Aviso ao responsável por e-mail via SMTP (Gmail, Brevo, Resend… qualquer provedor SMTP).
- * Variáveis: SMTP_HOST, SMTP_PORT (465 = SSL, 587 = STARTTLS), SMTP_USER, SMTP_PASS, EMAIL_FROM.
+ * Email notices to the guardian over SMTP (Gmail, Brevo, Resend… any SMTP provider).
+ * Variables: SMTP_HOST, SMTP_PORT (465 = SSL, 587 = STARTTLS), SMTP_USER, SMTP_PASS, EMAIL_FROM.
  */
 
+/** Stored as-is in the *_email_status columns. */
 export type EmailStatus = "enviado" | "falhou" | "sem_email" | "sem_config";
 
 export function emailConfigured(): boolean {
@@ -42,23 +43,23 @@ export type CheckinEmailData = {
   photo: Buffer;
 };
 
-/** Monta o e-mail (função pura, testada sem enviar nada). A foto vai embutida via Content-ID. */
+/** Builds the email (pure function, tested without sending anything). The photo is embedded via Content-ID. */
 export function buildCheckinEmail(d: CheckinEmailData) {
   const at = new Date(d.checkedInAt);
-  const hora = at.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: TZ });
-  const dia = at.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", timeZone: TZ });
+  const time = at.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: TZ });
+  const day = at.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", timeZone: TZ });
   const teen = firstName(d.teenName);
   const guardian = firstName(d.guardianName);
   const cid = "selfie-checkin@flag-o2";
 
-  const subject = `✅ ${teen} chegou ao culto da O2 · Flag (${hora})`;
+  const subject = `✅ ${teen} chegou ao culto da O2 · Flag (${time})`;
 
   const text = [
     `Olá, ${guardian}!`,
     "",
     `${d.teenName} chegou ao culto da Juventude O2 · Ministério Flag e já fez o check-in.`,
     "",
-    `Horário do check-in: ${hora} (${dia})`,
+    `Horário do check-in: ${time} (${day})`,
     "",
     "A foto tirada no check-in está anexada a este e-mail.",
     "",
@@ -82,8 +83,8 @@ export function buildCheckinEmail(d: CheckinEmailData) {
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#e6f5fb;border-radius:12px;margin:0 0 18px">
       <tr><td style="padding:14px 16px">
         <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#006a93">Horário do check-in</div>
-        <div style="font-size:28px;font-weight:800;margin-top:2px">${esc(hora)}</div>
-        <div style="font-size:14px;color:#5b6b77">${esc(dia)}</div>
+        <div style="font-size:28px;font-weight:800;margin-top:2px">${esc(time)}</div>
+        <div style="font-size:14px;color:#5b6b77">${esc(day)}</div>
       </td></tr>
     </table>
     <p style="margin:0 0 8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#006a93">Foto do check-in</p>
@@ -107,8 +108,8 @@ export function buildCheckinEmail(d: CheckinEmailData) {
 }
 
 /**
- * Envia o aviso para um ou mais e-mails do responsável (todos na mesma mensagem).
- * Nunca lança erro: devolve o status para gravar no check-in.
+ * Sends the notice to one or more of the guardian's emails (all on the same message).
+ * Never throws: returns the status to store on the check-in.
  */
 export async function sendCheckinEmail(
   recipients: string | null | undefined | (string | null | undefined)[],
@@ -122,21 +123,21 @@ export async function sendCheckinEmail(
     await transport().sendMail({ from: process.env.EMAIL_FROM, to, ...buildCheckinEmail(d) });
     return "enviado";
   } catch (err) {
-    console.error("Falha ao enviar e-mail de check-in:", err instanceof Error ? err.message : err);
+    console.error("Failed to send check-in email:", err instanceof Error ? err.message : err);
     return "falhou";
   }
 }
 
-/** Endereço do remetente (de EMAIL_FROM), para avisar o responsável de quem esperar o e-mail. */
+/** Sender address (from EMAIL_FROM), so the guardian knows who the email comes from. */
 export function senderAddress(): string | null {
   const from = process.env.EMAIL_FROM ?? "";
   return /<([^>]+)>/.exec(from)?.[1] ?? (from.includes("@") ? from.trim() : null);
 }
 
-export type CadastroEmailData = { guardianName: string; teenName: string };
+export type RegistrationEmailData = { guardianName: string; teenName: string };
 
-/** Confirmação do cadastro feito pelo responsável (função pura). */
-export function buildCadastroEmail(d: CadastroEmailData) {
+/** Confirmation of the registration made by the guardian (pure function). */
+export function buildRegistrationEmail(d: RegistrationEmailData) {
   const teen = firstName(d.teenName);
   const guardian = firstName(d.guardianName);
   const subject = `✅ Cadastro de ${teen} na O2 · Flag confirmado`;
@@ -193,16 +194,16 @@ export function buildCadastroEmail(d: CadastroEmailData) {
   return { subject, text, html };
 }
 
-/** Envia a confirmação do cadastro. Nunca lança erro. */
-export async function sendCadastroEmail(recipients: (string | null | undefined)[], d: CadastroEmailData): Promise<EmailStatus> {
+/** Sends the registration confirmation. Never throws. */
+export async function sendRegistrationEmail(recipients: (string | null | undefined)[], d: RegistrationEmailData): Promise<EmailStatus> {
   const list = [...new Set(recipients.map((e) => e?.trim().toLowerCase()).filter(Boolean) as string[])];
   if (!list.length) return "sem_email";
   if (!emailConfigured()) return "sem_config";
   try {
-    await transport().sendMail({ from: process.env.EMAIL_FROM, to: list.join(", "), ...buildCadastroEmail(d) });
+    await transport().sendMail({ from: process.env.EMAIL_FROM, to: list.join(", "), ...buildRegistrationEmail(d) });
     return "enviado";
   } catch (err) {
-    console.error("Falha ao enviar e-mail de cadastro:", err instanceof Error ? err.message : err);
+    console.error("Failed to send registration email:", err instanceof Error ? err.message : err);
     return "falhou";
   }
 }

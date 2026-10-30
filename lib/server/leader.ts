@@ -6,19 +6,21 @@ import { ipHash } from "./audit";
 import { codeHash, randomCode, setupCodeHash, tokenHash } from "./credentials";
 
 /**
- * Contas de LÍDER: senha + código do app autenticador, sessão guardada no banco.
- * O cookie leva só um valor aleatório; o banco guarda o hash dele. Revogar a sessão ou desativar
- * a conta vale na próxima requisição, em qualquer instância do servidor.
+ * LEADER accounts: password + authenticator app code, with the session stored in the database.
+ * The cookie only carries a random value; the database stores its hash. Revoking a session or
+ * deactivating an account takes effect on the next request, on any server instance.
  *
- * Os dois tipos de acesso do app ficam separados: adolescente usa o cookie da visita (o2_visita,
- * só em /api/checkin) e nunca passa por aqui.
+ * The app's two kinds of access stay apart: teens use the visit cookie (o2_visita, only on
+ * /api/checkin) and never go through here.
+ *
+ * Stage, action and outcome values are stored in the database, so they stay in Portuguese.
  */
 export const LEADER_COOKIE = "o2_lider";
 export type Stage = "senha" | "cadastro_totp" | "completa";
 export type Leader = { id: string; name: string; email: string };
 export type LeaderSession = { id: string; stage: Stage; leader: Leader };
 
-/** Etapas intermediárias valem pouco: digitar o código ou cadastrar o autenticador. */
+/** Intermediate stages are short-lived: entering the code or enrolling the authenticator. */
 const TTL_SECONDS: Record<Stage, number> = { senha: 10 * 60, cadastro_totp: 30 * 60, completa: 12 * 3600 };
 
 export const leaderCookieOptions = (maxAge: number) => ({
@@ -34,7 +36,7 @@ function readCookie(req: Request): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-/** Cria uma sessão e devolve a resposta com o cookie. Toda troca de etapa gera um valor novo. */
+/** Creates a session and returns the response with the cookie. Every stage change issues a new value. */
 export async function startSession(req: Request, leaderId: string, stage: Stage, body: Record<string, unknown>) {
   const token = randomBytes(32).toString("base64url");
   const ttl = TTL_SECONDS[stage];
@@ -52,7 +54,7 @@ export async function startSession(req: Request, leaderId: string, stage: Stage,
   return res;
 }
 
-/** Sessão válida: não revogada, não vencida e de conta ativa. */
+/** Valid session: not revoked, not expired and belonging to an active account. */
 export async function readSession(req: Request): Promise<LeaderSession | null> {
   const token = readCookie(req);
   if (!token || token.length < 40) return null;
@@ -67,7 +69,7 @@ export async function readSession(req: Request): Promise<LeaderSession | null> {
   return { id: data.id, stage: data.stage as Stage, leader: { id: l.id, name: l.name, email: l.email } };
 }
 
-/** Acesso a dados privados: só com a verificação em duas etapas concluída. */
+/** Access to private data: only once two-step verification is complete. */
 export async function requireLeader(req: Request): Promise<LeaderSession | null> {
   const s = await readSession(req);
   return s?.stage === "completa" ? s : null;
@@ -75,7 +77,7 @@ export async function requireLeader(req: Request): Promise<LeaderSession | null>
 
 export const unauthorized = () => NextResponse.json({ error: "Sessão expirada. Entre de novo." }, { status: 401 });
 
-/** Encerra sessões de um líder (todas, ou todas menos uma). Devolve quantas foram encerradas. */
+/** Ends a leader's sessions (all of them, or all but one). Returns how many were ended. */
 export async function revokeSessions(leaderId: string, exceptSessionId?: string): Promise<number> {
   let q = db()
     .from("leader_sessions")
@@ -95,8 +97,8 @@ export async function revokeSession(sessionId: string) {
 }
 
 /**
- * Limite de tentativas no banco: conta antes de conferir a senha/código, então 50 requisições
- * simultâneas não ganham 50 chances. Funciona igual com várias instâncias do servidor.
+ * Attempt limit kept in the database: it counts before checking the password/code, so 50
+ * simultaneous requests don't get 50 tries. Works the same across server instances.
  */
 export async function tooManyAttempts(key: string, windowSeconds: number, max: number): Promise<boolean> {
   const { data, error } = await db().rpc("auth_rate_hit", { p_key: key, p_window_seconds: windowSeconds });
@@ -119,9 +121,8 @@ export type AdminAction =
   | "presenca_removida";
 
 /**
- * Registro de ação administrativa ou de autenticação (tabela só de inserção: o banco recusa
- * alterar ou apagar). NUNCA passe senha, código do autenticador, código de recuperação ou
- * dado biométrico em `details`.
+ * Logs an admin or authentication action (insert-only table: the database refuses updates and
+ * deletes). NEVER put a password, authenticator code, recovery code or biometric data in `details`.
  */
 export async function adminAudit(
   req: Request,
@@ -146,7 +147,7 @@ export async function adminAudit(
     details: e.details ?? null,
     ip_hash: ipHash(req),
   });
-  if (error) console.error("Falha ao gravar auditoria administrativa:", error.message);
+  if (error) console.error("Failed to write admin audit entry:", error.message);
 }
 
 export const normalizeEmail = (v: unknown) => String(v ?? "").trim().toLowerCase().slice(0, 200);
@@ -154,9 +155,9 @@ export const normalizeEmail = (v: unknown) => String(v ?? "").trim().toLowerCase
 export const SETUP_CODE_HOURS = 24;
 
 /**
- * Ativação ou redefinição do acesso (celular perdido, conta reativada): apaga senha, autenticador
- * e códigos de recuperação, encerra as sessões e gera um código de uso único que vale 24 h.
- * Quem gera é OUTRO líder, que entrega o código pessoalmente: é o processo controlado de recuperação.
+ * Activates or resets access (lost phone, reactivated account): clears the password, authenticator
+ * and recovery codes, ends the sessions and issues a single-use code valid for 24 h. ANOTHER leader
+ * issues it and hands it over in person: that is the controlled recovery process.
  */
 export async function resetAccess(leaderId: string): Promise<{ code: string; expiresAt: string }> {
   const code = randomCode([4, 4, 4]);
@@ -181,7 +182,7 @@ export async function resetAccess(leaderId: string): Promise<{ code: string; exp
 
 export const RECOVERY_CODE_COUNT = 10;
 
-/** Troca todos os códigos de recuperação do líder por 10 novos (mostrados uma única vez). */
+/** Replaces all of the leader's recovery codes with 10 new ones (shown only once). */
 export async function newRecoveryCodes(leaderId: string): Promise<string[]> {
   const codes = Array.from({ length: RECOVERY_CODE_COUNT }, () => randomCode([5, 5]));
   const del = await db().from("leader_recovery_codes").delete().eq("leader_id", leaderId);

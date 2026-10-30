@@ -7,8 +7,8 @@ import { adminAudit, requireLeader, unauthorized } from "@/lib/server/leader";
 export const dynamic = "force-dynamic";
 
 /**
- * DELETE { id, reason }: correção de presença. Remove um check-in registrado por engano (e a foto
- * dele), com o motivo. Fica na trilha de auditoria: quem, quando, qual presença e por quê.
+ * DELETE { id, reason }: attendance correction. Removes a check-in made by mistake (and its photo),
+ * with the reason. It goes to the audit trail: who, when, which attendance and why.
  */
 export const DELETE = withErrors(async (req: Request) => {
   const s = await requireLeader(req);
