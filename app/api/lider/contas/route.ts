@@ -7,12 +7,12 @@ import { adminAudit, normalizeEmail, requireLeader, resetAccess, revokeSessions,
 export const dynamic = "force-dynamic";
 
 /**
- * Administração das contas de líder. Todo líder pode administrar (só existem dois tipos de acesso:
- * adolescente e líder). Desativar e redefinir valem para OUTRO líder: ninguém se tranca para fora
- * sozinho, e a recuperação de celular perdido passa sempre por uma segunda pessoa.
+ * Leader account administration. Every leader can administer (there are only two kinds of access:
+ * teen and leader). Deactivate and reset apply to ANOTHER leader: nobody locks themselves out alone,
+ * and recovering a lost phone always goes through a second person.
  */
 
-// GET: lista de líderes com situação do acesso e sessões abertas.
+// GET: list of leaders with their access status and open sessions.
 export const GET = withErrors(async (req: Request) => {
   const s = await requireLeader(req);
   if (!s) return unauthorized();
@@ -45,7 +45,7 @@ export const GET = withErrors(async (req: Request) => {
   }, { headers: { "Cache-Control": "no-store" } });
 });
 
-// POST { name, email }: cria a conta e devolve o código de ativação (mostrado uma única vez).
+// POST { name, email }: creates the account and returns the activation code (shown only once).
 export const POST = withErrors(async (req: Request) => {
   const s = await requireLeader(req);
   if (!s) return unauthorized();
@@ -99,13 +99,13 @@ export const PATCH = withErrors(async (req: Request) => {
   }
 
   if (action === "revogar_sessoes") {
-    // Na própria conta: encerra os OUTROS aparelhos e mantém este.
+    // On your own account: ends the OTHER devices' sessions and keeps this one.
     const ended = await revokeSessions(t.id, self ? s.id : undefined);
     await adminAudit(req, { actor: s.leader, action: "sessoes_revogadas", outcome: "ok", ...target, details: { sessoes_encerradas: ended, manteve_a_atual: self } });
     return NextResponse.json({ ok: true, sessionsEnded: ended });
   }
 
-  // reativar ou redefinir: credenciais zeradas e novo código de ativação, entregue pessoalmente.
+  // reactivate or reset: credentials wiped and a new activation code, handed over in person.
   if (action === "reativar") {
     const up = await db().from("leaders").update({ status: "ativo", disabled_at: null }).eq("id", t.id);
     if (up.error) throw up.error;

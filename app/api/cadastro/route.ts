@@ -1,22 +1,22 @@
 import { withErrors } from "@/lib/server/http";
 import { NextResponse, after } from "next/server";
 import { db } from "@/lib/server/supabase";
-import { emailConfigured, sendCadastroEmail, senderAddress } from "@/lib/server/email";
+import { emailConfigured, sendRegistrationEmail, senderAddress } from "@/lib/server/email";
 import { isValidBirthDate, isValidEmail, isValidPhone, nameTokens, onlyDigits } from "@/lib/format";
 import { findDuplicate } from "@/lib/duplicates";
 
 const clean = (v: unknown, max = 120) => String(v ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
 /**
- * Cadastro feito pelo RESPONSÁVEL antes do culto (página /cadastro) ou pelo pastor.
- * Sem foto e sem senha do fiscal: a foto de referência é tirada no primeiro check-in.
- * Sem CPF: o check-in usa nome + nascimento e as presenças apontam para o id interno do cadastro.
- * Cadastro parecido com um existente é gravado com a marca "possível duplicado" para um líder revisar.
+ * Registration made by the GUARDIAN before the service (/cadastro page) or by the pastor.
+ * No photo and no door-keeper password: the reference photo is taken at the first check-in.
+ * No CPF: check-in uses name + birth date, and attendances point to the registration's internal id.
+ * A registration similar to an existing one is stored flagged as a "possible duplicate" for a leader to review.
  */
 export const POST = withErrors(async (req: Request) => {
   const b = await req.json().catch(() => null);
   if (!b) return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
-  // Campo invisível para pessoas: só robôs o preenchem.
+  // Field invisible to people: only bots fill it in.
   if (b.website) return NextResponse.json({ ok: true });
 
   const data = {
@@ -50,10 +50,10 @@ export const POST = withErrors(async (req: Request) => {
   if (findError) throw findError;
   const match = findDuplicate(data, sameDay ?? []);
 
-  // Mesmo responsável reenviando o mesmo cadastro: nada a gravar. A resposta é igual à de um cadastro
-  // novo, então o formulário não revela se alguém já está cadastrado.
+  // Same guardian resubmitting the same registration: nothing to store. The response is the same as for a new
+  // registration, so the form doesn't reveal whether someone is already registered.
   if (match?.resubmission) {
-    after(() => sendCadastroEmail([data.guardian_email, data.guardian_email2], { guardianName: data.guardian_name, teenName: data.name }));
+    after(() => sendRegistrationEmail([data.guardian_email, data.guardian_email2], { guardianName: data.guardian_name, teenName: data.name }));
     return NextResponse.json({ ok: true, confirmationSent: emailConfigured(), sender: senderAddress() });
   }
 
@@ -63,8 +63,8 @@ export const POST = withErrors(async (req: Request) => {
     possible_duplicate_of: match?.id ?? null,
   });
   if (error) throw error;
-  // Confirmação por e-mail depois da resposta: o responsável já confere se caiu no spam.
-  after(() => sendCadastroEmail([data.guardian_email, data.guardian_email2], { guardianName: data.guardian_name, teenName: data.name }));
+  // Confirmation email after the response: the guardian can already check their spam folder.
+  after(() => sendRegistrationEmail([data.guardian_email, data.guardian_email2], { guardianName: data.guardian_name, teenName: data.name }));
 
   return NextResponse.json({ ok: true, confirmationSent: emailConfigured(), sender: senderAddress() });
 });

@@ -7,14 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "qrcode": "node scripts/gerar-qrcode.mjs",
-    "test:fluxo": "node scripts/testar-fluxo.mjs",
-    "db:push": "supabase db push",
+    "qrcode": "node scripts/generate-qrcode.mjs",
     "test": "vitest run",
+    "test:e2e": "node scripts/e2e-flow.mjs",
     "typecheck": "tsc --noEmit",
-    "simular": "node scripts/simular-checkins.mjs",
-    "email:confirmacao": "tsx --conditions=react-server scripts/enviar-confirmacao-cadastro.mts",
-    "lider:criar": "tsx --conditions=react-server scripts/criar-lider.mts"
+    "db:push": "supabase db push",
+    "simulate": "node scripts/simulate-checkins.mjs",
+    "email:confirmation": "tsx --conditions=react-server scripts/send-registration-confirmation.mts",
+    "leader:create": "tsx --conditions=react-server scripts/create-leader.mts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

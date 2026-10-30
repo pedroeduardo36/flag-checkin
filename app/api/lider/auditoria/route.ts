@@ -5,7 +5,7 @@ import { requireLeader, unauthorized } from "@/lib/server/leader";
 
 export const dynamic = "force-dynamic";
 
-// GET: últimas ações administrativas e de autenticação (somente leitura; o banco recusa editar ou apagar).
+// GET: latest admin and authentication actions (read-only; the database refuses edits and deletes).
 export const GET = withErrors(async (req: Request) => {
   if (!(await requireLeader(req))) return unauthorized();
   const { data, error } = await db()

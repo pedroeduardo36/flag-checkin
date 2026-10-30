@@ -1,4 +1,4 @@
--- O 1º check-in agora tem duas fotos: a de REGISTRO (vai para o cadastro) e a CRIATIVA (vai
--- para o check-in). Este campo marca o primeiro check-in da vida do adolescente para o feed.
+-- The first check-in now has two photos: the REGISTRATION one (goes to the registration) and the CREATIVE one
+-- (goes to the check-in). This column flags the teen's first check-in ever for the feed.
 alter table public.checkins add column if not exists is_first boolean not null default false;
 update public.checkins set is_first = true where photo_kind = 'registro';

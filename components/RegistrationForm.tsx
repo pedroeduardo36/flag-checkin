@@ -12,7 +12,7 @@ type Form = {
   guardianEmail: string;
   guardianEmail2: string;
   consent: boolean;
-  website: string; // armadilha para robôs (fica escondido)
+  website: string; // bot trap (kept hidden)
 };
 
 const empty: Form = { name: "", phone: "", birthDate: "", guardianName: "", guardianPhone: "", guardianEmail: "", guardianEmail2: "", consent: false, website: "" };
@@ -33,15 +33,15 @@ function validate(f: Form) {
   return e;
 }
 
-type Mode = "responsavel" | "pastor";
+type Mode = "guardian" | "pastor";
 
 /**
- * Cadastro do adolescente, sem foto e sem senha.
- * - responsavel: o pai, a mãe ou o responsável preenche antes do culto (/cadastro).
- * - pastor: mesmo formulário dentro da área do pastor, com "cadastrar outro".
- * A foto de referência é tirada pelo próprio adolescente no primeiro check-in.
+ * Teen registration, without photo or password.
+ * - guardian: the parent or guardian fills it in before the service (/cadastro).
+ * - pastor: the same form inside the pastor area, with "register another".
+ * The reference photo is taken by the teen at their first check-in.
  */
-export function CadastroForm({ mode, onSessionExpired }: { mode: Mode; onSessionExpired?: () => void }) {
+export function RegistrationForm({ mode, onSessionExpired }: { mode: Mode; onSessionExpired?: () => void }) {
   const [f, setF] = useState<Form>(empty);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
@@ -227,7 +227,7 @@ export function CadastroForm({ mode, onSessionExpired }: { mode: Mode; onSession
           {errors.consent && <small className="err">{errors.consent}</small>}
         </fieldset>
 
-        {/* Armadilha para robôs: invisível para pessoas */}
+        {/* Bot trap: invisible to people */}
         <input className="hp" tabIndex={-1} autoComplete="off" aria-hidden name="website" value={f.website}
           onChange={(e) => set("website", e.target.value)} />
 

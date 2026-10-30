@@ -56,7 +56,7 @@ async function send(method: string, path: string, body?: unknown) {
   return { status: r?.status ?? 0, data: (r ? await r.json().catch(() => ({})) : {}) as Record<string, any> };
 }
 
-/** Aba "Líderes": contas, sessões, códigos de ativação/recuperação e o registro de ações. */
+/** "Líderes" tab: accounts, sessions, activation/recovery codes and the action log. */
 export function LeadersAdmin({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [me, setMe] = useState<{ id: string } | null>(null);
   const [leaders, setLeaders] = useState<LeaderRow[]>([]);
@@ -180,7 +180,7 @@ export function LeadersAdmin({ onUnauthorized }: { onUnauthorized: () => void })
   );
 }
 
-/** Cadastros parecidos (mesmo nascimento e nome compatível) esperando a decisão de um líder. */
+/** Similar registrations (same birth date and a compatible name) waiting for a leader's decision. */
 function Duplicates({ onUnauthorized, onDone }: { onUnauthorized: () => void; onDone: () => void }) {
   const [pairs, setPairs] = useState<DupPair[] | null>(null);
   const [error, setError] = useState<string | null>(null);

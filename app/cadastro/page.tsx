@@ -1,13 +1,13 @@
 "use client";
 
 import { Shell } from "@/components/Brand";
-import { CadastroForm } from "@/components/CadastroForm";
+import { RegistrationForm } from "@/components/RegistrationForm";
 
-// Página exclusiva de cadastro, para o responsável preencher antes do culto.
+// Registration-only page, for the guardian to fill in before the service.
 export default function CadastroPage() {
   return (
     <Shell>
-      <CadastroForm mode="responsavel" />
+      <RegistrationForm mode="guardian" />
     </Shell>
   );
 }

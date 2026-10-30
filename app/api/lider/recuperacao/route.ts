@@ -7,7 +7,7 @@ import { adminAudit, newRecoveryCodes, requireLeader, tooMany, tooManyAttempts, 
 
 export const dynamic = "force-dynamic";
 
-// POST { code }: gera 10 códigos de recuperação novos (os antigos deixam de valer). Pede o código atual do autenticador.
+// POST { code }: issues 10 new recovery codes (the old ones stop working). Requires the current authenticator code.
 export const POST = withErrors(async (req: Request) => {
   const s = await requireLeader(req);
   if (!s) return unauthorized();

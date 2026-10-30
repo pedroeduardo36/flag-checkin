@@ -7,10 +7,10 @@ import { hasVisitSession } from "@/lib/server/visit";
 import { audit } from "@/lib/server/audit";
 import { firstName, isValidBirthDate, nameMatchScore, nameTokens } from "@/lib/format";
 
-/** A identificação vale até a foto criativa, que é tirada já dentro do culto. */
+/** Identification stays valid until the creative photo, which is taken once the service has started. */
 const TOKEN_TTL_SECONDS = 4 * 60 * 60;
 
-// Etapa 2: nome completo + data de nascimento. Devolve um token para a etapa da foto.
+// Step 2: full name + birth date. Returns a token for the photo step.
 export const POST = withErrors(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const coords = parseCoords(body);
@@ -28,7 +28,7 @@ export const POST = withErrors(async (req: Request) => {
     return NextResponse.json({ error: "Você precisa estar no local do culto para fazer o check-in.", code: "FORA_DO_LOCAL" }, { status: 403 });
   }
 
-  // Todos os nascidos nesse dia; o nome decide (tolera acento, "de/da", nome do meio omitido e um erro de digitação).
+  // Everyone born on that day; the name decides (tolerates accents, "de/da", an omitted middle name and one typo).
   const { data: sameDay, error } = await db()
     .from("members")
     .select("id, name, face_descriptor, photo_path")
@@ -59,10 +59,10 @@ export const POST = withErrors(async (req: Request) => {
   }
   const member = ranked[0].m;
 
-  // Foto e horário de um check-in são dados privados de um menor. Nome + nascimento (+ coordenadas
-  // informadas pelo próprio celular) NÃO autorizam lê-los. Só devolvemos esses detalhes ao aparelho
-  // que concluiu o check-in deste adolescente hoje (sessão da visita, após a conferência de rosto).
-  // Sem essa sessão a resposta é IDÊNTICA à de quem ainda não fez check-in: nem "já fez" vaza.
+  // A check-in's photo and time are a minor's private data. Name + birth date (+ coordinates
+  // reported by the phone itself) do NOT authorize reading them. We only return these details to the device
+  // that completed this teen's check-in today (visit session, after the face match).
+  // Without that session the response is IDENTICAL to someone who hasn't checked in yet: not even "already done" leaks.
   const today = serviceDate();
   if (hasVisitSession(req, member.id, today)) {
     const { data: existing } = await db()
@@ -94,7 +94,7 @@ export const POST = withErrors(async (req: Request) => {
     token,
     expiresAt: new Date(Date.now() + TOKEN_TTL_SECONDS * 1000).toISOString(),
     firstName: firstName(member.name),
-    // Primeiro check-in da vida: a foto é de REGISTRO (vira a referência do cadastro).
+    // First check-in ever: the photo is the REGISTRATION one (it becomes the registration's reference).
     photoKind: member.face_descriptor || member.photo_path ? "criativa" : "registro",
   });
 });

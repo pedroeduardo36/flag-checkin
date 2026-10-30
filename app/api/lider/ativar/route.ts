@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
 const WINDOW = 15 * 60;
 
 /**
- * Primeiro acesso (ou acesso redefinido): e-mail + código de ativação entregue por outro líder +
- * senha nova. Em seguida, obrigatoriamente, o cadastro do app autenticador.
+ * First access (or reset access): email + activation code handed over by another leader +
+ * new password. Enrolling the authenticator app is mandatory right after.
  */
 export const POST = withErrors(async (req: Request) => {
   const body = await req.json().catch(() => null);
@@ -36,7 +36,7 @@ export const POST = withErrors(async (req: Request) => {
   if (error) throw error;
   const valid =
     l && l.status === "ativo" && l.setup_code_hash && l.setup_expires_at && Date.parse(l.setup_expires_at) > Date.now();
-  // Consome o código com atualização condicional: dois envios simultâneos não ativam duas vezes.
+  // Consumes the code with a conditional update: two simultaneous submissions don't activate twice.
   const consumed = valid
     ? (await db()
         .from("leaders")

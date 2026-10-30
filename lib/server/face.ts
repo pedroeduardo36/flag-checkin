@@ -6,29 +6,32 @@ import { setWasmPaths } from "@tensorflow/tfjs-backend-wasm";
 import jpeg from "jpeg-js";
 
 /**
- * Reconhecimento facial no servidor (TensorFlow.js + WebAssembly, sem GPU nem binário nativo).
- * - SSD MobileNet v1 encontra os rostos.
- * - 68 landmarks alinham o rosto.
- * - FaceRecognitionNet (ResNet-34) gera um descritor de 128 números por rosto.
- * Duas fotos são da mesma pessoa quando a distância euclidiana entre os descritores é pequena.
+ * Server-side face recognition (TensorFlow.js + WebAssembly, no GPU or native binary).
+ * - SSD MobileNet v1 finds the faces.
+ * - 68 landmarks align each face.
+ * - FaceRecognitionNet (ResNet-34) produces a 128-number descriptor per face.
+ * Two photos show the same person when the Euclidean distance between their descriptors is small.
+ *
+ * Error codes (SEM_ROSTO, …) are part of the API contract and the audit log, so they stay in
+ * Portuguese; the messages are shown to the teen.
  */
 
 const NODE_MODULES = path.join(process.cwd(), "node_modules");
 const MODEL_DIR = path.join(NODE_MODULES, "@vladmandic/face-api/model");
 const WASM_DIR = path.join(NODE_MODULES, "@tensorflow/tfjs-backend-wasm/dist") + path.sep;
 
-/** Rosto mínimo: 15% da largura da foto (evita rosto distante demais para comparar). */
+/** Minimum face size: 15% of the photo width (rejects faces too far away to compare). */
 const MIN_FACE_RATIO = 0.15;
-/** Um segundo rosto com pelo menos 50% da área do principal conta como "outra pessoa na foto". */
+/** A second face with at least 50% of the main face's area counts as "someone else in the photo". */
 const SECOND_FACE_AREA_RATIO = 0.5;
 
-/** Na foto criativa (em grupo, de longe) um rosto pequeno ainda serve para comparar. */
+/** In the creative photo (group shot, from afar) a small face is still good enough to compare. */
 const MIN_CREATIVE_FACE_RATIO = 0.06;
 
 /**
- * Distância máxima entre um rosto da foto criativa e o rosto de referência do cadastro.
- * 0,65 é mais tolerante que o padrão do face-api (0,6): a foto criativa tem pose, careta,
- * luz do culto e outras pessoas. Pessoas diferentes ficam tipicamente acima de 0,75.
+ * Maximum distance between a face in the creative photo and the registration's reference face.
+ * 0.65 is more lenient than face-api's default (0.6): creative photos have poses, funny faces,
+ * stage lighting and other people. Different people typically land above 0.75.
  */
 export function matchThreshold(): number {
   const v = Number(process.env.FACE_MATCH_THRESHOLD);
@@ -48,7 +51,7 @@ function init(): Promise<void> {
       faceapi.nets.faceRecognitionNet.loadFromDisk(MODEL_DIR),
     ]);
   })().catch((err) => {
-    ready = null; // permite tentar de novo na próxima requisição
+    ready = null; // lets the next request try again
     throw err;
   });
   return ready;
@@ -62,7 +65,7 @@ const fail = (code: Exclude<FaceAnalysis, { ok: true }>["code"], message: string
 
 type DetectedFace = { descriptor: number[]; width: number; area: number; score: number };
 
-/** Detecta todos os rostos da foto (JPEG), do maior para o menor. */
+/** Detects every face in the (JPEG) photo, largest first. */
 async function detectFaces(photo: Buffer): Promise<{ width: number; faces: DetectedFace[] } | null> {
   await init();
   let img: { width: number; height: number; data: Uint8Array };
@@ -87,8 +90,8 @@ async function detectFaces(photo: Buffer): Promise<{ width: number; faces: Detec
 }
 
 /**
- * Foto de REGISTRO (primeiro check-in): exige um rosto só, de perto.
- * Devolve o descritor de 128 dimensões que vira a referência do cadastro.
+ * REGISTRATION photo (first check-in): requires a single face, close up.
+ * Returns the 128-dimension descriptor that becomes the registration's reference.
  */
 export async function analyzeFace(photo: Buffer): Promise<FaceAnalysis> {
   const r = await detectFaces(photo);
@@ -115,8 +118,8 @@ export type CreativeMatch =
   | { ok: false; code: "SEM_ROSTO" | "IMAGEM_INVALIDA" | "ROSTO_NAO_CONFERE"; message: string; distance?: number };
 
 /**
- * Foto CRIATIVA (check-ins seguintes): pode ter amigos, pose e careta.
- * Basta UM rosto da foto ser parecido o suficiente com a referência do cadastro.
+ * CREATIVE photo (later check-ins): friends, poses and funny faces are fine.
+ * It's enough for ONE face in the photo to be close enough to the registration's reference.
  */
 export async function matchCreativePhoto(photo: Buffer, reference: ArrayLike<number>): Promise<CreativeMatch> {
   const r = await detectFaces(photo);
@@ -136,13 +139,13 @@ export async function matchCreativePhoto(photo: Buffer, reference: ArrayLike<num
 }
 
 export function faceDistance(a: ArrayLike<number>, b: ArrayLike<number>): number {
-  if (a.length !== b.length) throw new Error("Descritores de tamanhos diferentes");
+  if (a.length !== b.length) throw new Error("Descriptors have different lengths");
   let sum = 0;
   for (let i = 0; i < a.length; i++) sum += (a[i] - b[i]) ** 2;
   return Math.sqrt(sum);
 }
 
-/** Descritor salvo no banco (array JSON) → número[] com validação. */
+/** Descriptor stored in the database (JSON array) → number[], validated. */
 export function parseDescriptor(value: unknown): number[] | null {
   return Array.isArray(value) && value.length === 128 && value.every((n) => typeof n === "number") ? value : null;
 }
