@@ -9,7 +9,7 @@ import { firstName } from "@/lib/format";
  */
 
 /** Stored as-is in the *_email_status columns. */
-export type EmailStatus = "enviado" | "falhou" | "sem_email" | "sem_config";
+export type EmailStatus = "enviado" | "falhou" | "sem_email" | "sem_config" | "desligado";
 
 export function emailConfigured(): boolean {
   return ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM"].every((k) => !!process.env[k]);
@@ -106,25 +106,94 @@ export function buildCheckinEmail(d: CheckinEmailData) {
   return { subject, text, html };
 }
 
-/**
- * Sends the notice to one or more of the guardian's emails (all on the same message).
- * Never throws: returns the status to store on the check-in.
- */
-export async function sendCheckinEmail(
+/** The guardian's emails, without duplicates or blanks. */
+function recipientList(recipients: string | null | undefined | (string | null | undefined)[]): string[] {
+  return [...new Set((Array.isArray(recipients) ? recipients : [recipients]).map((e) => e?.trim().toLowerCase()).filter(Boolean) as string[])];
+}
+
+/** Sends a notice (all recipients on one message). Never throws: returns the status to store. */
+async function sendNotice(
   recipients: string | null | undefined | (string | null | undefined)[],
-  d: CheckinEmailData,
+  message: { subject: string; text: string; html: string },
+  kind: string,
 ): Promise<EmailStatus> {
-  const list = [...new Set((Array.isArray(recipients) ? recipients : [recipients]).map((e) => e?.trim().toLowerCase()).filter(Boolean) as string[])];
+  const list = recipientList(recipients);
   if (!list.length) return "sem_email";
-  const to = list.join(", ");
   if (!emailConfigured()) return "sem_config";
   try {
-    await transport().sendMail({ from: process.env.EMAIL_FROM, to, ...buildCheckinEmail(d) });
+    await transport().sendMail({ from: process.env.EMAIL_FROM, to: list.join(", "), ...message });
     return "enviado";
   } catch (err) {
-    console.error("Failed to send check-in email:", err instanceof Error ? err.message : err);
+    console.error(`Failed to send ${kind} email:`, err instanceof Error ? err.message : err);
     return "falhou";
   }
+}
+
+/** Sends the check-in notice to one or more of the guardian's emails. */
+export const sendCheckinEmail = (
+  recipients: string | null | undefined | (string | null | undefined)[],
+  d: CheckinEmailData,
+) => sendNotice(recipients, buildCheckinEmail(d), "check-in");
+
+export type CheckoutEmailData = {
+  guardianName: string;
+  teenName: string;
+  checkedOutAt: string | Date;
+  /** "lider": a leader recorded the checkout (the teen forgot to confirm it). */
+  by: "participante" | "lider";
+};
+
+/** Checkout notice (pure function). Text only, like the check-in notice. */
+export function buildCheckoutEmail(d: CheckoutEmailData) {
+  const at = new Date(d.checkedOutAt);
+  const time = at.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: TZ });
+  const day = at.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", timeZone: TZ });
+  const teen = firstName(d.teenName);
+  const guardian = firstName(d.guardianName);
+  const who = d.by === "lider"
+    ? `A saída de ${d.teenName} foi registrada por um líder da O2.`
+    : `${d.teenName} confirmou a saída pelo celular.`;
+
+  const subject = `👋 ${teen} saiu do culto da O2 · Flag (${time})`;
+  const footer = "Você recebe este aviso porque confirmou o cadastro do(a) adolescente no check-in do Ministério Flag.";
+
+  const text = [
+    `Olá, ${guardian}!`,
+    "",
+    who,
+    "",
+    `Horário da saída: ${time} (${day})`,
+    "",
+    "Ministério Flag · Juventude O2",
+    footer,
+    "Para deixar de receber ou pedir a exclusão dos dados, responda a este e-mail ou fale com a liderança da O2.",
+  ].join("\n");
+
+  const html = layout(
+    "Saída O2 · Flag",
+    `<p style="margin:0 0 6px;font-size:15px;color:#5b6b77">Olá, ${esc(guardian)}!</p>
+    <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3">${esc(teen)} saiu do culto 👋</h1>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#e6f5fb;border-radius:12px;margin:0 0 18px">
+      <tr><td style="padding:14px 16px">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#006a93">Horário da saída</div>
+        <div style="font-size:28px;font-weight:800;margin-top:2px">${esc(time)}</div>
+        <div style="font-size:14px;color:#5b6b77">${esc(day)}</div>
+      </td></tr>
+    </table>
+    <p style="margin:0;font-size:14px;line-height:1.5;color:#5b6b77">${esc(who)}</p>`,
+    `${footer} Para deixar de receber ou pedir a exclusão dos dados, responda a este e-mail ou fale com a liderança da Juventude O2.`,
+  );
+
+  return { subject, text, html };
+}
+
+/** Checkout notice. CHECKOUT_NOTICE=false turns it off (the time is still stored and visible to leaders). */
+export function sendCheckoutEmail(
+  recipients: string | null | undefined | (string | null | undefined)[],
+  d: CheckoutEmailData,
+): Promise<EmailStatus> {
+  if (process.env.CHECKOUT_NOTICE === "false") return Promise.resolve("desligado");
+  return sendNotice(recipients, buildCheckoutEmail(d), "checkout");
 }
 
 /** Sender address (from EMAIL_FROM), so the guardian knows who the email will come from. */

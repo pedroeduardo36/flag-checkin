@@ -1,8 +1,9 @@
 // Pastor dashboard calculations (pure function, tested without a database).
 
-export type CheckinRow = { service_date: string; member_id: string | null; visitor_phone: string | null };
+export type CheckinRow = { service_date: string; member_id: string | null; visitor_phone: string | null; checked_out_at?: string | null };
 
-export type Service = { date: string; registered: number; visitors: number; total: number };
+/** checkouts: attendances whose checkout was confirmed (by the participant or by a leader). */
+export type Service = { date: string; registered: number; visitors: number; total: number; checkouts: number };
 
 export type RankingRow = {
   memberId: string;
@@ -21,7 +22,7 @@ export function buildDashboard(rows: CheckinRow[], { rankingSize = 10, trendSize
   const visitors = new Set<string>();
 
   for (const r of rows) {
-    const s = byDate.get(r.service_date) ?? { date: r.service_date, registered: 0, visitors: 0, total: 0 };
+    const s = byDate.get(r.service_date) ?? { date: r.service_date, registered: 0, visitors: 0, total: 0, checkouts: 0 };
     if (r.member_id) {
       s.registered++;
       const dates = byMember.get(r.member_id) ?? new Set<string>();
@@ -32,6 +33,7 @@ export function buildDashboard(rows: CheckinRow[], { rankingSize = 10, trendSize
       if (r.visitor_phone) visitors.add(r.visitor_phone);
     }
     s.total++;
+    if (r.checked_out_at) s.checkouts++;
     byDate.set(r.service_date, s);
   }
 

@@ -6,7 +6,7 @@
 | --- | --- | --- | --- | --- |
 | **Supabase** | Database (Postgres) and photo storage | All app data | São Paulo (`sa-east-1`), project `kcmlgoffvympjalsrwdn`. Encryption at rest and TLS | [supabase.com/security](https://supabase.com/security) |
 | **Vercel** | Hosts the site and the `/api` routes (where faces are compared) | All data in transit. Doesn't store the data, only short request logs | Functions in **São Paulo** (`gru1`, pinned in `vercel.json`; previously the default was Washington, `iad1`) | [vercel.com/docs/security/compliance](https://vercel.com/docs/security/compliance) |
-| **Google (Gmail, SMTP)** | Sends the registration confirmation and the check-in notices | Teen's name, guardian's name and email, time. The sent folder keeps a copy | Google's global infrastructure (international transfer, LGPD art. 33) | Google Workspace/Gmail terms |
+| **Google (Gmail, SMTP)** | Sends the registration confirmation and the check-in/checkout notices | Teen's name, guardian's name and email, time. The sent folder keeps a copy | Google's global infrastructure (international transfer, LGPD art. 33) | Google Workspace/Gmail terms |
 | **GitHub** | Source code | No personal data about teens. Tests use only synthetic faces | — | — |
 
 No data is sold or shared with third parties beyond these. Face recognition runs on our own server with an open-source

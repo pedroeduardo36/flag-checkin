@@ -37,7 +37,7 @@ their kid arrived.
 
 ## The solution
 
-A **mobile-first web app**, with nothing to install, built around three moments:
+A **mobile-first web app**, with nothing to install, built around four moments:
 
 1. **Before the service, the guardian registers the teen** at [`/cadastro`](https://flag-checkin.vercel.app/cadastro):
    no photo and no password, with separate sections for the teen's and the guardian's details, and up to **two emails**
@@ -49,6 +49,9 @@ A **mobile-first web app**, with nothing to install, built around three moments:
    contain a single face and becomes the registration's reference, followed by a quick explanation of the creative photo.
 3. **During the service:** the **creative photo** (friends, poses, funny faces) completes the check-in, including the
    first one. One of the faces just has to be the teen's. The identification from the entrance is kept on the phone for 4 h.
+4. **On the way out:** the **"Estou indo embora"** ("I'm leaving") button, the exit QR code or an NFC tag at the door
+   opens the checkout confirmation: **one tap**, nothing to type. The guardian gets the time. Without confirmation the
+   checkout stays "not recorded", and a leader can correct it.
 
 **Visitors** check in with just a name and phone number, with an optional creative photo.
 
@@ -64,11 +67,12 @@ A **mobile-first web app**, with nothing to install, built around three moments:
 
 Each leader signs in with **their own account: password + authenticator app code** (see Security). Four tabs:
 - **Live:** an Instagram-style feed of who just arrived (registration photo, name, time and check-in photo), the day's
-  head count, and "first check-in", "creative photo", "visitor", "face matches", "guardian notified"
-  badges. New check-ins show up on their own within about 4 seconds, highlighted as they arrive.
+  head count, and "first check-in", "creative photo", "visitor", "face matches", "guardian notified" and checkout
+  badges. New check-ins and checkouts show up on their own within about 4 seconds.
 - **Test example:** check-ins flagged `is_example` always appear at the end of the feed, tagged "Exemplo" with the
   service date. They don't count toward the day's total, and test cleanup never deletes them.
-- **Dashboard:** KPIs (services, average per service, latest service vs. the previous one, unique teens), the **attendance trend per service** as stacked columns (registered teens and visitors, with tap tooltips
+- **Dashboard:** KPIs (services, average per service, latest service vs. the previous one, unique teens, confirmed
+  checkouts), the **attendance trend per service** as stacked columns (registered teens and visitors, with tap tooltips
   and a table view) and a **top-10 attendance ranking**, with the % of services attended since the first check-in and a
   🔥 streak of consecutive services.
 - **Register:** the guardian's form, with a "register another" button for back-to-back registrations.
@@ -91,7 +95,7 @@ Three factors make fraud expensive:
 ```mermaid
 flowchart LR
   subgraph Phone["📱 Teen's phone"]
-    QR["QR code / NFC tag"] --> UI["Next.js (React 19)<br/>/checkin · /cadastro"]
+    QR["QR code / NFC tag"] --> UI["Next.js (React 19)<br/>/checkin · /cadastro · /checkout"]
     UI -- "Geolocation API<br/>getUserMedia (camera)" --> UI
   end
 
@@ -126,13 +130,14 @@ flowchart LR
 | **Face recognition on the server** | face-api (TensorFlow.js) with the **WebAssembly** backend runs inside the serverless function: no GPU, native binary or paid API. In the browser it would be easy to bypass; on the server, the API decides. |
 | **Stored descriptor, not a photo-to-photo comparison** | The first check-in saves a 128-number face vector. After that, only the creative photo is analyzed (about 250 ms) and compared with that vector. |
 | **Guardian email with `after()`** | SMTP runs **after** the response (`next/server` `after`). The teen sees the success screen immediately, and an email failure never undoes the check-in. The result is stored (`enviado`, `falhou`, `sem_email`, `sem_config`) and shows in the attendance list. |
-| **Text-only notices** | The check-in email carries only the name and time. The creative photo may show other minors, so it stays inside the app, behind leader sign-in, and is deleted after 30 days. |
+| **Text-only notices** | The check-in and checkout emails carry only the name and time. The creative photo may show other minors, so it stays inside the app, behind leader sign-in, and is deleted after 30 days. |
 | **SMTP, not a vendor SDK** | Nodemailer works with Gmail, Brevo or Resend by swapping environment variables. |
-| **"Live" feed through incremental polling** | Every 4 s the page asks only for what arrived after the last check-in seen (`?since=`). No WebSocket and no Realtime, which would require opening the database to the public key. It pauses while the tab is hidden and refreshes photo URLs every 30 min. |
+| **"Live" feed through incremental polling** | Every 4 s the page asks only for what changed after the last cursor (`?since=`): new arrivals and recorded or undone checkouts. No WebSocket and no Realtime, which would require opening the database to the public key. It pauses while the tab is hidden and refreshes photo URLs every 30 min. |
+| **Checkout on the same row, written once** | The checkout gets its own columns on the check-in row, written with `update … where checked_out_at is null`: repeated or simultaneous confirmations record one checkout and the attendance never changes. Nothing records a checkout automatically. |
 | **Leader session in the database, not just the cookie** | The `httpOnly` + `SameSite=strict` cookie carries 32 random bytes; the database stores the hash. Deactivating an account or ending sessions takes effect immediately, on any instance. Every login stage (password → code → access) rotates the cookie value. |
 | **Dependency-free TOTP** | RFC 6238 in ~60 lines of `node:crypto`, tested against the official RFC vectors. The secret is encrypted (AES-256-GCM) in the database and the last accepted step is stored, so the same code never works twice. |
 | **Attempt limits in Postgres** | `insert … on conflict do update returning hits` locks the row: 14 simultaneous requests count as 14, even across serverless functions. The attempt is counted **before** the password is checked. |
-| **Dashboard computed in a pure function** | `lib/stats.ts` takes only `(date, member, visitor)` per check-in and returns KPIs, trend and ranking, tested without a database. The attendance percentage counts only services **since the teen's first time**, so newcomers aren't penalized. |
+| **Dashboard computed in a pure function** | `lib/stats.ts` takes only `(date, member, visitor, checkout)` per check-in and returns KPIs, trend and ranking, tested without a database. The attendance percentage counts only services **since the teen's first time**, so newcomers aren't penalized. |
 | **Hand-rolled SVG chart, no library** | Stacked columns with a single axis, labels only on the largest and the latest service, touch/mouse tooltips, a table alternative and a palette (brand blue + orange) **validated by a script** for color blindness and contrast. |
 | **Service date in `America/Sao_Paulo`** | A 10 pm service in Brasília is already "tomorrow" in UTC. The time zone is explicit and covered by tests. |
 
@@ -169,7 +174,21 @@ sequenceDiagram
   Note over S: after() — once the response is sent
   S-)G: text-only SMTP email with the time (no photo)
   S->>D: stores the notice status (enviado / falhou / sem_config)
+  S-->>W: visit session cookie (httpOnly, this check-in only, until the end of the day)
+  Note over T,W: when it's time to leave
+  T->>W: "Estou indo embora", the exit QR code or NFC → /checkout
+  W->>S: POST /api/checkin/checkout (one tap, nothing to type)
+  S->>D: writes checked_out_at ONCE (update … where checked_out_at is null)
+  S-)G: text-only checkout notice
 ```
+
+**Checkout ([details](docs/features/P2-checkout.md)).** The visit session the check-in stores on the phone lets the
+teen confirm their checkout with one tap: from the success screen button, the exit QR code
+([`/qrcode?tipo=saida`](https://flag-checkin.vercel.app/qrcode?tipo=saida)) or an NFC tag at the door. The checkout
+lives on the same row as the check-in, in its own columns: the attendance doesn't change and confirming again
+duplicates nothing. Closing the browser, losing the connection or the service ending does **not** record a checkout:
+until someone confirms, it shows as "checkout not recorded". Leaders record a forgotten checkout (with the time) or undo
+one confirmed by mistake, always with a reason in the action log.
 
 Registration (`/cadastro`) follows the same pattern: client-side validation for quick feedback and **the same
 validation repeated on the server**, plus an invisible field only bots fill in (*honeypot*). Visitors
@@ -216,10 +235,11 @@ for different people.
 | Access to the feed and dashboard (**P1 fixed**, [report](docs/security/P1-leader-accounts.md)) | **One account per leader**: password (scrypt) **and** an authenticator app code (TOTP), required before any private data. No SMS or email fallback. Sessions live in the database and can be revoked instantly. The page isn't indexed (`robots: noindex`). |
 | Lost leader phone | 10 single-use **recovery codes** (only their hash is stored); using one ends the other sessions and requires enrolling a new authenticator. Without codes, **another leader** resets access and hands over a 24 h activation code in person. |
 | Brute force and parallel guessing | Database-backed limits, counted before checking: 8 passwords per account and 30 per network every 15 min; 5 codes per account every 15 min and 20 per day. Holds under simultaneous requests and multiple instances. |
-| Tracing leader actions | `admin_audit` table: login, creation, deactivation, ended sessions, authenticator enrollment, recovery, reset and **attendance corrections** (who, target, when, outcome, reason). A Postgres trigger refuses updates and deletes, even with the server key. Passwords, codes and biometric data never go in. |
+| Tracing leader actions | `admin_audit` table: login, creation, deactivation, ended sessions, authenticator enrollment, recovery, reset and **attendance/checkout corrections** (who, target, when, outcome, reason). A Postgres trigger refuses updates and deletes, even with the server key. Passwords, codes and biometric data never go in. |
 | Registration photo of anything | The first check-in photo must contain exactly one face, close up, verified on the server. |
-| Seeing another teen's photo or time (**P0 fixed**, [report](docs/security/P0-attendance-photos.md)) | Name, birth date and coordinates do **not** authorize reading private data. Photo and time only go back to the device holding the **visit session** (an `httpOnly` HMAC cookie tied to the teen and the day, issued after the face matched) or to signed-in leaders. The public response is identical whether or not the teen has checked in. |
-| Investigating abuse later | `audit_events` table with every identification and confirmation (outcome, teen, IP as an HMAC, distance), because the free Vercel and Supabase plans barely keep logs. |
+| Seeing another teen's photo or time (**P0 fixed**, [report](docs/security/P0-attendance-photos.md)) | Name, birth date and coordinates do **not** authorize reading private data. Photo and time only go back to the device holding the **visit session** (an `httpOnly` HMAC cookie tied to the teen, the check-in and the day, issued after the face matched) or to signed-in leaders. The public response is identical whether or not the teen has checked in. |
+| Closing someone else's visit | Checkout requires the same visit session. Repeating a visitor's name and phone grants no session. |
+| Investigating abuse later | `audit_events` table with every identification, confirmation and checkout (outcome, teen, IP as an HMAC, distance), because the free Vercel and Supabase plans barely keep logs. |
 | Discovering who is registered | An unknown name and a wrong date get **the same** response (no user enumeration). |
 | Skipping the identification step | The photo is only accepted with a valid HMAC-SHA256 token (4 h), compared in constant time. |
 | Open registration (no password) | Full server-side validation and a honeypot against bots. **No CPF** (Brazilian tax ID, [report](docs/security/P1-cpf-removal.md)): a similar registration (same birth date and a compatible name) is flagged as a **possible duplicate** for a leader to merge or dismiss. The same guardian resubmitting doesn't create a duplicate and gets the same response as a new registration, so the form doesn't reveal who is registered. Even a fake registration can't check in without being at church and showing a real face in the registration photo. |
@@ -240,9 +260,9 @@ the next step would be Upstash Ratelimit there.
 ## Tests
 
 ```bash
-npm test             # 86 unit tests (Vitest): dashboard, name search, masks, dates, haversine, HMAC, geofence, upload, faces, email, TOTP (RFC 6238 vectors), passwords, sessions, possible duplicates, guardian consent
+npm test             # 98 unit tests (Vitest): dashboard, name search, masks, dates, haversine, HMAC, geofence, upload, faces, email, TOTP (RFC 6238 vectors), passwords, sessions, possible duplicates, guardian consent, checkout time
 npm run typecheck    # TypeScript in strict mode
-npm run test:e2e     # end-to-end checks (including the P0, leader accounts, CPF removal and privacy regressions) against the real Supabase project, cleaning up the data at the end
+npm run test:e2e     # end-to-end checks (including the P0, leader accounts, CPF removal, privacy and checkout regressions) against the real Supabase project, cleaning up the data at the end
 npm run simulate     # two synthetic teens check in 8 s apart (to watch the live feed)
 ```
 
@@ -251,7 +271,8 @@ or CPF (the server discards a CPF if sent), resubmission without duplicates, a p
 a leader, a position outside the radius (403), a wrong name or date (404), identification with the name without accents
 and without the middle name, a **registration photo** without a face or with two people (422), a second check-in on the
 same day (409), a **creative photo** of someone else (403) and a **group photo with the teen** (200), visitors with and
-without a photo and repeated on the same day, leader accounts (activation, mandatory authenticator, reused code, recovery, simultaneous bursts,
+without a photo and repeated on the same day, checkout (forged or missing session, one tap, simultaneous confirmations,
+leader corrections), leader accounts (activation, mandatory authenticator, reused code, recovery, simultaneous bursts,
 deactivation that only signs out that leader, a teen session without leader access, an immutable audit trail without
 secrets), the feed with visitors and the attendance view.
 
@@ -274,6 +295,7 @@ The **GitHub Actions CI** pipeline runs type checks, tests and the build on ever
 ```
 app/
   checkin/page.tsx            check-in (location → name and birth date or visitor → registration or creative photo → success)
+  checkout/page.tsx           one-tap checkout (visit session; exit QR code or NFC)
   cadastro/page.tsx           registration by the guardian (no photo, no password) with LGPD consent
   confirmar/page.tsx          email link: the guardian reads, consents (or declines) and the registration becomes valid
   privacidade/page.tsx        explanation for families and teens
@@ -282,17 +304,19 @@ app/
   api/checkin/identificar     name + birth date → HMAC token (4 h) and photo kind
   api/checkin/confirmar       registration (first) or creative photo → Storage + insert + text-only notice
   api/checkin/visitante       visitor: name + phone (+ optional photo)
+  api/checkin/checkout        GET: this phone's visit · POST: confirms the checkout (once, server time)
   api/cadastro                new teen (+ confirmation link)
   api/cadastro/verificar      confirmation or refusal by the guardian
   api/cron/retencao           retention periods (Vercel Cron, daily)
   api/lider/*                 sign in, verify (code or recovery), activate, authenticator, session, accounts, audit, duplicates, family requests
-  api/pastor/checkins         attendance correction (DELETE with a reason, goes to the audit log)
+  api/pastor/checkins         attendance correction (DELETE) and checkout correction (PATCH record/undo), with the reason in the audit log
   api/pastor/dashboard        KPIs, per-service trend and ranking (full leader session only)
-  api/pastor/feed             the day's check-ins with signed photo URLs (?since= for incremental updates)
+  api/pastor/feed             the day's check-ins and checkouts, with signed photo URLs (?since=cursor for incremental updates)
   api/health                  diagnostics (variables, tables, view and bucket)
-  api/qrcode · qrcode/        server-generated QR code (PNG/SVG) and a printable page
+  api/qrcode · qrcode/        entrance and exit QR codes (PNG/SVG), generated on the server, and a printable page
 components/                   Brand, Camera, RegistrationForm, PastorDashboard, LeaderAuth (login, activation, authenticator), LeadersAdmin (accounts, audit, requests)
 lib/stats.ts                  dashboard calculation (pure function)
+lib/checkout.ts               leader-entered checkout time and status label (pure functions)
 lib/format.ts                 validation shared by client and server
 lib/server/                   env, Supabase client, security, face recognition, email, guardian consent, leader sessions, retention
 supabase/migrations/          schema, RLS, attendance view, bucket and retention function
@@ -311,11 +335,12 @@ Portuguese names that stay in routes, the database and the UI:
 | `líder` / `pastor` | leader / pastor (the leader area lives at `/pastor`) |
 | `culto` | church service |
 | `presença`, view `presencas` | attendance, the attendance view |
+| `saída` | checkout (leaving the service) |
 | `visitante` | visitor |
 | `foto de registro` / `foto criativa` | registration photo (reference face) / creative photo (any later check-in photo) |
 | `identificar` / `confirmar` | identify (name + birth date) / confirm (photo) |
 | `expurgar_dados()` | retention purge |
-| `enviado`, `falhou`, `sem_email`, `sem_config` | email status: sent, failed, no email, SMTP not configured |
+| `enviado`, `falhou`, `sem_email`, `sem_config`, `desligado` | email status: sent, failed, no email, SMTP not configured, turned off |
 
 ## Running locally
 

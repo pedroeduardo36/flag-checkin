@@ -51,6 +51,10 @@ const req = async (method, path, body, cookie) => {
   return { status: r.status, data: await r.json().catch(() => ({})), cookie: sc.split(";")[0], setCookie: sc };
 };
 
+const hhmmBrasilia = (d = new Date()) =>
+  d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Sao_Paulo" });
+const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+
 let failures = 0;
 const check = (name, cond, extra) => {
   console.log(`${cond ? "✅" : "❌"} ${name}${!cond && extra !== undefined ? ` → ${JSON.stringify(extra).slice(0, 300)}` : ""}`);
@@ -242,13 +246,56 @@ try {
   f = await post("/api/checkin/confirmar", { token, photo: photo("two-people") });
   check("a GROUP creative photo with the teen is accepted (200, not the first)", f.status === 200 && f.data.photoKind === "criativa" && f.data.isFirst === false, f.data);
 
+  // ---------- P2: browser checkout (visit session, one tap) ----------
+  const checkoutCookie = (f.headers.get("set-cookie") ?? "").split(";")[0];
+  const { data: beforeCheckout } = await sb.from("checkins").select("id, checked_in_at, photo_path, distance_m, face_distance").eq("member_id", m.id).eq("service_date", today).single();
+  let s = await req("GET", "/api/checkin/checkout");
+  check("P2 checkout: without the visit session, no visit is shown", s.status === 200 && s.data.visit === null, s.data);
+  s = await req("POST", "/api/checkin/checkout", {});
+  check("P2 checkout: without the visit session, the checkout is rejected (401 SEM_VISITA)", s.status === 401 && s.data.code === "SEM_VISITA", s.data);
+  s = await req("POST", "/api/checkin/checkout", {}, "o2_visita=eyJtaWQiOm51bGx9.assinaturafalsa");
+  check("P2 checkout: a forged visit cookie records no checkout (401)", s.status === 401, s.status);
+  s = await req("GET", "/api/checkin/checkout", null, visitCookie);
+  check("P2 checkout: the session of a check-in moved to another day doesn't work today", s.data.visit === null, s.data);
+  s = await req("GET", "/api/checkin/checkout", null, checkoutCookie);
+  check("P2 checkout: the visit session opens the checkout without asking for data again ('não registrada')",
+    s.status === 200 && s.data.visit?.name === reg.name && s.data.visit.checkedOutAt === null && s.data.visit.checkedInAt === beforeCheckout.checked_in_at, s.data);
+  const beforeTap = Date.now();
+  s = await req("POST", "/api/checkin/checkout", inside, checkoutCookie);
+  const checkoutTime = s.data.checkedOutAt;
+  check("P2 checkout: one tap records the checkout with the server time",
+    s.status === 200 && s.data.alreadyCheckedOut === false && Math.abs(Date.parse(checkoutTime) - beforeTap) < 60_000 && s.data.checkoutBy === "participante", s.data);
+  const repeated = await Promise.all(Array.from({ length: 3 }, () => req("POST", "/api/checkin/checkout", {}, checkoutCookie)));
+  check("P2 checkout: confirming again (3 at once) returns the same checkout, without duplicating",
+    repeated.every((x) => x.status === 200 && x.data.alreadyCheckedOut === true && x.data.checkedOutAt === checkoutTime), repeated.map((x) => [x.status, x.data.checkedOutAt]));
+  const { data: afterCheckout } = await sb.from("checkins").select("id, checked_in_at, photo_path, distance_m, face_distance, checked_out_at, checkout_by, checkout_leader_id, checkout_distance_m, latitude").eq("member_id", m.id).eq("service_date", today);
+  check("P2 checkout: a single row, and the original attendance (arrival, photo, distance, face) is unchanged",
+    afterCheckout.length === 1 && afterCheckout[0].id === beforeCheckout.id && afterCheckout[0].checked_in_at === beforeCheckout.checked_in_at &&
+    afterCheckout[0].photo_path === beforeCheckout.photo_path && afterCheckout[0].distance_m === beforeCheckout.distance_m && afterCheckout[0].face_distance === beforeCheckout.face_distance, afterCheckout);
+  check("P2 checkout: stored as confirmed by the participant, with only the (optional) distance",
+    afterCheckout[0].checkout_by === "participante" && afterCheckout[0].checkout_leader_id === null && typeof afterCheckout[0].checkout_distance_m === "number" && afterCheckout[0].latitude === null, afterCheckout[0]);
+  r = await post("/api/checkin/identificar", { ...inside, name: reg.name, birthDate: birth }, { cookie: checkoutCookie });
+  check("P2 checkout: reopening the check-in on the same phone shows the checkout", r.data.alreadyCheckedIn === true && r.data.checkedOutAt === checkoutTime, r.data);
+  let checkoutNotice = null;
+  for (let i = 0; i < 20 && !checkoutNotice; i++) {
+    await new Promise((res) => setTimeout(res, 1000));
+    ({ data: { checkout_email_status: checkoutNotice } } = await sb.from("checkins").select("checkout_email_status").eq("id", beforeCheckout.id).single());
+  }
+  check(`P2 checkout: guardian checkout notice recorded (${checkoutNotice})`, expected.includes(checkoutNotice) || checkoutNotice === "desligado", checkoutNotice);
+
   // ---------- Visitor ----------
   r = await post("/api/checkin/visitante", { ...inside, name: "Visitante Teste", phone: "123" });
   check("a visitor with an invalid phone is rejected (400)", r.status === 400 && !!r.data.errors?.phone, r.data);
   r = await post("/api/checkin/visitante", { ...inside, name: "Visitante Teste Sem Foto", phone: visitorPhones[0] });
   check("visitor with only a name and phone (200)", r.status === 200 && r.data.ok && !r.data.alreadyCheckedIn, r.data);
+  const visitorCookie = (r.headers.get("set-cookie") ?? "").split(";")[0];
   r = await post("/api/checkin/visitante", { ...inside, name: "Visitante Teste Sem Foto", phone: visitorPhones[0] });
   check("a repeat visitor on the same day → already checked in", r.status === 200 && r.data.alreadyCheckedIn === true, r.data);
+  check("P2 checkout: repeating a visitor's name and phone does NOT grant the visit session (knowing the phone doesn't close the visit)",
+    !(r.headers.get("set-cookie") ?? "").includes("o2_visita="), r.headers.get("set-cookie"));
+  s = await req("POST", "/api/checkin/checkout", {}, visitorCookie);
+  check("P2 checkout: a visitor also confirms the checkout from the check-in phone",
+    visitorCookie.startsWith("o2_visita=") && s.status === 200 && s.data.isVisitor === true && !!s.data.checkedOutAt, s.data);
   r = await post("/api/checkin/visitante", { ...inside, name: "Visitante Teste Com Foto", phone: visitorPhones[1], photo: photo("person-b") });
   check("visitor with the optional creative photo (200)", r.status === 200 && r.data.ok, r.data);
   const { data: visitorPhoto } = await sb.from("checkins").select("photo_path, latitude").eq("visitor_phone", visitorPhones[1]).single();
@@ -369,13 +416,16 @@ try {
   check("the check-in shows up in the feed with the creative photo and the registration photo", !!mine?.selfieUrl && !!mine?.avatarUrl && mine.photoKind === "criativa", mine);
   const visitors = feed.items?.filter((i) => i.isVisitor && i.name.startsWith("Visitante Teste")) ?? [];
   check("visitors show up in the feed flagged as visitors", visitors.length === 2, visitors.length);
-  const since = await fetch(`${BASE}/api/pastor/feed?since=${encodeURIComponent(feed.items?.[0]?.checkedInAt ?? "")}`, { headers: { cookie: pastorCookie } }).then((x) => x.json());
+  const since = await fetch(`${BASE}/api/pastor/feed?since=${encodeURIComponent(feed.cursor ?? "")}`, { headers: { cookie: pastorCookie } }).then((x) => x.json());
   check("the incremental feed (since) doesn't repeat what was already seen", Array.isArray(since.items) && since.items.length === 0, since.items?.length);
+  check("P2 checkout: the feed shows the checkout confirmed by the teen and counts the day's checkouts",
+    mine?.checkedOutAt === checkoutTime && mine?.checkoutBy === "participante" && feed.checkedOut >= 2 && typeof feed.cursor === "string", { mine: mine?.checkedOutAt, checkedOut: feed.checkedOut });
   const dashNoSession = await fetch(`${BASE}/api/pastor/dashboard`);
   check("the dashboard without a session is blocked (401)", dashNoSession.status === 401, dashNoSession.status);
   const dash = await fetch(`${BASE}/api/pastor/dashboard`, { headers: { cookie: pastorCookie } }).then((x) => x.json());
   const todayService = dash.trend?.at(-1);
   check("the dashboard counts today's service (teen + 2 visitors)", todayService?.registered >= 1 && todayService?.visitors >= 2 && dash.kpis?.services >= 1, todayService);
+  check("P2 checkout: the dashboard counts the service's confirmed checkouts", todayService?.checkouts >= 2 && dash.kpis?.latest?.checkouts === todayService?.checkouts, todayService);
   const rk = dash.ranking ?? [];
   const sorted = rk.every((r, i) => i === 0 || rk[i - 1].attendances >= r.attendances);
   const hasRoom = rk.length < 10;
@@ -388,6 +438,32 @@ try {
 
   const { data: att } = await sb.from("presencas").select("nome, tipo, tipo_foto").in("nome", [reg.name, "Visitante Teste Sem Foto"]);
   check("the presencas view shows the teen (creative photo) and the visitor", att?.some((p) => p.tipo === "cadastrado" && p.tipo_foto === "criativa") && att?.some((p) => p.tipo === "visitante"), att);
+
+  // ---------- P2 checkout: leaders correct the checkout (with a reason) ----------
+  r = await req("PATCH", "/api/pastor/checkins", { id: mine?.id, action: "desfazer_saida", reason: "x" }, checkoutCookie);
+  check("P2 checkout: the teen's visit session can't correct checkouts (401)", r.status === 401, r.status);
+  r = await req("PATCH", "/api/pastor/checkins", { id: mine?.id, action: "desfazer_saida", reason: "" }, ckA);
+  check("P2 checkout: a checkout correction requires a reason (400)", r.status === 400, r.data);
+  r = await req("PATCH", "/api/pastor/checkins", { id: mine?.id, action: "registrar_saida", time: hhmmBrasilia(), reason: "automated test" }, ckA);
+  check("P2 checkout: a leader doesn't overwrite an existing checkout (409)", r.status === 409 && r.data.code === "JA_SAIU", r.data);
+  r = await req("PATCH", "/api/pastor/checkins", { id: mine?.id, action: "desfazer_saida", reason: "automated test: confirmed by accident" }, ckA);
+  const { data: undone } = await sb.from("checkins").select("checked_in_at, checked_out_at, checkout_by").eq("id", mine?.id ?? "").single();
+  check("P2 checkout: a leader undoes the checkout and the attendance stays", r.status === 200 && undone.checked_out_at === null && undone.checkout_by === null && undone.checked_in_at === beforeCheckout.checked_in_at, undone);
+  const feedChanged = await req("GET", `/api/pastor/feed?since=${encodeURIComponent(feed.cursor ?? "")}`, null, ckA);
+  check("P2 checkout: the live feed receives the checkout change on the item already on screen",
+    feedChanged.data.items?.length === 1 && feedChanged.data.items[0].id === mine?.id && feedChanged.data.items[0].checkedOutAt === null, feedChanged.data.items);
+  s = await req("GET", "/api/checkin/checkout", null, checkoutCookie);
+  check("P2 checkout: once undone, the phone shows 'checkout not recorded' again", s.data.visit?.checkedOutAt === null, s.data.visit);
+  r = await req("PATCH", "/api/pastor/checkins", { id: mine?.id, action: "registrar_saida", time: hhmmBrasilia(new Date(Date.now() + 2 * 3600e3)), reason: "automated test" }, ckA);
+  check("P2 checkout: a checkout at a time that hasn't come yet is rejected (400)", r.status === 400, r.data);
+  r = await req("PATCH", "/api/pastor/checkins", { id: mine?.id, action: "registrar_saida", time: hhmmBrasilia(), reason: "automated test: forgot to confirm" }, ckA);
+  const { data: byLeader } = await sb.from("checkins").select("checked_out_at, checkout_by, checkout_leader_id, checkout_distance_m").eq("id", mine?.id ?? "").single();
+  check("P2 checkout: a leader records the forgotten checkout, flagged as the leader's",
+    r.status === 200 && r.data.checkoutBy === "lider" && byLeader.checkout_by === "lider" && byLeader.checkout_leader_id === lA.id && byLeader.checkout_distance_m === null, { r: r.data, byLeader });
+  s = await req("POST", "/api/checkin/checkout", {}, checkoutCookie);
+  check("P2 checkout: confirming after the leader doesn't change the recorded checkout", s.status === 200 && s.data.alreadyCheckedOut === true && s.data.checkoutBy === "lider", s.data);
+  const { data: attCheckout } = await sb.from("presencas").select("saida, saida_confirmada_por").eq("nome", reg.name).eq("culto", today).single();
+  check("P2 checkout: the presencas view shows the checkout and who confirmed it", /^\d{2}:\d{2}$/.test(attCheckout?.saida ?? "") && attCheckout?.saida_confirmada_por === "lider", attCheckout);
 
   // Attendance correction (with a reason) and audit trail.
   r = await req("DELETE", "/api/pastor/checkins", { id: mine?.id, reason: "" }, ckA);
@@ -488,6 +564,12 @@ try {
     has("recuperacao_usada", "ok", (a) => a.actor_id === lA.id) && has("conta_criada", "ok", (a) => a.actor_id === lA.id && a.target_id === idC) &&
     has("conta_desativada", "ok", (a) => a.actor_id === lA.id && a.target_id === idC) && has("conta_desativada", "negado", (a) => a.target_id === lA.id),
     [...new Set((trail ?? []).map((a) => `${a.action}:${a.outcome}`))]);
+  check("P2 checkout: checkout corrections are in the trail (who, which, reason and the previous checkout)",
+    has("saida_desfeita", "ok", (a) => a.actor_id === lA.id && a.target_id === mine?.id && /by accident/.test(a.details?.motivo ?? "") && a.details?.saida_anterior === checkoutTime) &&
+    has("saida_registrada", "ok", (a) => a.actor_id === lA.id && a.target_id === mine?.id && /forgot/.test(a.details?.motivo ?? "")));
+  const { data: checkoutEvents } = await sb.from("audit_events").select("outcome").eq("event", "checkout").gte("at", t0);
+  check("P2 checkout: checkout attempts are in the check-in audit (ok, repeated, no session)",
+    ["ok", "repetido", "SEM_VISITA"].every((o) => checkoutEvents?.some((e) => e.outcome === o)), checkoutEvents?.map((e) => e.outcome));
   check("P1: the attendance correction is recorded with who, which and why",
     has("presenca_removida", "ok", (a) => a.actor_id === lA.id && a.target_id === mine?.id && /by mistake/.test(a.details?.motivo ?? "")));
   check("P1 CPF: the duplicate review is in the trail (different people and merge)",
