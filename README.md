@@ -220,7 +220,7 @@ for different people.
 | Investigating abuse later | `audit_events` table with every identification and confirmation (outcome, teen, IP as an HMAC, coordinates), because the free Vercel and Supabase plans barely keep logs. |
 | Discovering who is registered | An unknown name and a wrong date get **the same** response (no user enumeration). |
 | Skipping the identification step | The photo is only accepted with a valid HMAC-SHA256 token (4 h), compared in constant time. |
-| Open registration (no password) | Unique CPF (Brazilian tax ID), full server-side validation and a honeypot against bots. Even a fake registration can't check in without being at church and showing a real face in the registration photo. |
+| Open registration (no password) | Full server-side validation and a honeypot against bots. **No CPF** (Brazilian tax ID, [report](docs/security/P1-cpf-removal.md)): a similar registration (same birth date and a compatible name) is flagged as a **possible duplicate** for a leader to merge or dismiss. The same guardian resubmitting doesn't create a duplicate and gets the same response as a new registration, so the form doesn't reveal who is registered. Even a fake registration can't check in without being at church and showing a real face in the registration photo. |
 | Leaked public key | RLS without policies: the `anon` key can't read or write anything (tested: `[]` and `401`). |
 | Exposed photos | **Private** bucket, 2 MB limit, image MIME types only. Access through 10-minute signed URLs. |
 | Malicious upload | `decodePhoto` only accepts `data:image/jpeg;base64` between 2 KB and 2 MB, decoded by a pure-JavaScript JPEG reader. |
@@ -238,14 +238,15 @@ the next step would be Upstash Ratelimit there.
 ## Tests
 
 ```bash
-npm test             # 78 unit tests (Vitest): dashboard, name search, masks, dates, haversine, HMAC, geofence, upload, faces, email, TOTP (RFC 6238 vectors), passwords, sessions
+npm test             # 80 unit tests (Vitest): dashboard, name search, masks, dates, haversine, HMAC, geofence, upload, faces, email, TOTP (RFC 6238 vectors), passwords, sessions, possible duplicates
 npm run typecheck    # TypeScript in strict mode
-npm run test:e2e     # 87 end-to-end checks (including the P0 and P1 regressions) against the real Supabase project, cleaning up the data at the end
+npm run test:e2e     # 98 end-to-end checks (including the P0, leader accounts and CPF removal regressions) against the real Supabase project, cleaning up the data at the end
 npm run simulate     # two synthetic teens check in 8 s apart (to watch the live feed)
 ```
 
-The **end-to-end test** covers the happy path **and** the attacks: registration by the guardian without photo or
-password, a duplicate CPF (409), a position outside the radius (403), a wrong name or date (404), identification with
+The **end-to-end test** covers the happy path **and** the attacks: registration by the guardian without photo, password
+or CPF (the server discards a CPF if sent), resubmission without duplicates, a possible duplicate reviewed and merged by
+a leader, a position outside the radius (403), a wrong name or date (404), identification with
 the name without accents and without the middle name, a **registration photo** without a face or with two people (422),
 a second check-in on the same day (409), a **creative photo** of someone else (403) and a **group photo with the teen**
 (200), visitors with and without a photo and repeated on the same day, leader accounts (activation, mandatory
@@ -278,7 +279,7 @@ app/
   api/checkin/confirmar       registration (first) or creative photo → Storage + insert + email
   api/checkin/visitante       visitor: name + phone (+ optional photo)
   api/cadastro                new teen
-  api/lider/*                 sign in, verify (code or recovery), activate, authenticator, session, accounts, audit
+  api/lider/*                 sign in, verify (code or recovery), activate, authenticator, session, accounts, audit, duplicates
   api/pastor/checkins         attendance correction (DELETE with a reason, goes to the audit log)
   api/pastor/dashboard        KPIs, per-service trend and ranking (full leader session only)
   api/pastor/feed             the day's check-ins with signed photo URLs (?since= for incremental updates)

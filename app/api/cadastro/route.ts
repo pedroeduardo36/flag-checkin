@@ -2,13 +2,16 @@ import { withErrors } from "@/lib/server/http";
 import { NextResponse, after } from "next/server";
 import { db } from "@/lib/server/supabase";
 import { emailConfigured, sendRegistrationEmail, senderAddress } from "@/lib/server/email";
-import { isValidBirthDate, isValidCpf, isValidEmail, isValidPhone, nameTokens, onlyDigits } from "@/lib/format";
+import { isValidBirthDate, isValidEmail, isValidPhone, nameTokens, onlyDigits } from "@/lib/format";
+import { findDuplicate } from "@/lib/duplicates";
 
 const clean = (v: unknown, max = 120) => String(v ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
 /**
  * Registration made by the GUARDIAN before the service (/cadastro page) or by the pastor.
  * No photo and no door-keeper password: the reference photo is taken at the first check-in.
+ * No CPF: check-in uses name + birth date, and attendances point to the registration's internal id.
+ * A registration similar to an existing one is stored flagged as a "possible duplicate" for a leader to review.
  */
 export const POST = withErrors(async (req: Request) => {
   const b = await req.json().catch(() => null);
@@ -18,7 +21,6 @@ export const POST = withErrors(async (req: Request) => {
 
   const data = {
     name: clean(b.name),
-    cpf: onlyDigits(b.cpf),
     phone: onlyDigits(b.phone) || null,
     birth_date: String(b.birthDate ?? ""),
     guardian_name: clean(b.guardianName),
@@ -29,7 +31,6 @@ export const POST = withErrors(async (req: Request) => {
 
   const errors: Record<string, string> = {};
   if (nameTokens(data.name).length < 2) errors.name = "Informe nome e sobrenome do adolescente.";
-  if (!isValidCpf(data.cpf)) errors.cpf = "CPF do adolescente inválido.";
   if (data.phone && !isValidPhone(data.phone)) errors.phone = "Telefone do adolescente inválido.";
   if (!isValidBirthDate(data.birth_date)) errors.birthDate = "Data de nascimento inválida.";
   if (nameTokens(data.guardian_name).length < 2) errors.guardianName = "Informe seu nome e sobrenome.";
@@ -41,12 +42,27 @@ export const POST = withErrors(async (req: Request) => {
   if (Object.keys(errors).length)
     return NextResponse.json({ error: "Corrija os campos destacados.", errors }, { status: 400 });
 
-  const { error } = await db().from("members").insert({ ...data, guardian_consent_at: new Date().toISOString() });
-  if (error) {
-    if (error.code === "23505")
-      return NextResponse.json({ error: "Este CPF já está cadastrado. O adolescente já pode fazer o check-in.", code: "CPF_EXISTE" }, { status: 409 });
-    throw error;
+  const { data: sameDay, error: findError } = await db()
+    .from("members")
+    .select("id, name, guardian_email, guardian_email2, created_at")
+    .eq("birth_date", data.birth_date)
+    .order("created_at");
+  if (findError) throw findError;
+  const match = findDuplicate(data, sameDay ?? []);
+
+  // Same guardian resubmitting the same registration: nothing to store. The response is the same as for a new
+  // registration, so the form doesn't reveal whether someone is already registered.
+  if (match?.resubmission) {
+    after(() => sendRegistrationEmail([data.guardian_email, data.guardian_email2], { guardianName: data.guardian_name, teenName: data.name }));
+    return NextResponse.json({ ok: true, confirmationSent: emailConfigured(), sender: senderAddress() });
   }
+
+  const { error } = await db().from("members").insert({
+    ...data,
+    guardian_consent_at: new Date().toISOString(),
+    possible_duplicate_of: match?.id ?? null,
+  });
+  if (error) throw error;
   // Confirmation email after the response: the guardian can already check their spam folder.
   after(() => sendRegistrationEmail([data.guardian_email, data.guardian_email2], { guardianName: data.guardian_name, teenName: data.name }));
 

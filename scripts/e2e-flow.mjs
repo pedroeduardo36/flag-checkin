@@ -18,15 +18,8 @@ const env = {
 };
 const sb = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-function randomCpf() {
-  const n = Array.from({ length: 9 }, () => Math.floor(Math.random() * 10));
-  for (const len of [9, 10]) {
-    const s = n.reduce((acc, d, i) => acc + d * (len + 1 - i), 0);
-    const r = (s * 10) % 11;
-    n.push(r === 10 ? 0 : r);
-  }
-  return n.join("");
-}
+// Random birth date (2009–2013): test registrations don't collide with others of the same name.
+const randomBirthDate = () => new Date(Date.UTC(2009, 0, 1) + Math.floor(Math.random() * 5 * 365) * 86400_000).toISOString().slice(0, 10);
 const randomPhone = () => "619" + String(Math.floor(Math.random() * 1e8)).padStart(8, "0");
 
 const post = async (path, body, headers = {}) => {
@@ -71,22 +64,23 @@ if (geoOff) console.log("⚠️  GEOFENCE_DISABLED=true — location check is OF
 const inside = { lat: Number(env.CHURCH_LAT), lng: Number(env.CHURCH_LNG), accuracy: 15 };
 const outside = { lat: inside.lat + 0.05, lng: inside.lng, accuracy: 15 };
 
-const cpf = randomCpf();
-const createdCpfs = [cpf];
 const visitorPhones = [randomPhone(), randomPhone()];
-const birth = "2010-05-20";
+const birth = randomBirthDate();
+const DUPLICATE_NAME = "Teste Automatico Souza Flag"; // same name, written differently
+const createdNames = ["Teste Automático de Souza Flag", "Teste Automático Pastor", DUPLICATE_NAME];
 const reg = {
-  name: "Teste Automático de Souza Flag", cpf, phone: "", birthDate: birth,
+  name: createdNames[0], phone: "", birthDate: birth,
   guardianName: "Responsável Teste", guardianPhone: "61988880000",
   guardianEmail: env.E2E_EMAIL || env.SMTP_USER || "responsavel.teste@example.com",
   // Second email: the same address with "+responsavel2" (Gmail delivers it to the same inbox, no bounce).
   guardianEmail2: (env.E2E_EMAIL || env.SMTP_USER || "responsavel.teste@example.com").replace("@", "+responsavel2@"),
   consent: true,
 };
-const waitForNotice = async (memberCpf) => {
+const testRegistrations = (name = reg.name) => sb.from("members").select("id, photo_path, face_descriptor, guardian_email2, possible_duplicate_of").eq("birth_date", birth).eq("name", name);
+const waitForNotice = async (memberId) => {
   for (let i = 0; i < 20; i++) {
     await new Promise((res) => setTimeout(res, 1000));
-    const { data } = await sb.from("checkins").select("guardian_email_status, members!inner(cpf)").eq("members.cpf", memberCpf).maybeSingle();
+    const { data } = await sb.from("checkins").select("guardian_email_status").eq("member_id", memberId).maybeSingle();
     if (data?.guardian_email_status) return data.guardian_email_status;
   }
   return null;
@@ -104,12 +98,18 @@ try {
   check("second email equal to the first is rejected (400)", r.status === 400 && !!r.data.errors?.guardianEmail2, r.data);
   r = await post("/api/cadastro", { ...reg, guardianEmail: "email-invalido" });
   check("registration with an invalid guardian email is rejected (400)", r.status === 400 && !!r.data.errors?.guardianEmail, r);
-  r = await post("/api/cadastro", reg);
-  check("guardian registers with NO photo and NO door-keeper password (200)", r.status === 200, r);
+  // An old client may still send a CPF: the server discards it.
+  r = await post("/api/cadastro", { ...reg, cpf: "529.982.247-25" });
+  check("guardian registers with NO photo, NO door-keeper password and NO CPF (200)", r.status === 200, r);
   check("registration returns the sender for the spam notice", typeof r.data.sender === "string" && r.data.sender.includes("@"), r.data);
+  const firstResponse = JSON.stringify(Object.keys(r.data).sort());
   r = await post("/api/cadastro", reg);
-  check("duplicate CPF is rejected (409)", r.status === 409, r);
-  const { data: noPhoto } = await sb.from("members").select("photo_path, face_descriptor, guardian_email2").eq("cpf", cpf).single();
+  const { data: justOne } = await testRegistrations();
+  check("P1 CPF: the same guardian resubmitting doesn't duplicate the registration (1 row)", r.status === 200 && justOne?.length === 1, justOne?.length);
+  check("P1 CPF: a resubmission responds like a new registration (doesn't reveal who is registered)", JSON.stringify(Object.keys(r.data).sort()) === firstResponse, r.data);
+  const noPhoto = justOne[0];
+  const cpfColumn = await sb.from("members").select("cpf").eq("id", noPhoto.id).maybeSingle();
+  check("P1 CPF: no CPF stored (column dropped or empty)", cpfColumn.error?.code === "42703" || cpfColumn.data?.cpf === null, cpfColumn.error?.code ?? cpfColumn.data);
   check("registration has no photo until the first check-in", !noPhoto.photo_path && !noPhoto.face_descriptor, noPhoto);
   check("the guardian's second email is saved", noPhoto.guardian_email2 === reg.guardianEmail2, noPhoto.guardian_email2);
 
@@ -142,7 +142,7 @@ try {
   check("registration photo with two people is rejected (422 VARIOS_ROSTOS)", f.status === 422 && f.data.code === "VARIOS_ROSTOS", f.data);
   f = await post("/api/checkin/confirmar", { token, photo: photo("person-a-registration") });
   check("registration photo with one face completes the registration and asks for the creative photo", f.status === 200 && f.data.registered === true && f.data.next === "criativa", f.data);
-  const { data: withPhoto } = await sb.from("members").select("id, photo_path, face_descriptor").eq("cpf", cpf).single();
+  const { data: withPhoto } = await sb.from("members").select("id, photo_path, face_descriptor").eq("id", noPhoto.id).single();
   check("registration photo becomes the registration's photo (with descriptor)", !!withPhoto.photo_path && withPhoto.face_descriptor?.length === 128, !!withPhoto.photo_path);
   const { count: stillNone } = await sb.from("checkins").select("id", { count: "exact", head: true }).eq("member_id", withPhoto.id);
   check("the registration photo alone does NOT complete the check-in", stillNone === 0, stillNone);
@@ -155,7 +155,7 @@ try {
   const visitCookie = visitSetCookie.split(";")[0];
   check("completed check-in stores the visit session (httpOnly, SameSite=strict, /api/checkin only)",
     visitCookie.startsWith("o2_visita=") && /httponly/i.test(visitSetCookie) && /samesite=strict/i.test(visitSetCookie) && /path=\/api\/checkin/i.test(visitSetCookie), visitSetCookie);
-  const notice = await waitForNotice(cpf);
+  const notice = await waitForNotice(noPhoto.id);
   const expected = env.E2E_EMAIL ? ["enviado"] : ["enviado", "falhou", "sem_config"];
   check(`guardian notice recorded (${notice})`, expected.includes(notice), notice);
 
@@ -183,7 +183,7 @@ try {
 
   // ---------- Later check-ins: creative photo ----------
   // Simulates "another Sunday": today's check-in moves to last week (the registration already has the reference photo).
-  const { data: m } = await sb.from("members").select("id").eq("cpf", cpf).single();
+  const m = noPhoto;
   const lastWeek = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10);
   await sb.from("checkins").update({ service_date: lastWeek }).eq("member_id", m.id);
   r = await post("/api/checkin/identificar", { ...inside, name: reg.name, birthDate: birth });
@@ -333,10 +333,9 @@ try {
   check("ranking sorted (up to 10) and with the test teen when there's room",
     sorted && rk.length <= 10 && (!hasRoom || rk.some((r) => r.name === reg.name)), rk.map((r) => [r.name, r.attendances]));
 
-  const cpf2 = randomCpf();
-  createdCpfs.push(cpf2);
-  const r2 = await post("/api/cadastro", { ...reg, cpf: cpf2, name: "Teste Automático Pastor" }, { cookie: pastorCookie });
-  check("a leader registers through the same form (200)", r2.status === 200, r2.data);
+  const r2 = await post("/api/cadastro", { ...reg, name: createdNames[1] }, { cookie: pastorCookie });
+  const { data: byPastor } = await testRegistrations(createdNames[1]);
+  check("a leader registers through the same form (200), without flagging a different name as a duplicate", r2.status === 200 && byPastor?.[0]?.possible_duplicate_of === null, r2.data);
 
   const { data: att } = await sb.from("presencas").select("nome, tipo, tipo_foto").in("nome", [reg.name, "Visitante Teste Sem Foto"]);
   check("the presencas view shows the teen (creative) and the visitor", att?.some((p) => p.tipo === "cadastrado" && p.tipo_foto === "criativa") && att?.some((p) => p.tipo === "visitante"), att);
@@ -348,6 +347,44 @@ try {
   const { data: stillThere } = await sb.from("checkins").select("id").eq("id", mine?.id ?? "").maybeSingle();
   check("P1: a leader removes an attendance recorded by mistake", r.status === 200 && !stillThere, r.data);
 
+
+  // ---------- P1 CPF: possible duplicates for a leader to review ----------
+  // Another guardian registers the same teen with the name written differently.
+  r = await post("/api/cadastro", { ...reg, name: DUPLICATE_NAME, guardianEmail: reg.guardianEmail.replace("@", "+outro@"), guardianEmail2: "" });
+  const { data: [dup] = [] } = await testRegistrations(DUPLICATE_NAME);
+  check("P1 CPF: a similar registration is accepted and flagged as a possible duplicate of the original", r.status === 200 && dup?.possible_duplicate_of === m.id, dup);
+  r = await post("/api/checkin/identificar", { ...inside, name: reg.name, birthDate: birth });
+  check("P1 CPF: with two matching registrations, check-in asks for the full name or a leader (409)", r.status === 409 && r.data.code === "AMBIGUO", r.data);
+  r = await req("GET", "/api/lider/duplicados");
+  check("P1 CPF: the duplicate list requires a leader (401)", r.status === 401, r.status);
+  r = await req("GET", "/api/lider/duplicados", null, ckA);
+  const pair = r.data.pairs?.find((p) => p.duplicate.id === dup?.id);
+  check("P1 CPF: a leader sees the pair (new × existing, attendances, same guardian contact)",
+    r.status === 200 && pair?.original.id === m.id && pair.sameGuardian === true && pair.original.checkins >= 1, pair);
+  check("P1 CPF: the review exposes no email, phone or CPF", !/@|61988880000|cpf/i.test(JSON.stringify(r.data.pairs)), r.data.pairs);
+  r = await req("PATCH", "/api/lider/duplicados", { id: dup?.id, action: "pessoas_diferentes" }, ckA);
+  const { data: [dupCleared] = [] } = await testRegistrations(DUPLICATE_NAME);
+  check("P1 CPF: 'different people' clears the flag", r.status === 200 && dupCleared?.possible_duplicate_of === null, r.data);
+
+  // Merge: the duplicate has one attendance on a service the original lacks and another on one it has.
+  await sb.from("members").update({ possible_duplicate_of: m.id }).eq("id", dup.id);
+  const twoWeeksAgo = new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10);
+  const { count: before } = await sb.from("checkins").select("id", { count: "exact", head: true }).eq("member_id", m.id);
+  await sb.from("checkins").insert([
+    { member_id: dup.id, service_date: twoWeeksAgo, photo_kind: "criativa" },
+    { member_id: dup.id, service_date: lastWeek, photo_kind: "criativa" },
+  ]);
+  r = await req("PATCH", "/api/lider/duplicados", { id: dup.id, action: "mesclar" }, ckA);
+  const { data: dupAfter } = await sb.from("members").select("id").eq("id", dup.id).maybeSingle();
+  const { data: original } = await sb.from("members").select("id, photo_path, face_descriptor").eq("id", m.id).single();
+  const { data: hist } = await sb.from("checkins").select("service_date").eq("member_id", m.id);
+  check("P1 CPF: merging deletes the duplicate and keeps the original's id and history (+1 service, no repeated day)",
+    r.status === 200 && !dupAfter && original.id === m.id && hist.length === before + 1 && hist.some((h) => h.service_date === twoWeeksAgo) &&
+    new Set(hist.map((h) => h.service_date)).size === hist.length && original.face_descriptor?.length === 128, { status: r.status, hist });
+  r = await req("PATCH", "/api/lider/duplicados", { id: m.id, action: "mesclar" }, ckA);
+  check("P1 CPF: an unflagged registration isn't merged (404)", r.status === 404, r.status);
+
+
   const { data: trail } = await sb.from("admin_audit").select("id, actor_id, action, target_id, outcome, details").gte("at", t0).order("id");
   const has = (action, outcome, f = () => true) => (trail ?? []).some((a) => a.action === action && a.outcome === outcome && f(a));
   check("P1: the trail records activation, authenticator, login, recovery, creation and deactivation",
@@ -358,6 +395,9 @@ try {
     [...new Set((trail ?? []).map((a) => `${a.action}:${a.outcome}`))]);
   check("P1: attendance correction recorded with who, which and why",
     has("presenca_removida", "ok", (a) => a.actor_id === lA.id && a.target_id === mine?.id && /engano/.test(a.details?.motivo ?? "")));
+  check("P1 CPF: the duplicate review is in the trail (different people and merge)",
+    has("duplicado_descartado", "ok", (a) => a.actor_id === lA.id && a.target_id === dup.id) &&
+    has("cadastro_mesclado", "ok", (a) => a.actor_id === lA.id && a.target_id === m.id && a.details?.cadastro_apagado === dup.id));
   const trailText = JSON.stringify(trail);
   const secrets = [PASSWORD_A, enrollCode, next, ...recoveryCodesA, activationA, setupA.data.secret?.replace(/ /g, "")].filter(Boolean);
   check("P1: the trail contains no password, codes or authenticator key", !secrets.some((x) => trailText.includes(x)));
@@ -373,9 +413,8 @@ try {
   failures++;
 } finally {
   // Cleanup: test teens (check-ins cascade), test visitors and every photo.
-  for (const doc of createdCpfs) {
-    const { data: m } = await sb.from("members").select("id, photo_path").eq("cpf", doc).maybeSingle();
-    if (!m) continue;
+  const { data: created } = await sb.from("members").select("id, photo_path").eq("birth_date", birth).in("name", createdNames);
+  for (const m of created ?? []) {
     const { data: cks } = await sb.from("checkins").select("photo_path").eq("member_id", m.id);
     await sb.storage.from("fotos").remove([m.photo_path, ...(cks ?? []).map((c) => c.photo_path)].filter(Boolean));
     await sb.from("members").delete().eq("id", m.id);
