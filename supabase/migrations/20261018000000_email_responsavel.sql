@@ -1,9 +1,9 @@
--- E-mail do responsável e registro do aviso de check-in enviado a ele.
+-- Guardian email and a record of the check-in notice sent to them.
 
 alter table public.members add column if not exists guardian_email text
   check (guardian_email is null or guardian_email ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
--- enviado | falhou | sem_email (cadastro antigo) | sem_config (SMTP não configurado)
+-- enviado (sent) | falhou (failed) | sem_email (older registration) | sem_config (SMTP not configured)
 alter table public.checkins add column if not exists guardian_email_status text;
 alter table public.checkins add column if not exists guardian_email_at timestamptz;
 

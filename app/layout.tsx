@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 
-// Montserrat variável (400–900) hospedada no próprio app: sem depender do Google Fonts no build nem no runtime.
+// Variable Montserrat (400–900) self-hosted: no dependency on Google Fonts at build time or runtime.
 const font = localFont({
   src: [
     { path: "./fonts/montserrat-latin.woff2", weight: "100 900", style: "normal" },

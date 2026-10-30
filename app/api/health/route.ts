@@ -9,10 +9,10 @@ export const maxDuration = 30;
 
 export const dynamic = "force-dynamic";
 
-// Diagnóstico da integração: confere variáveis, tabelas e bucket. Não expõe dados.
+// Integration diagnostics: checks variables, tables and the bucket. Exposes no data.
 export async function GET() {
   const checks: Record<string, boolean | string> = {};
-  let lideresAtivos: number | null = null;
+  let activeLeaders: number | null = null;
   const envs = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "CHURCH_LAT", "CHURCH_LNG", "CHECKIN_SECRET"];
   const missing = envs.filter((k) => !process.env[k]);
   checks.env = missing.length ? `faltando: ${missing.join(", ")}` : true;
@@ -24,21 +24,21 @@ export async function GET() {
     const checkins = await db().from("checkins").select("id", { count: "exact", head: true });
     checks.checkins = checkins.error ? checkins.error.message : true;
     const leaders = await db().from("leaders").select("id", { count: "exact", head: true }).eq("status", "ativo");
-    checks.lideres = leaders.error ? leaders.error.message : true;
-    lideresAtivos = leaders.count ?? 0; // 0 = ninguém entra em /pastor ainda: rode npm run lider:criar
+    checks.leaders = leaders.error ? leaders.error.message : true;
+    activeLeaders = leaders.count ?? 0; // 0 = nobody can sign in to /pastor yet: run npm run leader:create
     const view = await db().from("presencas").select("culto", { head: true });
     checks.presencas = view.error ? view.error.message : true;
     const bucket = await db().storage.getBucket(PHOTO_BUCKET);
     checks.bucket = bucket.error ? bucket.error.message : bucket.data.public ? "bucket está PÚBLICO — deixe privado" : true;
-    // Carrega os modelos de reconhecimento facial e confere que um logo (sem rosto) é recusado.
+    // Loads the face recognition models and checks that a logo (no face) is rejected.
     const logo = readFileSync(path.join(process.cwd(), "public/brand/flag-logo.jpg"));
     const face = await analyzeFace(logo);
-    checks.reconhecimento_facial = !face.ok && face.code === "SEM_ROSTO" ? true : `resultado inesperado: ${JSON.stringify(face).slice(0, 80)}`;
+    checks.face_recognition = !face.ok && face.code === "SEM_ROSTO" ? true : `unexpected result: ${JSON.stringify(face).slice(0, 80)}`;
   } catch (err) {
     checks.conexao = err instanceof Error ? err.message : String(err);
   }
 
   const ok = Object.values(checks).every((v) => v === true);
-  const geofence = process.env.GEOFENCE_DISABLED === "true" ? "DESLIGADA (modo teste)" : "ligada";
-  return NextResponse.json({ ok, geofence, lideresAtivos, checks }, { status: ok ? 200 : 500 });
+  const geofence = process.env.GEOFENCE_DISABLED === "true" ? "OFF (test mode)" : "on";
+  return NextResponse.json({ ok, geofence, activeLeaders, checks }, { status: ok ? 200 : 500 });
 }

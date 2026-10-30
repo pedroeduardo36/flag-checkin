@@ -4,15 +4,16 @@ import { after } from "next/server";
 import { env } from "./env";
 import { db } from "./supabase";
 
-/** IP vira um código irreversível (HMAC): dá para ver repetição/abuso sem guardar o IP em claro. */
+/** Turns the IP into an irreversible code (HMAC): repeats and abuse are visible without storing the raw IP. */
 export function ipHash(req: Request): string | null {
   const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || req.headers.get("x-real-ip");
   return ip ? createHmac("sha256", env.checkinSecret).update(`ip:${ip}`).digest("base64url").slice(0, 22) : null;
 }
 
 /**
- * Registra uma tentativa nas rotas públicas de check-in, depois da resposta: não atrasa o usuário,
- * e uma falha aqui (por exemplo, a tabela ainda não existir) nunca derruba o check-in.
+ * Logs an attempt on the public check-in routes after the response is sent: it never slows the user
+ * down, and a failure here (for example, the table not existing yet) never breaks the check-in.
+ * Event values are stored as-is in audit_events, so they stay in Portuguese.
  */
 export function audit(
   req: Request,
@@ -29,6 +30,6 @@ export function audit(
   };
   after(async () => {
     const { error } = await db().from("audit_events").insert(row);
-    if (error) console.error("Falha ao gravar auditoria:", error.message);
+    if (error) console.error("Failed to write audit event:", error.message);
   });
 }

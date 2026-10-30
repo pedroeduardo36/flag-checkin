@@ -17,7 +17,7 @@ export function parseCoords(body: any): Coords | null {
   return { lat, lng, accuracy: Number.isFinite(accuracy) ? accuracy : 0 };
 }
 
-/** Confere se a posição está dentro do raio do local do culto. */
+/** Checks whether the position is inside the radius around the service venue. */
 export function checkGeofence(c: Coords | null) {
   if (env.geofenceDisabled) {
     const distance = c ? Math.round(distanceMeters(c.lat, c.lng, env.churchLat, env.churchLng)) : null;
@@ -28,7 +28,7 @@ export function checkGeofence(c: Coords | null) {
   return { inside: distance <= env.churchRadius, distance, radius: env.churchRadius, disabled: false };
 }
 
-// Token curto (5 min) que liga a etapa "CPF + nascimento" à etapa "foto".
+// Short-lived token (5 min) linking the "CPF + birth date" step to the "photo" step.
 type TokenPayload = { mid: string; lat: number | null; lng: number | null; acc: number | null; dist: number | null; exp: number };
 
 const sign = (data: string) => createHmac("sha256", env.checkinSecret).update(data).digest("base64url");
@@ -49,14 +49,14 @@ export function readCheckinToken(token: string): TokenPayload | null {
   }
 }
 
-/** Data do culto no fuso de Brasília (AAAA-MM-DD). */
+/** Service date in the Brasília time zone (YYYY-MM-DD). */
 export function serviceDate(d = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(d);
 }
 
 const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 
-/** Converte o dataURL JPEG enviado pelo navegador (a câmera do app sempre gera JPEG) em Buffer, com validação. */
+/** Validates the JPEG data URL sent by the browser (the app camera always produces JPEG) and turns it into a Buffer. */
 export function decodePhoto(dataUrl: unknown): { buffer: Buffer; contentType: string } | null {
   const m = /^data:(image\/jpeg);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl ?? ""));
   if (!m) return null;

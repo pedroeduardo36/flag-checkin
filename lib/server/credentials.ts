@@ -2,7 +2,7 @@ import "server-only";
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes, randomInt, scrypt, timingSafeEqual } from "node:crypto";
 import { env } from "./env";
 
-// ---------- Senha (scrypt, sal aleatório por conta) ----------
+// ---------- Password (scrypt, random salt per account) ----------
 const N = 2 ** 15, R = 8, P = 1, KEYLEN = 32, MAXMEM = 64 * 1024 * 1024;
 
 const derive = (password: string, salt: Buffer, n = N, r = R, p = P) =>
@@ -14,7 +14,7 @@ export async function hashPassword(password: string): Promise<string> {
   return `scrypt$${N}$${R}$${P}$${salt.toString("base64url")}$${key.toString("base64url")}`;
 }
 
-// Conta inexistente ou sem senha também gasta o tempo do scrypt: a resposta não denuncia quem existe.
+// A missing account or one without a password still pays the scrypt cost: the response doesn't reveal who exists.
 const DUMMY = `scrypt$${N}$${R}$${P}$${Buffer.alloc(16).toString("base64url")}$${Buffer.alloc(KEYLEN).toString("base64url")}`;
 
 export async function verifyPassword(password: unknown, stored: string | null | undefined): Promise<boolean> {
@@ -27,7 +27,7 @@ export async function verifyPassword(password: unknown, stored: string | null | 
 
 const COMMON = ["1234567890", "0123456789", "senha12345", "password12", "qwertyuiop", "flag123456", "o2flag1234", "pastor1234"];
 
-/** Regras da senha de líder (NIST 800-63B: tamanho conta mais que símbolos obrigatórios). */
+/** Leader password rules (NIST 800-63B: length matters more than mandatory symbols). Messages are shown to the leader. */
 export function passwordProblem(password: unknown, email = ""): string | null {
   const p = String(password ?? "");
   if (p.length < 10) return "Use pelo menos 10 caracteres.";
@@ -40,8 +40,8 @@ export function passwordProblem(password: unknown, email = ""): string | null {
   return null;
 }
 
-// ---------- Segredo do autenticador cifrado no banco (AES-256-GCM) ----------
-// Chave derivada do CHECKIN_SECRET (HKDF): quem lê só o banco não consegue gerar códigos.
+// ---------- Authenticator secret encrypted in the database (AES-256-GCM) ----------
+// Key derived from CHECKIN_SECRET (HKDF): someone who can only read the database can't generate codes.
 const sealKey = () => Buffer.from(hkdfSync("sha256", env.checkinSecret, "flag-o2", "totp-v1", 32));
 
 export function seal(plain: Buffer): string {
@@ -63,27 +63,27 @@ export function unseal(sealed: string | null | undefined): Buffer | null {
   }
 }
 
-// ---------- Códigos de uso único (ativação e recuperação) ----------
-// Sem 0/O, 1/I/L: dá para ditar e digitar sem confusão. 31 símbolos ≈ 5 bits cada.
+// ---------- Single-use codes (activation and recovery) ----------
+// No 0/O or 1/I/L, so codes can be read aloud and typed without confusion. 31 symbols ≈ 5 bits each.
 const ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 
-/** Ex.: groups=[5,5] → "K7QM2-XR9TD" (50 bits). */
+/** E.g. groups=[5,5] → "K7QM2-XR9TD" (50 bits). */
 export function randomCode(groups: number[]): string {
   return groups.map((n) => Array.from({ length: n }, () => ALPHABET[randomInt(ALPHABET.length)]).join("")).join("-");
 }
 
 export const normalizeCode = (code: unknown) => String(code ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
 
-/** Códigos de recuperação: guardamos só o HMAC (50 bits, valem até serem usados): um vazamento do banco não os entrega. */
+/** Recovery codes: only the HMAC is stored (50 bits, valid until used), so a database leak doesn't expose them. */
 export const codeHash = (kind: "recuperacao", code: unknown) =>
   createHmac("sha256", env.checkinSecret).update(`${kind}:${normalizeCode(code)}`).digest("base64url");
 
 /**
- * Código de ativação: SHA-256 sem chave, para o script `lider:criar` (que roda fora da Vercel, sem o
- * segredo de produção) gerar códigos que a produção aceita. 60 bits aleatórios, uso único e 24 h de
- * validade: inverter o hash por força bruta nesse prazo é inviável.
+ * Activation code: unkeyed SHA-256, so the `leader:create` script (which runs outside Vercel, without
+ * the production secret) can issue codes production accepts. 60 random bits, single use and valid for
+ * 24 h: brute-forcing the hash within that window isn't feasible.
  */
 export const setupCodeHash = (code: unknown) => createHash("sha256").update(`ativacao:${normalizeCode(code)}`).digest("base64url");
 
-/** Hash do valor do cookie de sessão (o banco nunca guarda o valor em si). */
+/** Hash of the session cookie value (the database never stores the value itself). */
 export const tokenHash = (token: string) => createHash("sha256").update(token).digest("base64url");

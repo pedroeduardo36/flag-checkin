@@ -1,14 +1,14 @@
 -- Novo fluxo:
--- 1) O responsável cadastra o adolescente antes do culto, SEM foto. A foto de referência
---    é tirada no primeiro check-in (members.photo_path / face_descriptor ficam vazios até lá).
--- 2) O check-in identifica por nome completo + data de nascimento.
--- 3) Visitantes fazem check-in só com nome e telefone (foto criativa opcional).
+-- 1) The guardian registers the teen before the service, WITHOUT a photo. The reference photo
+--    is taken at the first check-in (members.photo_path / face_descriptor stay empty until then).
+-- 2) Check-in identifies people by full name + birth date.
+-- 3) Visitors check in with only a name and phone (creative photo optional).
 
 alter table public.members alter column photo_path drop not null;
 alter table public.members alter column phone drop not null;
 create index if not exists members_birth_date_idx on public.members (birth_date);
 
--- Check-in de visitante: sem membro, com nome e telefone próprios.
+-- Visitor check-in: no member, with its own name and phone.
 alter table public.checkins alter column member_id drop not null;
 alter table public.checkins alter column photo_path drop not null;
 alter table public.checkins add column if not exists visitor_name text;
@@ -19,7 +19,7 @@ alter table public.checkins drop constraint if exists checkins_member_ou_visitan
 alter table public.checkins add constraint checkins_member_ou_visitante
   check ((member_id is not null and visitor_name is null) or (member_id is null and visitor_name is not null and visitor_phone is not null));
 
--- Um check-in por visitante (telefone) por dia.
+-- One check-in per visitor (phone) per day.
 create unique index if not exists checkins_visitante_dia_idx
   on public.checkins (visitor_phone, service_date) where member_id is null;
 

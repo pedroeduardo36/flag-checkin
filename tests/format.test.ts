@@ -2,80 +2,80 @@ import { describe, expect, it } from "vitest";
 import { brDateToIso, isValidEmail, maskDate, nameMatchScore, nameTokens, distanceMeters, firstName, isValidBirthDate, isValidCpf, isValidPhone, maskCpf, maskPhone } from "@/lib/format";
 
 describe("CPF", () => {
-  it("aceita CPFs válidos, com ou sem máscara", () => {
+  it("accepts valid CPFs, with or without the mask", () => {
     expect(isValidCpf("529.982.247-25")).toBe(true);
     expect(isValidCpf("52998224725")).toBe(true);
   });
-  it("recusa dígito verificador errado, sequências repetidas e tamanho errado", () => {
+  it("rejects a wrong check digit, repeated sequences and the wrong length", () => {
     expect(isValidCpf("529.982.247-24")).toBe(false);
     expect(isValidCpf("111.111.111-11")).toBe(false);
     expect(isValidCpf("123")).toBe(false);
   });
-  it("aplica a máscara progressivamente", () => {
+  it("applies the mask progressively", () => {
     expect(maskCpf("529")).toBe("529");
     expect(maskCpf("5299822")).toBe("529.982.2");
     expect(maskCpf("52998224725999")).toBe("529.982.247-25");
   });
 });
 
-describe("Telefone", () => {
-  it("formata celular e fixo", () => {
+describe("Phone", () => {
+  it("formats mobile and landline numbers", () => {
     expect(maskPhone("61999990000")).toBe("(61) 99999-0000");
     expect(maskPhone("6133330000")).toBe("(61) 3333-0000");
   });
-  it("valida 10 ou 11 dígitos", () => {
+  it("validates 10 or 11 digits", () => {
     expect(isValidPhone("(61) 99999-0000")).toBe(true);
     expect(isValidPhone("9999-0000")).toBe(false);
   });
 });
 
-describe("Data de nascimento", () => {
-  it("aceita datas reais no passado", () => expect(isValidBirthDate("2010-05-20")).toBe(true));
-  it("recusa datas impossíveis, futuras ou mal formatadas", () => {
+describe("Birth date", () => {
+  it("accepts real dates in the past", () => expect(isValidBirthDate("2010-05-20")).toBe(true));
+  it("rejects impossible, future or malformed dates", () => {
     expect(isValidBirthDate("2010-02-30")).toBe(false);
     expect(isValidBirthDate("2999-01-01")).toBe(false);
     expect(isValidBirthDate("20/05/2010")).toBe(false);
   });
 });
 
-describe("Campo de data (DD/MM/AAAA)", () => {
-  it("aplica a máscara enquanto digita só números", () => {
+describe("Date field (DD/MM/YYYY)", () => {
+  it("applies the mask while digits are typed", () => {
     expect(maskDate("2")).toBe("2");
     expect(maskDate("2005")).toBe("20/05");
     expect(maskDate("20052010")).toBe("20/05/2010");
     expect(maskDate("20/05/20109")).toBe("20/05/2010");
   });
-  it("converte para o formato do banco só quando completa", () => {
+  it("converts to the database format only when complete", () => {
     expect(brDateToIso("20/05/2010")).toBe("2010-05-20");
     expect(brDateToIso("20/05/201")).toBe("");
   });
 });
 
-describe("Nome completo no check-in", () => {
-  const cadastro = "Ana Beatriz de Souza Lima";
-  it("normaliza acento, maiúsculas e conectivos", () => {
+describe("Full name at check-in", () => {
+  const registered = "Ana Beatriz de Souza Lima";
+  it("normalizes accents, case and particles", () => {
     expect(nameTokens("  ANA Beatríz de Souza ")).toEqual(["ana", "beatriz", "souza"]);
   });
-  it("acha com o nome completo, sem acento e com nomes do meio omitidos", () => {
-    expect(nameMatchScore("Ana Beatriz de Souza Lima", cadastro)).toBe(1);
-    expect(nameMatchScore("ana souza", cadastro)).toBeGreaterThan(0);
-    expect(nameMatchScore("Ana Lima", cadastro)).toBeGreaterThan(0);
+  it("matches the full name, without accents and with middle names left out", () => {
+    expect(nameMatchScore("Ana Beatriz de Souza Lima", registered)).toBe(1);
+    expect(nameMatchScore("ana souza", registered)).toBeGreaterThan(0);
+    expect(nameMatchScore("Ana Lima", registered)).toBeGreaterThan(0);
   });
-  it("tolera um erro de digitação em palavras longas", () => {
-    expect(nameMatchScore("Ana Beatris Souza", cadastro)).toBeGreaterThan(0);
+  it("tolerates one typo in long words", () => {
+    expect(nameMatchScore("Ana Beatris Souza", registered)).toBeGreaterThan(0);
   });
-  it("nome mais completo pontua mais", () => {
-    expect(nameMatchScore("Ana Beatriz Souza Lima", cadastro)).toBeGreaterThan(nameMatchScore("Ana Lima", cadastro));
+  it("a more complete name scores higher", () => {
+    expect(nameMatchScore("Ana Beatriz Souza Lima", registered)).toBeGreaterThan(nameMatchScore("Ana Lima", registered));
   });
-  it("recusa só o primeiro nome, primeiro nome diferente ou sobrenome que não existe", () => {
-    expect(nameMatchScore("Ana", cadastro)).toBe(0);
-    expect(nameMatchScore("Maria Souza", cadastro)).toBe(0);
-    expect(nameMatchScore("Ana Pereira", cadastro)).toBe(0);
+  it("rejects a first name alone, a different first name or a last name that doesn't exist", () => {
+    expect(nameMatchScore("Ana", registered)).toBe(0);
+    expect(nameMatchScore("Maria Souza", registered)).toBe(0);
+    expect(nameMatchScore("Ana Pereira", registered)).toBe(0);
   });
 });
 
-describe("E-mail do responsável", () => {
-  it("aceita e-mails comuns e recusa formatos inválidos", () => {
+describe("Guardian email", () => {
+  it("accepts common emails and rejects invalid formats", () => {
     expect(isValidEmail("mae.souza@gmail.com")).toBe(true);
     expect(isValidEmail(" pai@igreja.org.br ")).toBe(true);
     expect(isValidEmail("mae@gmail")).toBe(false);
@@ -84,11 +84,11 @@ describe("E-mail do responsável", () => {
   });
 });
 
-describe("Distância (Haversine)", () => {
-  it("é zero para o mesmo ponto", () => expect(distanceMeters(-15.81, -47.84, -15.81, -47.84)).toBe(0));
-  it("1 milésimo de grau de latitude ≈ 111 m", () => {
+describe("Distance (haversine)", () => {
+  it("is zero for the same point", () => expect(distanceMeters(-15.81, -47.84, -15.81, -47.84)).toBe(0));
+  it("1 thousandth of a degree of latitude ≈ 111 m", () => {
     expect(distanceMeters(-15.81, -47.84, -15.811, -47.84)).toBeCloseTo(111.2, 0);
   });
 });
 
-it("extrai o primeiro nome", () => expect(firstName("  Ana   Beatriz Souza ")).toBe("Ana"));
+it("extracts the first name", () => expect(firstName("  Ana   Beatriz Souza ")).toBe("Ana"));

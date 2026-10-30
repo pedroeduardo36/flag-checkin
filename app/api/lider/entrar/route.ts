@@ -9,14 +9,14 @@ export const dynamic = "force-dynamic";
 
 const WINDOW = 15 * 60;
 
-// Etapa 1 do login: e-mail + senha. Libera só a etapa do código do autenticador (10 min).
+// Login step 1: email + password. Only unlocks the authenticator code step (10 min).
 export const POST = withErrors(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const email = normalizeEmail(body?.email);
   const password = String(body?.password ?? "").slice(0, 200);
   if (!email || !password) return NextResponse.json({ error: "Informe e-mail e senha." }, { status: 400 });
 
-  // Conta a tentativa ANTES de conferir: por conta e por rede.
+  // Count the attempt BEFORE checking: per account and per network.
   const ip = ipHash(req) ?? "sem-ip";
   if ((await tooManyAttempts(`entrar:ip:${ip}`, WINDOW, 30)) || (await tooManyAttempts(`entrar:email:${email}`, WINDOW, 8))) {
     await adminAudit(req, { action: "login", outcome: "bloqueado", targetType: "lider", targetLabel: email, details: { etapa: "senha" } });
@@ -36,8 +36,8 @@ export const POST = withErrors(async (req: Request) => {
     await adminAudit(req, { action: "login", outcome: "negado", targetType: "lider", targetId: l?.id, targetLabel: email, details: { etapa: "senha", motivo } });
     return NextResponse.json({ error: "E-mail ou senha incorretos." }, { status: 401 });
   }
-  // Senha certa mas o autenticador nunca foi cadastrado: a ativação ficou pela metade.
-  // Não deixamos a senha sozinha cadastrar um autenticador novo; outro líder gera um código de ativação.
+  // Right password but the authenticator was never enrolled: activation was left halfway.
+  // A password alone can't enroll a new authenticator; another leader issues an activation code.
   if (!l.totp_enabled_at) {
     await adminAudit(req, { action: "login", outcome: "negado", targetType: "lider", targetId: l.id, targetLabel: email, details: { etapa: "senha", motivo: "sem_autenticador" } });
     return NextResponse.json(

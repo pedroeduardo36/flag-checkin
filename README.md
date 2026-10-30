@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="public/brand/flag-logo.jpg" width="96" alt="Logo Flag" />
+<img src="public/brand/flag-logo.jpg" width="96" alt="Flag logo" />
 
 # Flag Check-in
 
-**Check-in antifraude para o ministério de adolescentes de uma igreja: QR code ou NFC → geolocalização → nome e nascimento → foto com reconhecimento facial.**
+**Fraud-resistant check-in for a church youth ministry: QR code or NFC → geolocation → name and birth date → photo with face recognition.**
 
-Ministério **Flag** · Juventude **O2** — Igreja Batista Capital, Brasília
+**Flag** ministry · **O2** youth group, Igreja Batista Capital, Brasília (Brazil)
 
 [![CI](https://github.com/pedroeduardo36/flag-checkin/actions/workflows/ci.yml/badge.svg)](https://github.com/pedroeduardo36/flag-checkin/actions/workflows/ci.yml)
 ![Next.js](https://img.shields.io/badge/Next.js-15-000?logo=nextdotjs)
@@ -15,77 +15,82 @@ Ministério **Flag** · Juventude **O2** — Igreja Batista Capital, Brasília
 ![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Storage-3ecf8e?logo=supabase&logoColor=white)
 ![Vercel](https://img.shields.io/badge/deploy-Vercel-000?logo=vercel)
 
-[**▶ Abrir o app**](https://flag-checkin.vercel.app/checkin) · [QR code para imprimir](https://flag-checkin.vercel.app/qrcode) · [Guia de instalação](docs/SETUP.md)
+[**▶ Open the app**](https://flag-checkin.vercel.app/checkin) · [Printable QR code](https://flag-checkin.vercel.app/qrcode) · [Setup guide](docs/SETUP.md)
 
-<a href="https://flag-checkin.vercel.app/qrcode"><img src="https://flag-checkin.vercel.app/api/qrcode" width="140" alt="QR code do check-in" /></a><br/><sub>Aponte a câmera do celular · o check-in só é aceito no local do culto</sub>
+<a href="https://flag-checkin.vercel.app/qrcode"><img src="https://flag-checkin.vercel.app/api/qrcode" width="140" alt="Check-in QR code" /></a><br/><sub>Point your phone camera at it · check-in is only accepted at the service venue</sub>
 
 </div>
 
 ---
 
-## O problema
+> **Language note.** The code, tests and docs are in English. The app itself is in Brazilian Portuguese because its
+> users are Brazilian teens, parents and youth leaders. Routes (`/cadastro`, `/pastor`, `/api/lider/*`), database
+> objects (the `presencas` view), stored values (audit actions, email statuses) and API error codes keep their
+> Portuguese names so printed QR codes, sent links and the production database keep working.
+> [Glossary](#glossary) below.
 
-A cada culto, dezenas de adolescentes chegam ao mesmo tempo. A lista de presença no papel é lenta, fácil de fraudar
-("assina por mim?") e não diz nada aos líderes sobre frequência ou sobre quem parou de vir. Os responsáveis também
-querem saber se o filho chegou.
+## The problem
 
-## A solução
+At every service, dozens of teens arrive at the same time. A paper attendance sheet is slow, easy to fake ("can you
+sign for me?") and tells leaders nothing about attendance trends or who stopped coming. Parents also want to know
+their kid arrived.
 
-Um **web app mobile-first**, sem instalar nada, em três momentos:
+## The solution
 
-1. **Antes do culto, o responsável cadastra o filho** em [`/cadastro`](https://flag-checkin.vercel.app/cadastro): sem foto e
-   sem senha, com seções separadas para os dados do adolescente e os do responsável, e até **dois e-mails** para os
-   avisos (o segundo é opcional, pelo botão "+ Adicionar outro e-mail"). Ao terminar, vê o resumo dos dados, recebe um
-   e-mail de confirmação e um aviso em destaque para conferir o spam.
-2. **Na entrada:** um QR code ou tag NFC abre o check-in. O app confere a **localização** e o adolescente informa **nome
-   completo e data de nascimento**. No **primeiro check-in da vida**, ele tira uma **foto de registro**, que precisa ter um
-   rosto só e vira a referência do cadastro, e em seguida vê uma explicação rápida da foto criativa.
-3. **Dentro do culto:** a **foto criativa** (amigos, pose, careta) conclui o check-in, inclusive no primeiro. Basta um
-   dos rostos da foto ser o do adolescente. A identificação da entrada fica guardada no celular por 4 h.
+A **mobile-first web app**, with nothing to install, built around three moments:
 
-**Visitantes** fazem check-in só com nome e telefone, com foto criativa opcional.
+1. **Before the service, the guardian registers the teen** at [`/cadastro`](https://flag-checkin.vercel.app/cadastro):
+   no photo and no password, with separate sections for the teen's and the guardian's details, and up to **two emails**
+   for notices (the second is optional, through the "+ Adicionar outro e-mail" button). When done, they see a summary
+   of the details, get a confirmation email and a prominent reminder to check the spam folder.
+2. **At the entrance:** a QR code or NFC tag opens the check-in. The app checks the **location**, and the teen enters
+   their **full name and birth date**. On their **first check-in ever**, they take a **registration photo**, which must
+   contain a single face and becomes the registration's reference, followed by a quick explanation of the creative photo.
+3. **During the service:** the **creative photo** (friends, poses, funny faces) completes the check-in, including the
+   first one. One of the faces just has to be the teen's. The identification from the entrance is kept on the phone for 4 h.
 
-| 1. Localização | 2. Nome e nascimento (ou visitante) | 3. Confirmação | Fora do raio | Cadastro pelo responsável |
+**Visitors** check in with just a name and phone number, with an optional creative photo.
+
+| 1. Location | 2. Name and birth date (or visitor) | 3. Confirmation | Outside the radius | Registration by the guardian |
 | :-: | :-: | :-: | :-: | :-: |
-| <img src="docs/screenshots/01-localizacao.jpg" width="160" /> | <img src="docs/screenshots/02-identificacao.jpg" width="160" /> | <img src="docs/screenshots/03-sucesso.jpg" width="160" /> | <img src="docs/screenshots/04-fora-do-local.jpg" width="160" /> | <img src="docs/screenshots/05-cadastro.jpg" width="160" /> |
+| <img src="docs/screenshots/01-location.jpg" width="160" /> | <img src="docs/screenshots/02-identification.jpg" width="160" /> | <img src="docs/screenshots/03-success.jpg" width="160" /> | <img src="docs/screenshots/04-outside-venue.jpg" width="160" /> | <img src="docs/screenshots/05-registration.jpg" width="160" /> |
 
-| E-mail para o responsável | Pastor: ao vivo | Pastor: dashboard |
+| Guardian email | Pastor: live feed | Pastor: dashboard |
 | :-: | :-: | :-: |
-| <img src="docs/screenshots/06-email-responsavel.jpg" width="200" /> | <img src="docs/screenshots/07-pastor-feed.jpg" width="200" /> | <img src="docs/screenshots/08-pastor-dashboard.jpg" width="200" /> |
+| <img src="docs/screenshots/06-guardian-email.jpg" width="200" /> | <img src="docs/screenshots/07-pastor-feed.jpg" width="200" /> | <img src="docs/screenshots/08-pastor-dashboard.jpg" width="200" /> |
 
-### Área do pastor — [`/pastor`](https://flag-checkin.vercel.app/pastor)
+### Pastor area — [`/pastor`](https://flag-checkin.vercel.app/pastor)
 
-Cada líder entra com a **própria conta: senha + código do app autenticador** (veja Segurança). Quatro abas:
-- **Ao vivo:** feed no estilo Instagram com quem acabou de chegar (foto do cadastro, nome, horário e foto do
-  check-in), contador de presentes do dia e selos "1º check-in", "foto criativa", "visitante", "rosto confere" e
-  "responsável avisado". Novos check-ins aparecem
-  sozinhos, em cerca de 4 segundos, com destaque de entrada.
-- **Exemplo para teste:** check-ins marcados com `is_example` aparecem sempre no fim do feed, com a etiqueta "Exemplo"
-  e a data do culto. Não entram no contador do dia e as rotinas de limpeza dos testes não os apagam.
-- **Dashboard:** indicadores (encontros, média por encontro, último encontro comparado ao anterior, adolescentes
-  diferentes), **evolução da frequência a cada encontro** em colunas empilhadas (cadastrados e visitantes, com dica ao
-  tocar e opção de tabela) e **ranking dos 10 mais frequentes**, com % de presença desde o 1º check-in e 🔥 sequência
-  de encontros seguidos.
-- **Cadastrar:** o mesmo formulário do responsável, com o botão "Cadastrar outro" para cadastrar em sequência.
+Each leader signs in with **their own account: password + authenticator app code** (see Security). Four tabs:
+- **Live:** an Instagram-style feed of who just arrived (registration photo, name, time and check-in photo), the day's
+  head count, and "first check-in", "creative photo", "visitor", "face matches", "guardian notified"
+  badges. New check-ins show up on their own within about 4 seconds, highlighted as they arrive.
+- **Test example:** check-ins flagged `is_example` always appear at the end of the feed, tagged "Exemplo" with the
+  service date. They don't count toward the day's total, and test cleanup never deletes them.
+- **Dashboard:** KPIs (services, average per service, latest service vs. the previous one, unique teens), the **attendance trend per service** as stacked columns (registered teens and visitors, with tap tooltips
+  and a table view) and a **top-10 attendance ranking**, with the % of services attended since the first check-in and a
+  🔥 streak of consecutive services.
+- **Register:** the guardian's form, with a "register another" button for back-to-back registrations.
+- **Leaders:** leader accounts, sessions and the action log.
 
-E o responsável recebe na hora, **nos dois e-mails cadastrados**, um aviso com o horário e a foto do check-in.
+The guardian gets an instant notice **at both registered emails** with the check-in time and photo.
 
-Três fatores tornam a fraude cara:
+Three factors make fraud expensive:
 
-1. **Onde você está:** cerca geográfica (*geofence*) de 150 m ao redor da igreja, validada **no servidor**.
-2. **Quem você é:** nome completo e data de nascimento conferidos com o cadastro feito pelo responsável.
-3. **Que é você mesmo:** a foto de registro (1º check-in) precisa ter um rosto real, e cada foto criativa depois é
-   comparada por **reconhecimento facial** com ela. Se ninguém na foto for o adolescente, o check-in é recusado.
+1. **Where you are:** a 150 m geofence around the church, validated **on the server**.
+2. **Who you are:** full name and birth date matched against the guardian's registration.
+3. **That it's really you:** the registration photo (first check-in) must show a real face, and every later creative
+   photo is compared with it through **face recognition**. If nobody in the photo is the teen, the check-in is rejected.
 
 ---
 
-## Arquitetura
+## Architecture
 
 ```mermaid
 flowchart LR
-  subgraph Celular["📱 Celular do adolescente"]
-    QR["QR code / tag NFC"] --> UI["Next.js (React 19)<br/>/checkin · /cadastro"]
-    UI -- "Geolocation API<br/>getUserMedia (câmera)" --> UI
+  subgraph Phone["📱 Teen's phone"]
+    QR["QR code / NFC tag"] --> UI["Next.js (React 19)<br/>/checkin · /cadastro"]
+    UI -- "Geolocation API<br/>getUserMedia (camera)" --> UI
   end
 
   subgraph Vercel["▲ Vercel (serverless)"]
@@ -93,216 +98,232 @@ flowchart LR
   end
 
   subgraph Supabase["🟢 Supabase (São Paulo)"]
-    PG[("Postgres<br/>members · checkins<br/>view presencas<br/>RLS ligado")]
-    ST[("Storage<br/>bucket privado 'fotos'")]
+    PG[("Postgres<br/>members · checkins<br/>view presencas<br/>RLS on")]
+    ST[("Storage<br/>private 'fotos' bucket")]
   end
 
   UI -- "JSON / HTTPS" --> API
-  API -- "service_role (só no servidor)" --> PG
-  API -- "upload + URL assinada (10 min)" --> ST
-  API -. "reconhecimento facial<br/>TensorFlow.js + WASM" .-> API
-  Lideres["👥 Líderes"] -- "Painel Supabase<br/>view presencas" --> PG
+  API -- "service_role (server only)" --> PG
+  API -- "upload + signed URL (10 min)" --> ST
+  API -. "face recognition<br/>TensorFlow.js + WASM" .-> API
+  Leaders["👥 Leaders"] -- "Supabase dashboard<br/>view presencas" --> PG
 ```
 
-**Decisões e por quê**
+**Decisions and why**
 
-| Decisão | Motivo |
+| Decision | Reason |
 | --- | --- |
-| **Web app, não app nativo** | Ninguém instala app para entrar no culto. QR e NFC abrem uma URL, e o navegador já oferece GPS e câmera. |
-| **Next.js com Route Handlers** | Front e API num repositório só, um deploy só e tipos compartilhados (`lib/format.ts` roda no cliente **e** no servidor). |
-| **O navegador nunca fala com o banco** | Toda leitura e escrita passa pela API com a chave `service_role`. O banco tem RLS ligado e **nenhuma** política pública: a chave `anon` vazada não lê nada (isso foi testado). |
-| **Supabase em vez de Firebase/Neon** | Postgres de verdade (constraints, views, migrations SQL) **e** armazenamento de arquivos no mesmo plano grátis. Região `sa-east-1`, perto dos usuários e alinhada à LGPD. |
-| **Token HMAC sem estado entre as etapas** | A identificação (nome e nascimento, na entrada) emite um token assinado de **4 h** que a etapa da foto exige, já que a foto criativa é tirada dentro do culto. O celular guarda o token e, ao reabrir a página, vai direto para a foto. Sem sessão nem tabela extra. |
-| **Busca por nome tolerante** | Filtra por data de nascimento e pontua o nome: sem acento, sem "de/da/dos", nomes do meio podem ser omitidos e uma palavra longa pode ter um erro de digitação. O primeiro nome tem de bater, e empate entre dois cadastros pede o nome completo. |
-| **Foto de registro no 1º check-in, não no cadastro** | Quem cadastra é o responsável, de casa. A foto de referência é tirada pelo próprio adolescente na igreja, exigindo um rosto só, e as fotos seguintes podem ser criativas. |
-| **Unicidade no banco, não no código** | `unique (member_id, service_date)` garante um check-in por dia mesmo com dois cliques simultâneos (corrida tratada pelo código `23505`). |
-| **Reconhecimento facial no servidor** | face-api (TensorFlow.js) com backend **WebAssembly**: roda dentro da função serverless, sem GPU, binário nativo nem API paga. No navegador seria fácil de burlar; no servidor, a decisão é da API. |
-| **Descritor guardado, não comparado na foto** | No 1º check-in é salvo um vetor de 128 números do rosto. Depois, só a foto criativa é analisada (cerca de 250 ms) e comparada com esse vetor. |
-| **E-mail ao responsável com `after()`** | O envio SMTP roda **depois** da resposta (`next/server` `after`). O adolescente vê a tela de sucesso na hora, e uma falha no e-mail não desfaz o check-in. O resultado fica gravado (`enviado`, `falhou`, `sem_email`, `sem_config`) e aparece na lista de presença. |
-| **Foto embutida (CID), não link** | A foto do check-in vai como anexo *inline*. Não depende de URL assinada (que expira) nem de bucket público, e aparece direto no Gmail ou Outlook. |
-| **SMTP, não SDK de um fornecedor** | Nodemailer funciona com Gmail, Brevo ou Resend só trocando variáveis de ambiente. |
-| **Feed "ao vivo" por *polling* incremental** | A cada 4 s a página pergunta só pelo que chegou depois do último check-in visto (`?since=`). Não precisa de WebSocket nem de Realtime, que exigiria abrir o banco para a chave pública. Pausa com a aba escondida e renova as URLs das fotos a cada 30 min. |
-| **Sessão de líder no banco, não só no cookie** | O cookie `httpOnly` + `SameSite=strict` leva 32 bytes aleatórios; o banco guarda o hash. Assim, desativar uma conta ou encerrar sessões vale na hora, em qualquer instância. Cada etapa do login (senha → código → acesso) troca o valor do cookie. |
-| **TOTP sem dependência** | RFC 6238 em ~60 linhas de `node:crypto`, testado com os vetores oficiais da RFC. O segredo fica cifrado (AES-256-GCM) no banco e o último código aceito é gravado, então o mesmo código não vale duas vezes. |
-| **Limite de tentativas no Postgres** | `insert … on conflict do update returning hits` trava a linha: 14 requisições simultâneas contam 14, mesmo em funções serverless diferentes. A tentativa é contada **antes** de conferir a senha. |
-| **Dashboard calculado numa função pura** | `lib/stats.ts` recebe só `(data, membro, visitante)` de cada check-in e devolve indicadores, evolução e ranking, testada sem banco. O percentual de presença conta só os encontros **desde a 1ª vez** do adolescente, para não punir quem chegou depois. |
-| **Gráfico em SVG próprio, sem biblioteca** | Colunas empilhadas com um só eixo, rótulo só no maior e no último encontro, dica ao passar o dedo ou o mouse, alternativa em tabela e paleta (azul da marca + laranja) **validada por script** para daltonismo e contraste. |
-| **Data do culto em `America/Sao_Paulo`** | Um culto às 22h em Brasília já é o "dia seguinte" em UTC. O fuso é explícito e coberto por teste. |
+| **Web app, not a native app** | Nobody installs an app to walk into a service. QR and NFC open a URL, and the browser already provides GPS and the camera. |
+| **Next.js with Route Handlers** | Frontend and API in one repository, one deploy and shared types (`lib/format.ts` runs on the client **and** the server). |
+| **The browser never talks to the database** | Every read and write goes through the API with the `service_role` key. The database has RLS on and **no** public policies: a leaked `anon` key reads nothing (tested). |
+| **Supabase instead of Firebase/Neon** | Real Postgres (constraints, views, SQL migrations) **and** file storage on the same free plan. Region `sa-east-1`, close to the users and in line with LGPD (Brazil's data protection law). |
+| **Stateless HMAC token between steps** | Identification (name and birth date, at the entrance) issues a **4 h** signed token that the photo step requires, since the creative photo is taken during the service. The phone keeps the token and, when the page is reopened, goes straight to the photo. No session or extra table. |
+| **Forgiving name search** | Filters by birth date and scores the name: accents and "de/da/dos" particles are ignored, middle names can be left out and one long word may have a typo. The first name must match, and a tie between two registrations asks for the full name. |
+| **Registration photo at the first check-in, not at registration** | The guardian registers from home. The teen takes the reference photo at church, with a single face required, and later photos can be creative. |
+| **Uniqueness in the database, not in code** | `unique (member_id, service_date)` guarantees one check-in per day even with two simultaneous taps (the race is handled through error code `23505`). |
+| **Face recognition on the server** | face-api (TensorFlow.js) with the **WebAssembly** backend runs inside the serverless function: no GPU, native binary or paid API. In the browser it would be easy to bypass; on the server, the API decides. |
+| **Stored descriptor, not a photo-to-photo comparison** | The first check-in saves a 128-number face vector. After that, only the creative photo is analyzed (about 250 ms) and compared with that vector. |
+| **Guardian email with `after()`** | SMTP runs **after** the response (`next/server` `after`). The teen sees the success screen immediately, and an email failure never undoes the check-in. The result is stored (`enviado`, `falhou`, `sem_email`, `sem_config`) and shows in the attendance list. |
+| **Embedded photo (CID), not a link** | The check-in photo goes as an *inline* attachment. It doesn't depend on a signed URL (which expires) or a public bucket, and shows up directly in Gmail or Outlook. |
+| **SMTP, not a vendor SDK** | Nodemailer works with Gmail, Brevo or Resend by swapping environment variables. |
+| **"Live" feed through incremental polling** | Every 4 s the page asks only for what arrived after the last check-in seen (`?since=`). No WebSocket and no Realtime, which would require opening the database to the public key. It pauses while the tab is hidden and refreshes photo URLs every 30 min. |
+| **Leader session in the database, not just the cookie** | The `httpOnly` + `SameSite=strict` cookie carries 32 random bytes; the database stores the hash. Deactivating an account or ending sessions takes effect immediately, on any instance. Every login stage (password → code → access) rotates the cookie value. |
+| **Dependency-free TOTP** | RFC 6238 in ~60 lines of `node:crypto`, tested against the official RFC vectors. The secret is encrypted (AES-256-GCM) in the database and the last accepted step is stored, so the same code never works twice. |
+| **Attempt limits in Postgres** | `insert … on conflict do update returning hits` locks the row: 14 simultaneous requests count as 14, even across serverless functions. The attempt is counted **before** the password is checked. |
+| **Dashboard computed in a pure function** | `lib/stats.ts` takes only `(date, member, visitor)` per check-in and returns KPIs, trend and ranking, tested without a database. The attendance percentage counts only services **since the teen's first time**, so newcomers aren't penalized. |
+| **Hand-rolled SVG chart, no library** | Stacked columns with a single axis, labels only on the largest and the latest service, touch/mouse tooltips, a table alternative and a palette (brand blue + orange) **validated by a script** for color blindness and contrast. |
+| **Service date in `America/Sao_Paulo`** | A 10 pm service in Brasília is already "tomorrow" in UTC. The time zone is explicit and covered by tests. |
 
-## Fluxo do check-in
+## Check-in flow
 
 ```mermaid
 sequenceDiagram
   autonumber
-  actor A as Adolescente
+  actor T as Teen
   participant W as Web app
   participant S as API (Vercel)
   participant D as Supabase
-  participant R as Responsável (e-mail)
+  participant G as Guardian (email)
 
-  A->>W: escaneia QR / encosta no NFC
-  W->>A: pede permissão de localização (alta precisão)
+  T->>W: scans the QR code / taps the NFC tag
+  W->>T: asks for location permission (high accuracy)
   W->>S: POST /api/checkin/local {lat, lng, accuracy}
-  S-->>W: dentro do raio? (Haversine no servidor)
-  A->>W: nome completo + data de nascimento
+  S-->>W: inside the radius? (haversine on the server)
+  T->>W: full name + birth date
   W->>S: POST /api/checkin/identificar
-  S->>S: revalida a cerca (não confia no passo anterior)
-  S->>D: membros com essa data de nascimento → pontua o nome
-  S-->>W: token HMAC (4 h) + tipo de foto (registro | criativa)
-  A->>W: foto (getUserMedia → canvas → JPEG 720px)
-  W->>S: POST /api/checkin/confirmar {token, foto}
-  alt 1º check-in (registro)
-    S->>S: exatamente 1 rosto → descritor 128-d vira a referência do cadastro
-    S-->>W: cadastro completo → tela explicativa → foto criativa (mesmo token)
-  else foto criativa
-    S->>S: todos os rostos → menor distância até a referência ≤ 0,65?
+  S->>S: re-checks the geofence (doesn't trust the previous step)
+  S->>D: members with that birth date → score the name
+  S-->>W: HMAC token (4 h) + photo kind (registro | criativa)
+  T->>W: photo (getUserMedia → canvas → 720px JPEG)
+  W->>S: POST /api/checkin/confirmar {token, photo}
+  alt first check-in (registration photo)
+    S->>S: exactly 1 face → its 128-d descriptor becomes the reference
+    S-->>W: registration complete → explanation screen → creative photo (same token)
+  else creative photo
+    S->>S: every face → smallest distance to the reference ≤ 0.65?
   end
-  S->>D: upload no bucket privado + insert em checkins (com a distância)
-  S-->>W: nome + horário → tela de sucesso
-  Note over S: after() — depois da resposta
-  S-)R: e-mail SMTP com horário + foto embutida (cid)
-  S->>D: grava o status do aviso (enviado / falhou / sem_config)
+  S->>D: upload to the private bucket + insert into checkins (with the distance)
+  S-->>W: name + time → success screen
+  Note over S: after() — once the response is sent
+  S-)G: SMTP email with the time + embedded photo (cid)
+  S->>D: stores the notice status (enviado / falhou / sem_config)
 ```
 
-O cadastro (`/cadastro`) segue o mesmo padrão: validação no cliente para dar resposta rápida e **a mesma validação
-repetida no servidor**, mais um campo invisível que só robôs preenchem (*honeypot*). O visitante (`/api/checkin/visitante`)
-passa pela mesma cerca geográfica e tem um check-in por telefone por dia.
+Registration (`/cadastro`) follows the same pattern: client-side validation for quick feedback and **the same
+validation repeated on the server**, plus an invisible field only bots fill in (*honeypot*). Visitors
+(`/api/checkin/visitante`) go through the same geofence and get one check-in per phone number per day.
 
-### Reconhecimento facial
+### Face recognition
 
-| Etapa | Modelo | O que faz |
+| Stage | Model | What it does |
 | --- | --- | --- |
-| Detecção | SSD MobileNet v1 | encontra os rostos e devolve a caixa e a confiança |
-| Alinhamento | 68 landmarks | posiciona olhos, nariz e boca para normalizar o rosto |
-| Descritor | FaceRecognitionNet (ResNet-34) | gera um vetor de 128 números por rosto |
-| Comparação | distância euclidiana | foto criativa aceita se **algum** rosto estiver a ≤ **0,65** da referência (configurável em `FACE_MATCH_THRESHOLD`) |
+| Detection | SSD MobileNet v1 | finds the faces and returns the box and confidence |
+| Alignment | 68 landmarks | places eyes, nose and mouth to normalize the face |
+| Descriptor | FaceRecognitionNet (ResNet-34) | produces a 128-number vector per face |
+| Comparison | Euclidean distance | a creative photo passes if **any** face is within **0.65** of the reference (configurable through `FACE_MATCH_THRESHOLD`) |
 
-Regras: sem rosto → recusa; um segundo rosto com mais de 50% do tamanho do principal → "mais de uma pessoa" (rostos
-pequenos ao fundo são tolerados); rosto com menos de 15% da largura da foto → "aproxime o celular".
+Rules: no face → rejected; a second face larger than 50% of the main one → "more than one person" (small faces in the
+background are tolerated); a face narrower than 15% of the photo width → "move the phone closer".
 
-Calibração com rostos sintéticos: **0,35** para a mesma pessoa (espelhada, girada e mais escura) contra **0,76 a 0,82**
-para pessoas diferentes.
+Calibration with synthetic faces: **0.35** for the same person (mirrored, rotated and darker) versus **0.76 to 0.82**
+for different people.
 
 ---
 
 ## Design
 
-- **Identidade a partir do logo:** o azul `#008EC3` foi tirado do logo do Flag por análise de pixels. As listras do
-  cabeçalho repetem a bandeira do logo.
-- **Hierarquia de marca pedida pelo ministério:** **FLAG** em destaque (900, 44px) e "Juventude **O2**" como apoio.
-- **Mobile-first de verdade:** botões de 54px, inputs de 17px (abaixo de 16px o iOS dá zoom ao focar),
-  `inputMode="numeric"` com máscara DD/MM/AAAA na data.
-- **Uma decisão por tela** e barra de progresso em 4 etapas, para quem está na fila e com pressa.
-- **Erros que dizem o que fazer:** localização negada vira um passo a passo para iPhone e Android; GPS impreciso
-  sugere ligar a *Localização Precisa*; cadastro não encontrado oferece o check-in de visitante.
-- **Câmera com guia oval** e *fallback* para `<input capture="user">` quando o navegador bloqueia `getUserMedia`.
-- **Acessibilidade:** `role="alert"` nas mensagens de erro, `aria-label` no progresso e respeito a
+- **Identity drawn from the logo:** the `#008EC3` blue was sampled from the Flag logo. The header stripes echo the
+  flag in the logo.
+- **Brand hierarchy requested by the ministry:** **FLAG** up front (900, 44px) with "Juventude **O2**" as the supporting line.
+- **Truly mobile-first:** 54px buttons, 17px inputs (iOS zooms in on focus below 16px), `inputMode="numeric"` with a
+  DD/MM/YYYY mask on the date.
+- **One decision per screen** and a 4-step progress bar, for people standing in line in a hurry.
+- **Errors that say what to do:** denied location becomes a step-by-step guide for iPhone and Android; imprecise GPS
+  suggests turning on *Precise Location*; an unknown registration offers the visitor check-in.
+- **Camera with an oval guide** and a fallback to `<input capture="user">` when the browser blocks `getUserMedia`.
+- **Accessibility:** `role="alert"` on error messages, `aria-label` on the progress bar and support for
   `prefers-reduced-motion`.
 
-## Segurança e privacidade (dados de menores)
+## Security and privacy (minors' data)
 
-| Ameaça | Mitigação |
+| Threat | Mitigation |
 | --- | --- |
-| Check-in de casa | Cerca geográfica validada **no servidor**, duas vezes. A foto fica como prova para auditoria. |
-| "Faz o check-in por mim" | A foto criativa é comparada com a foto de registro (403 se ninguém na foto for o adolescente). A distância fica gravada para auditoria. |
-| Injeção de HTML no e-mail | Nome e responsável vêm do cadastro e são escapados antes de entrar no HTML (teste cobre `<b>`). |
-| Acesso ao feed e ao dashboard (**P1 corrigido**, [relatório](docs/seguranca/P1-contas-de-lider.md)) | **Conta individual por líder**: senha (scrypt) **e** código de app autenticador (TOTP), obrigatório antes de qualquer dado privado. Sem alternativa por SMS ou e-mail. Sessão no banco, revogável na hora. A página não é indexada (`robots: noindex`). |
-| Celular do líder perdido | 10 **códigos de recuperação** de uso único (só o hash fica no banco); usar um encerra as outras sessões e exige cadastrar um autenticador novo. Sem códigos: **outro líder** redefine o acesso e entrega pessoalmente um código de ativação de 24 h. |
-| Força bruta e chutes em paralelo | Limite no banco, contado antes de conferir: 8 senhas por conta e 30 por rede a cada 15 min; 5 códigos por conta a cada 15 min e 20 por dia. Vale para requisições simultâneas e várias instâncias. |
-| Rastrear ações dos líderes | Tabela `admin_audit`: login, criação, desativação, sessões encerradas, autenticador cadastrado, recuperação, redefinição e **correção de presença** (quem, alvo, quando, resultado, motivo). Um gatilho no Postgres recusa editar ou apagar, até com a chave do servidor. Senhas, códigos e dados biométricos nunca entram. |
-| Foto de registro de qualquer coisa | A foto do 1º check-in precisa ter exatamente um rosto, de perto, verificado no servidor. |
-| Ver a foto ou o horário de outro adolescente (**P0 corrigido**, [relatório](docs/seguranca/P0-fotos-de-presenca.md)) | Nome, nascimento e coordenadas **não** autorizam ler dados privados. Foto e horário só voltam ao aparelho com a **sessão da visita** (cookie HMAC `httpOnly`, ligado ao adolescente e ao dia, emitido depois do rosto conferido) ou aos líderes logados. A resposta pública é idêntica para quem já fez ou não o check-in. |
-| Investigar abuso depois | Tabela `audit_events` com cada identificação e confirmação (resultado, adolescente, IP como HMAC, coordenadas), porque os planos gratuitos da Vercel e do Supabase quase não retêm logs. |
-| Descobrir quem está cadastrado | Nome inexistente e data errada recebem **a mesma** resposta (sem *user enumeration*). |
-| Pular a etapa de identificação | A foto só é aceita com um token HMAC-SHA256 válido (4 h), comparado em tempo constante. |
-| Cadastro aberto (sem senha) | CPF único, validação completa no servidor e *honeypot* contra robôs. Mesmo um cadastro falso não faz check-in sem estar na igreja e sem um rosto real na foto de registro. |
-| Vazamento de chave pública | RLS sem políticas: a chave `anon` não lê nem grava nada (teste: `[]` e `401`). |
-| Fotos expostas | Bucket **privado**, com limite de 2 MB e só MIME de imagem. Acesso por URL assinada de 10 minutos. |
-| Upload malicioso | `decodePhoto` aceita apenas `data:image/jpeg;base64` entre 2 KB e 2 MB, decodificado por um leitor JPEG em JavaScript puro. |
-| Segredo no cliente | `import "server-only"` em `lib/server/*`: o build falha se algo do servidor for importado no navegador. |
-| LGPD (art. 14, menores) | Consentimento do responsável obrigatório e gravado com data (`guardian_consent_at`), e coleta mínima. |
+| Checking in from home | Geofence validated **on the server**, twice. The photo stays as evidence for audits. |
+| "Check in for me" | The creative photo is compared with the registration photo (403 if nobody in it is the teen). The distance is stored for audits. |
+| HTML injection in emails | Teen and guardian names come from the registration and are escaped before going into the HTML (a test covers `<b>`). |
+| Access to the feed and dashboard (**P1 fixed**, [report](docs/security/P1-leader-accounts.md)) | **One account per leader**: password (scrypt) **and** an authenticator app code (TOTP), required before any private data. No SMS or email fallback. Sessions live in the database and can be revoked instantly. The page isn't indexed (`robots: noindex`). |
+| Lost leader phone | 10 single-use **recovery codes** (only their hash is stored); using one ends the other sessions and requires enrolling a new authenticator. Without codes, **another leader** resets access and hands over a 24 h activation code in person. |
+| Brute force and parallel guessing | Database-backed limits, counted before checking: 8 passwords per account and 30 per network every 15 min; 5 codes per account every 15 min and 20 per day. Holds under simultaneous requests and multiple instances. |
+| Tracing leader actions | `admin_audit` table: login, creation, deactivation, ended sessions, authenticator enrollment, recovery, reset and **attendance corrections** (who, target, when, outcome, reason). A Postgres trigger refuses updates and deletes, even with the server key. Passwords, codes and biometric data never go in. |
+| Registration photo of anything | The first check-in photo must contain exactly one face, close up, verified on the server. |
+| Seeing another teen's photo or time (**P0 fixed**, [report](docs/security/P0-attendance-photos.md)) | Name, birth date and coordinates do **not** authorize reading private data. Photo and time only go back to the device holding the **visit session** (an `httpOnly` HMAC cookie tied to the teen and the day, issued after the face matched) or to signed-in leaders. The public response is identical whether or not the teen has checked in. |
+| Investigating abuse later | `audit_events` table with every identification and confirmation (outcome, teen, IP as an HMAC, coordinates), because the free Vercel and Supabase plans barely keep logs. |
+| Discovering who is registered | An unknown name and a wrong date get **the same** response (no user enumeration). |
+| Skipping the identification step | The photo is only accepted with a valid HMAC-SHA256 token (4 h), compared in constant time. |
+| Open registration (no password) | Unique CPF (Brazilian tax ID), full server-side validation and a honeypot against bots. Even a fake registration can't check in without being at church and showing a real face in the registration photo. |
+| Leaked public key | RLS without policies: the `anon` key can't read or write anything (tested: `[]` and `401`). |
+| Exposed photos | **Private** bucket, 2 MB limit, image MIME types only. Access through 10-minute signed URLs. |
+| Malicious upload | `decodePhoto` only accepts `data:image/jpeg;base64` between 2 KB and 2 MB, decoded by a pure-JavaScript JPEG reader. |
+| Secrets on the client | `import "server-only"` in `lib/server/*`: the build fails if server code is imported in the browser. |
+| LGPD (art. 14, minors) | Mandatory guardian consent, stored with a timestamp (`guardian_consent_at`), and minimal data collection. |
 
-Também foram adicionados os cabeçalhos `Permissions-Policy` (câmera e GPS só na própria origem),
-`X-Content-Type-Options` e `Referrer-Policy`.
+The `Permissions-Policy` (camera and GPS on the app's own origin only), `X-Content-Type-Options` and `Referrer-Policy`
+headers are also set.
 
-**Limitações assumidas:** apps de GPS falso existem, e por isso a foto é a segunda camada. O reconhecimento facial não
-tem prova de vida (*liveness*): mostrar uma foto impressa da pessoa para a câmera ainda passaria. O próximo passo seria
-pedir um movimento, como piscar ou virar o rosto. Ainda não há limite de
-tentativas por IP; o próximo passo seria o Upstash Ratelimit nas rotas de identificação.
+**Known limitations:** GPS spoofing apps exist, which is why the photo is the second layer. Face recognition has no
+liveness check: holding a printed photo of the person up to the camera would still pass. The next step would be asking
+for a movement, such as blinking or turning the head. The public identification routes have no per-IP rate limit yet;
+the next step would be Upstash Ratelimit there.
 
-## Testes
+## Tests
 
 ```bash
-npm test             # 78 testes unitários (Vitest): dashboard, busca por nome, máscaras, datas, Haversine, HMAC, geofence, upload, rostos, e-mail, TOTP (vetores da RFC 6238), senha, sessões
-npm run typecheck    # TypeScript em modo strict
-npm run test:fluxo   # 87 verificações ponta a ponta (inclui as regressões do P0 e do P1) contra o Supabase real, com limpeza dos dados no final
-npm run simular      # dois adolescentes sintéticos fazem check-in com 8 s de intervalo (para ver o feed ao vivo)
+npm test             # 78 unit tests (Vitest): dashboard, name search, masks, dates, haversine, HMAC, geofence, upload, faces, email, TOTP (RFC 6238 vectors), passwords, sessions
+npm run typecheck    # TypeScript in strict mode
+npm run test:e2e     # 87 end-to-end checks (including the P0 and P1 regressions) against the real Supabase project, cleaning up the data at the end
+npm run simulate     # two synthetic teens check in 8 s apart (to watch the live feed)
 ```
 
-O **teste ponta a ponta** cobre o caminho feliz **e** os ataques: cadastro pelo responsável sem foto nem senha, CPF
-duplicado (409), posição fora do raio (403), nome ou data errados (404), identificação com o nome sem acento e sem o
-nome do meio, **foto de registro** sem rosto ou com duas pessoas (422), segundo check-in no mesmo dia (409), **foto
-criativa** de outra pessoa (403) e **em grupo com o adolescente** (200), visitante com e sem foto e repetido no dia,
-contas de líder (ativação, autenticador obrigatório, código repetido, recuperação, rajadas simultâneas, desativação
-que derruba só aquele líder, sessão de adolescente sem acesso de líder, auditoria imutável e sem segredos), feed com
-visitantes e a view de presença.
+The **end-to-end test** covers the happy path **and** the attacks: registration by the guardian without photo or
+password, a duplicate CPF (409), a position outside the radius (403), a wrong name or date (404), identification with
+the name without accents and without the middle name, a **registration photo** without a face or with two people (422),
+a second check-in on the same day (409), a **creative photo** of someone else (403) and a **group photo with the teen**
+(200), visitors with and without a photo and repeated on the same day, leader accounts (activation, mandatory
+authenticator, reused code, recovery, simultaneous bursts, deactivation that only signs out that leader, a teen session
+without leader access, an immutable audit trail without secrets), the feed with visitors and the attendance view.
 
-As imagens de teste em `tests/fixtures/` são **rostos sintéticos** gerados por StyleGAN2 (thispersondoesnotexist.com):
-nenhuma pessoa real aparece no repositório.
+The test images in `tests/fixtures/` are **synthetic faces** generated by StyleGAN2 (thispersondoesnotexist.com): no
+real person appears in the repository.
 
-A esteira de **CI no GitHub Actions** roda tipos, testes e build a cada push e PR.
+The **GitHub Actions CI** pipeline runs type checks, tests and the build on every push and PR.
 
 ## Stack
 
-**Front:** Next.js 15 (App Router) · React 19 · TypeScript strict · CSS puro com design tokens (sem framework de UI)
-**Back:** Route Handlers serverless · `node:crypto` (HMAC e comparação em tempo constante) · Supabase JS
-**E-mail:** Nodemailer (SMTP) · HTML responsivo em tabelas (compatível com Gmail e Outlook) · imagem inline via CID
-**Visão computacional:** face-api (TensorFlow.js 4, backend WebAssembly) · SSD MobileNet v1 · FaceRecognitionNet · jpeg-js
-**Dados:** Postgres 17 (Supabase) · migrations versionadas com o Supabase CLI · Storage privado
-**Infra:** Vercel · GitHub Actions · QR code gerado no servidor (`/api/qrcode`) · tags NFC NTAG213
+**Frontend:** Next.js 15 (App Router) · React 19 · strict TypeScript · plain CSS with design tokens (no UI framework)
+**Backend:** serverless Route Handlers · `node:crypto` (HMAC and constant-time comparison) · Supabase JS
+**Email:** Nodemailer (SMTP) · responsive table-based HTML (works in Gmail and Outlook) · inline image via CID
+**Computer vision:** face-api (TensorFlow.js 4, WebAssembly backend) · SSD MobileNet v1 · FaceRecognitionNet · jpeg-js
+**Data:** Postgres 17 (Supabase) · versioned migrations with the Supabase CLI · private Storage
+**Infra:** Vercel · GitHub Actions · server-generated QR codes (`/api/qrcode`) · NTAG213 NFC tags
 
-## Estrutura
+## Project structure
 
 ```
 app/
-  checkin/page.tsx            check-in (local → nome e nascimento ou visitante → foto de registro ou criativa → sucesso)
-  cadastro/page.tsx           cadastro pelo responsável (sem foto, sem senha) com consentimento LGPD
-  pastor/page.tsx             área dos líderes: login em 2 etapas, feed ao vivo, dashboard, cadastro e aba Líderes
-  api/checkin/local           GET: modo teste? · POST: confere a cerca
-  api/checkin/identificar     nome + nascimento → token HMAC (4 h) e tipo de foto
-  api/checkin/confirmar       foto de registro (1º) ou criativa → Storage + insert + e-mail
-  api/checkin/visitante       visitante: nome + telefone (+ foto opcional)
-  api/cadastro                novo adolescente
-  api/lider/*                 entrar, verificar (código ou recuperação), ativar, autenticador, sessao, contas, auditoria
-  api/pastor/checkins         correção de presença (DELETE com motivo, vai para a auditoria)
-  api/pastor/dashboard        indicadores, evolução por encontro e ranking (só com sessão de líder completa)
-  api/pastor/feed             check-ins do dia com URLs assinadas das fotos (?since= para o incremental)
-  api/health                  diagnóstico (variáveis, tabelas, view e bucket)
-  api/qrcode · qrcode/        QR code gerado no servidor (PNG/SVG) e página para imprimir
-components/                   Brand, Camera, CadastroForm, PastorDashboard, LeaderAuth (login, ativação, autenticador), LeadersAdmin (contas e auditoria)
-lib/stats.ts                  cálculo do dashboard (função pura)
-lib/format.ts                 validações compartilhadas cliente/servidor
-lib/server/                   env, cliente Supabase, segurança, reconhecimento facial, tratamento de erros
-supabase/migrations/          schema, RLS, view de presença e bucket
-scripts/                      gerador de QR code e teste ponta a ponta
-tests/                        testes unitários (Vitest) e rostos sintéticos de teste
+  checkin/page.tsx            check-in (location → name and birth date or visitor → registration or creative photo → success)
+  cadastro/page.tsx           registration by the guardian (no photo, no password) with LGPD consent
+  pastor/page.tsx             leader area: 2-step login, live feed, dashboard, registration and Leaders tab
+  api/checkin/local           GET: test mode? · POST: checks the geofence
+  api/checkin/identificar     name + birth date → HMAC token (4 h) and photo kind
+  api/checkin/confirmar       registration (first) or creative photo → Storage + insert + email
+  api/checkin/visitante       visitor: name + phone (+ optional photo)
+  api/cadastro                new teen
+  api/lider/*                 sign in, verify (code or recovery), activate, authenticator, session, accounts, audit
+  api/pastor/checkins         attendance correction (DELETE with a reason, goes to the audit log)
+  api/pastor/dashboard        KPIs, per-service trend and ranking (full leader session only)
+  api/pastor/feed             the day's check-ins with signed photo URLs (?since= for incremental updates)
+  api/health                  diagnostics (variables, tables, view and bucket)
+  api/qrcode · qrcode/        server-generated QR code (PNG/SVG) and a printable page
+components/                   Brand, Camera, RegistrationForm, PastorDashboard, LeaderAuth (login, activation, authenticator), LeadersAdmin (accounts and audit)
+lib/stats.ts                  dashboard calculation (pure function)
+lib/format.ts                 validation shared by client and server
+lib/server/                   env, Supabase client, security, face recognition, email, leader sessions, error handling
+supabase/migrations/          schema, RLS, attendance view and bucket
+scripts/                      QR code generator, leader bootstrap, registration confirmation, simulations and the end-to-end test
+tests/                        unit tests (Vitest) and synthetic test faces
 ```
 
-## Rodando localmente
+## Glossary
+
+Portuguese names that stay in routes, the database and the UI:
+
+| Name | Meaning |
+| --- | --- |
+| `cadastro` | registration (of a teen) |
+| `responsável` | guardian (parent or legal guardian) |
+| `líder` / `pastor` | leader / pastor (the leader area lives at `/pastor`) |
+| `culto` | church service |
+| `presença`, view `presencas` | attendance, the attendance view |
+| `visitante` | visitor |
+| `foto de registro` / `foto criativa` | registration photo (reference face) / creative photo (any later check-in photo) |
+| `identificar` / `confirmar` | identify (name + birth date) / confirm (photo) |
+| `enviado`, `falhou`, `sem_email`, `sem_config` | email status: sent, failed, no email, SMTP not configured |
+
+## Running locally
 
 ```bash
 git clone https://github.com/pedroeduardo36/flag-checkin.git && cd flag-checkin
 npm install
-cp .env.example .env.local     # preencha com seu projeto Supabase
-npx supabase link --project-ref SEU_REF && npm run db:push
+cp .env.example .env.local     # fill in your Supabase project
+npx supabase link --project-ref YOUR_REF && npm run db:push
 npm run dev
 ```
 
-O passo a passo completo (Supabase, Vercel, QR code, NFC e operação no dia do culto) está em
+The full walkthrough (Supabase, Vercel, QR code, NFC and running it on service day) is in
 [docs/SETUP.md](docs/SETUP.md).
 
 ---
 
 <div align="center">
-Feito por <a href="https://github.com/pedroeduardo36">Pedro Andrade</a> para o Ministério Flag · Juventude O2
+Built by <a href="https://github.com/pedroeduardo36">Pedro Andrade</a> for the Flag ministry · O2 youth group
 </div>

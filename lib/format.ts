@@ -1,4 +1,4 @@
-// Utilidades compartilhadas entre navegador e servidor.
+// Helpers shared by the browser and the server.
 
 export const onlyDigits = (v: string) => (v ?? "").replace(/\D/g, "");
 
@@ -30,7 +30,7 @@ export function maskPhone(value: string): string {
   return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
 }
 
-/** Formato básico de e-mail (a entrega real é confirmada pelo servidor de e-mail). */
+/** Basic email shape check (actual delivery is confirmed by the mail server). */
 export const isValidEmail = (v: string) => /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test((v ?? "").trim()) && v.trim().length <= 254;
 
 export const isValidPhone = (v: string) => {
@@ -38,7 +38,7 @@ export const isValidPhone = (v: string) => {
   return d.length === 10 || d.length === 11;
 };
 
-/** Máscara DD/MM/AAAA enquanto a pessoa digita só números. */
+/** DD/MM/YYYY mask applied while the person types digits only. */
 export function maskDate(value: string): string {
   const d = onlyDigits(value).slice(0, 8);
   if (d.length <= 2) return d;
@@ -46,13 +46,13 @@ export function maskDate(value: string): string {
   return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
 }
 
-/** "20/05/2010" → "2010-05-20" (formato do banco). Data incompleta vira "". */
+/** "20/05/2010" → "2010-05-20" (database format). An incomplete date becomes "". */
 export function brDateToIso(value: string): string {
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value ?? "");
   return m ? `${m[3]}-${m[2]}-${m[1]}` : "";
 }
 
-/** Aceita "AAAA-MM-DD" e confere se é uma data real no passado. */
+/** Accepts "YYYY-MM-DD" and checks that it is a real date in the past. */
 export function isValidBirthDate(v: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
   const d = new Date(`${v}T12:00:00Z`);
@@ -61,7 +61,7 @@ export function isValidBirthDate(v: string): boolean {
   return year >= 1900 && d.getTime() < Date.now();
 }
 
-/** Distância em metros entre dois pontos (fórmula de Haversine). */
+/** Distance in meters between two points (haversine formula). */
 export function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000;
   const toRad = (x: number) => (x * Math.PI) / 180;
@@ -74,10 +74,10 @@ export function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: n
 
 export const firstName = (name: string) => (name ?? "").trim().split(/\s+/)[0] ?? "";
 
-// ---------- Nome completo ----------
+// ---------- Full name ----------
 const NAME_STOPWORDS = new Set(["de", "da", "do", "das", "dos", "e"]);
 
-/** "  Ana Beatriz de Souza " → ["ana", "beatriz", "souza"] (sem acento, sem "de/da/dos"). */
+/** "  Ana Beatriz de Souza " → ["ana", "beatriz", "souza"] (no accents, no Portuguese particles "de/da/dos"). */
 export function nameTokens(name: string): string[] {
   return (name ?? "")
     .normalize("NFD")
@@ -97,13 +97,13 @@ function editDistance(a: string, b: string): number {
   return dp[a.length][b.length];
 }
 
-/** Palavra igual, ou com um erro de digitação em palavras de 5+ letras ("Beatris" ≈ "Beatriz"). */
+/** Same word, or one typo away for words of 5+ letters ("Beatris" ≈ "Beatriz"). */
 const sameWord = (a: string, b: string) => a === b || (Math.min(a.length, b.length) >= 5 && editDistance(a, b) <= 1);
 
 /**
- * Quão bem o nome digitado no check-in bate com o nome cadastrado pelo responsável (0 = não bate).
- * Regras: pelo menos nome + sobrenome; o primeiro nome tem de bater; todas as palavras digitadas
- * precisam existir no cadastro (pode omitir nomes do meio). Quanto mais completo, maior a nota.
+ * How well the name typed at check-in matches the name the guardian registered (0 = no match).
+ * Rules: at least first + last name; the first name must match; every typed word must exist in the
+ * registration (middle names may be left out). The more complete the name, the higher the score.
  */
 export function nameMatchScore(typed: string, registered: string): number {
   const a = nameTokens(typed);

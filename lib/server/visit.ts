@@ -4,20 +4,21 @@ import { env } from "./env";
 import { safeEqual } from "./security";
 
 /**
- * Sessão da VISITA: prova de que ESTE aparelho concluiu o check-in DESTE adolescente HOJE.
+ * VISIT session: proof that THIS device completed THIS teen's check-in TODAY.
  *
- * Nome + data de nascimento (+ coordenadas, que o próprio celular informa) NÃO autorizam ler a foto
- * ou o horário de um check-in. Só quem passou pela conferência de rosto recebe este cookie:
- * httpOnly, SameSite=strict, restrito a /api/checkin, válido até o fim do dia do culto.
+ * Name + birth date (+ coordinates, which the phone itself reports) do NOT authorize reading a
+ * check-in's photo or time. Only someone who passed the face match gets this cookie:
+ * httpOnly, SameSite=strict, scoped to /api/checkin, valid until the end of the service day.
  */
 export const VISIT_COOKIE = "o2_visita";
 
 type Visit = { mid: string; date: string; exp: number };
 
+// The "visita:" prefix and the cookie name are part of the signature: renaming them would log everyone out.
 const sign = (data: string) => createHmac("sha256", env.checkinSecret).update(`visita:${data}`).digest("base64url");
 
 export function createVisitSession(memberId: string, serviceDate: string, now = Date.now()) {
-  const maxAge = 18 * 3600; // cobre o culto da noite com folga, some no dia seguinte
+  const maxAge = 18 * 3600; // comfortably covers the evening service and expires the next day
   const data = Buffer.from(JSON.stringify({ mid: memberId, date: serviceDate, exp: now + maxAge * 1000 } satisfies Visit)).toString("base64url");
   return { value: `${data}.${sign(data)}`, maxAge };
 }
@@ -33,7 +34,7 @@ export function readVisitSession(value: string | null | undefined, now = Date.no
   }
 }
 
-/** Verdadeiro só se o cookie da requisição é deste adolescente e deste dia de culto. */
+/** True only if the request cookie belongs to this teen and this service day. */
 export function hasVisitSession(req: Request, memberId: string, serviceDate: string): boolean {
   const m = new RegExp(`(?:^|;\\s*)${VISIT_COOKIE}=([^;]+)`).exec(req.headers.get("cookie") ?? "");
   const v = readVisitSession(m ? decodeURIComponent(m[1]) : null);
