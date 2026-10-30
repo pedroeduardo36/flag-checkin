@@ -31,10 +31,10 @@ type Row = {
 };
 
 /**
- * GET /api/pastor/feed?date=AAAA-MM-DD&since=ISO
- * Check-ins do dia (mais recentes primeiro). Com "since", só os que chegaram ou tiveram a saída
- * gravada/desfeita depois — usado no acompanhamento em tempo real, que pergunta a cada poucos segundos.
- * "cursor" é o "since" da próxima pergunta.
+ * GET /api/pastor/feed?date=YYYY-MM-DD&since=ISO
+ * The day's check-ins (newest first). With "since", only those that arrived or had their checkout
+ * recorded/undone afterwards — used by the live view, which polls every few seconds.
+ * "cursor" is the "since" for the next poll.
  */
 export const GET = withErrors(async (req: Request) => {
   if (!(await requireLeader(req))) return unauthorized();
@@ -49,11 +49,11 @@ export const GET = withErrors(async (req: Request) => {
     .eq("service_date", date)
     .order("checked_in_at", { ascending: false })
     .limit(300);
-  // Sem converter: o banco guarda microssegundos, e arredondar para milissegundos repetiria o último item.
+  // No conversion: the database stores microseconds, and rounding to milliseconds would repeat the last item.
   const validSince = since && /^[\d\-T:.+Z ]{10,40}$/.test(since) && !Number.isNaN(Date.parse(since)) ? since : null;
   if (validSince) q = q.or(`checked_in_at.gt."${validSince}",checkout_recorded_at.gt."${validSince}"`);
 
-  // Check-ins de exemplo (is_example): vêm só na carga completa, fora do contador do dia.
+  // Example check-ins (is_example): only in the full load, not counted in the day's total.
   const examplesQuery = since
     ? Promise.resolve({ data: [], error: null })
     : db().from("checkins").select(COLUMNS).eq("is_example", true).neq("service_date", date).order("checked_in_at", { ascending: false }).limit(5);
@@ -71,7 +71,7 @@ export const GET = withErrors(async (req: Request) => {
   const exampleRows = (ex.data ?? []) as unknown as Row[];
   const member = (r: Row) => (Array.isArray(r.members) ? r.members[0] : r.members);
 
-  // Uma chamada só para assinar todas as fotos (selfie + foto do cadastro).
+  // One call to sign every photo (selfie + registration photo).
   const paths = [...new Set([...rows, ...exampleRows].flatMap((r) => [r.photo_path, member(r)?.photo_path].filter(Boolean) as string[]))];
   const signed = paths.length ? (await db().storage.from(PHOTO_BUCKET).createSignedUrls(paths, PHOTO_URL_TTL)).data ?? [] : [];
   const urlOf = new Map(signed.map((s) => [s.path, s.signedUrl]));
@@ -97,7 +97,7 @@ export const GET = withErrors(async (req: Request) => {
     };
   };
 
-  // Próximo "since": o último instante em que algo destes check-ins mudou.
+  // Next "since": the last instant anything in these check-ins changed.
   const cursor = rows
     .flatMap((r) => [r.checked_in_at, r.checkout_recorded_at])
     .filter((t): t is string => !!t)

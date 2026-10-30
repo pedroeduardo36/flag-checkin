@@ -6,7 +6,7 @@ import { runRetention } from "@/lib/server/retention";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-/** Vercel Cron (vercel.json): todo dia, com "Authorization: Bearer $CRON_SECRET". Sem CRON_SECRET, nada roda. */
+/** Vercel Cron (vercel.json): daily, with "Authorization: Bearer $CRON_SECRET". Without CRON_SECRET nothing runs. */
 export const GET = withErrors(async (req: Request) => {
   const secret = process.env.CRON_SECRET;
   const got = Buffer.from(req.headers.get("authorization") ?? "");

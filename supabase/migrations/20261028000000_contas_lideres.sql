@@ -1,18 +1,18 @@
--- P1: contas individuais de líder (senha + app autenticador), sessões revogáveis, limite de tentativas
--- e trilha de auditoria das ações administrativas que o app não consegue alterar nem apagar.
--- Dois tipos de acesso só: ADOLESCENTE (sessão da visita, sem senha) e LÍDER (esta tabela).
--- Tudo com RLS ligado e sem políticas: só o servidor (service_role) acessa.
+-- P1: individual leader accounts (password + authenticator app), revocable sessions, attempt limits
+-- and an audit trail of admin actions that the app can neither change nor delete.
+-- Only two kinds of access: TEEN (visit session, no password) and LEADER (this table).
+-- Everything has RLS on and no policies: only the server (service_role) has access.
 
 create table if not exists public.leaders (
   id                uuid primary key default gen_random_uuid(),
   name              text not null,
   email             text not null unique check (email = lower(email)),
-  password_hash     text,                     -- scrypt; nulo até a pessoa ativar a conta
-  totp_secret_enc   text,                     -- segredo do app autenticador, cifrado (AES-256-GCM)
-  totp_pending_enc  text,                     -- segredo gerado no cadastro, antes de confirmar o 1º código
+  password_hash     text,                     -- scrypt; null until the person activates the account
+  totp_secret_enc   text,                     -- authenticator app secret, encrypted (AES-256-GCM)
+  totp_pending_enc  text,                     -- secret generated at enrollment, before the first code is confirmed
   totp_enabled_at   timestamptz,
-  totp_last_step    bigint not null default 0, -- último código aceito: o mesmo código não vale duas vezes
-  setup_code_hash   text,                     -- código de ativação/redefinição (uso único, HMAC)
+  totp_last_step    bigint not null default 0, -- last accepted code: the same code can't be used twice
+  setup_code_hash   text,                     -- activation/reset code (single use, hashed)
   setup_expires_at  timestamptz,
   status            text not null default 'ativo' check (status in ('ativo', 'desativado')),
   created_at        timestamptz not null default now(),
@@ -30,9 +30,9 @@ create table if not exists public.leader_recovery_codes (
 );
 create index if not exists leader_recovery_codes_leader_idx on public.leader_recovery_codes (leader_id);
 
--- Sessão no banco (o cookie guarda só um valor aleatório; aqui fica o hash dele).
--- stage: 'senha' = passou a senha, falta o código | 'cadastro_totp' = precisa cadastrar o autenticador
---        'completa' = acesso liberado. Desativar a conta ou revogar marca revoked_at e vale na hora.
+-- Session in the database (the cookie only holds a random value; its hash lives here).
+-- stage: 'senha' = password passed, code pending | 'cadastro_totp' = must enroll the authenticator
+--        'completa' = access granted. Deactivating the account or revoking sets revoked_at, effective immediately.
 create table if not exists public.leader_sessions (
   id           uuid primary key default gen_random_uuid(),
   leader_id    uuid not null references public.leaders(id) on delete cascade,
@@ -47,8 +47,8 @@ create table if not exists public.leader_sessions (
 );
 create index if not exists leader_sessions_leader_idx on public.leader_sessions (leader_id) where revoked_at is null;
 
--- Limite de tentativas: contador por chave numa janela fixa. O "insert ... on conflict do update"
--- trava a linha, então requisições simultâneas e várias instâncias do servidor contam certo.
+-- Attempt limit: a per-key counter over a fixed window. The "insert ... on conflict do update"
+-- locks the row, so simultaneous requests and multiple server instances count correctly.
 create table if not exists public.auth_rate_limits (
   key          text primary key,
   window_start timestamptz not null,
@@ -70,13 +70,13 @@ $$;
 revoke all on function public.auth_rate_hit(text, integer) from public, anon, authenticated;
 grant execute on function public.auth_rate_hit(text, integer) to service_role;
 
--- Trilha das ações administrativas e de autenticação dos líderes.
--- Sem chave estrangeira: o registro sobrevive a qualquer mudança nas contas. Nunca guarda senha,
--- código do autenticador, código de recuperação ou dado biométrico.
+-- Trail of the leaders' admin and authentication actions.
+-- No foreign key: the entry survives any change to the accounts. Never stores a password,
+-- authenticator code, recovery code or biometric data.
 create table if not exists public.admin_audit (
   id           bigserial primary key,
   at           timestamptz not null default now(),
-  actor_id     uuid,          -- líder que agiu (nulo: tentativa sem sessão, ex. login errado)
+  actor_id     uuid,          -- leader who acted (null: attempt without a session, e.g. a failed login)
   actor_name   text,
   action       text not null, -- login, conta_criada, conta_desativada, sessoes_revogadas, totp_cadastrado, ...
   target_type  text,          -- lider | checkin | sessao
@@ -94,7 +94,7 @@ language plpgsql
 set search_path = public
 as $$
 begin
-  -- Única exceção: apagar um adolescente zera o member_id em audit_events (on delete set null).
+  -- Only exception: deleting a teen nulls member_id in audit_events (on delete set null).
   if tg_table_name = 'audit_events' and tg_op = 'UPDATE' then
     if new.member_id is null
        and (new.id, new.at, new.event, new.outcome, new.ip_hash, new.user_agent, new.lat, new.lng)
@@ -121,7 +121,7 @@ drop trigger if exists audit_events_sem_truncate on public.audit_events;
 create trigger audit_events_sem_truncate before truncate on public.audit_events
   for each statement execute function public.audit_imutavel();
 
--- Pela API, ninguém além do servidor; e nem o servidor edita ou apaga auditoria.
+-- Through the API, nobody but the server; and not even the server edits or deletes audit entries.
 revoke update, delete, truncate on public.admin_audit, public.audit_events from anon, authenticated, service_role;
 
 alter table public.leaders               enable row level security;

@@ -8,13 +8,13 @@ import { adminAudit, clearAttempts, newRecoveryCodes, readSession, revokeSession
 
 export const dynamic = "force-dynamic";
 
-/** Cadastro obrigatório do app autenticador. Só na etapa "cadastro_totp" (após ativação ou recuperação). */
+/** Mandatory authenticator app enrollment. Only at the "cadastro_totp" stage (after activation or recovery). */
 async function enrolling(req: Request) {
   const s = await readSession(req);
   return s?.stage === "cadastro_totp" ? s : null;
 }
 
-// GET: QR code e chave para o app autenticador. A chave fica guardada (cifrada) até o 1º código conferir.
+// GET: QR code and key for the authenticator app. The key is kept (encrypted) until the first code matches.
 export const GET = withErrors(async (req: Request) => {
   const s = await enrolling(req);
   if (!s) return NextResponse.json({ error: "Sessão expirada. Entre de novo." }, { status: 401 });
@@ -34,7 +34,7 @@ export const GET = withErrors(async (req: Request) => {
   );
 });
 
-// POST { code }: confirma o primeiro código, liga o autenticador e devolve os códigos de recuperação (uma vez só).
+// POST { code }: confirms the first code, turns the authenticator on and returns the recovery codes (only once).
 export const POST = withErrors(async (req: Request) => {
   const s = await enrolling(req);
   if (!s) return NextResponse.json({ error: "Sessão expirada. Entre de novo." }, { status: 401 });

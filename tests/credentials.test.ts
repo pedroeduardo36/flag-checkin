@@ -6,8 +6,8 @@ beforeEach(() => {
 });
 const load = () => import("@/lib/server/credentials");
 
-describe("senha dos líderes (scrypt)", () => {
-  it("confere a senha certa e recusa a errada", async () => {
+describe("leader passwords (scrypt)", () => {
+  it("verifies the right password and rejects the wrong one", async () => {
     const { hashPassword, verifyPassword } = await load();
     const h = await hashPassword("louvor no domingo 2026");
     expect(h).toMatch(/^scrypt\$32768\$8\$1\$/);
@@ -16,18 +16,18 @@ describe("senha dos líderes (scrypt)", () => {
     expect(await verifyPassword("Louvor no domingo 2026", h)).toBe(false);
   });
 
-  it("mesma senha gera hashes diferentes (sal por conta)", async () => {
+  it("the same password produces different hashes (per-account salt)", async () => {
     const { hashPassword } = await load();
     expect(await hashPassword("louvor no domingo 2026")).not.toBe(await hashPassword("louvor no domingo 2026"));
   });
 
-  it("conta sem senha (não ativada) nunca entra", async () => {
+  it("an account without a password (not activated) never gets in", async () => {
     const { verifyPassword } = await load();
     expect(await verifyPassword("", null)).toBe(false);
     expect(await verifyPassword("qualquer", undefined)).toBe(false);
   });
 
-  it("regras: tamanho, repetição, senha comum e e-mail", async () => {
+  it("rules: length, repetition, common passwords and email", async () => {
     const { passwordProblem } = await load();
     expect(passwordProblem("curta")).toMatch(/10/);
     expect(passwordProblem("aaaaaaaaaaaa")).toMatch(/repetitiva/);
@@ -37,8 +37,8 @@ describe("senha dos líderes (scrypt)", () => {
   });
 });
 
-describe("segredo do autenticador cifrado", () => {
-  it("cifra e decifra; adulterado ou com outra chave não abre", async () => {
+describe("encrypted authenticator secret", () => {
+  it("encrypts and decrypts; tampered data or another key doesn't open", async () => {
     const { seal, unseal } = await load();
     const secret = Buffer.from("segredo-de-20-bytes!");
     const s = seal(secret);
@@ -56,8 +56,8 @@ describe("segredo do autenticador cifrado", () => {
   });
 });
 
-describe("códigos de ativação e recuperação", () => {
-  it("formato fácil de ditar, sem caracteres ambíguos", async () => {
+describe("activation and recovery codes", () => {
+  it("easy to read aloud, no ambiguous characters", async () => {
     const { randomCode } = await load();
     for (let i = 0; i < 50; i++) {
       expect(randomCode([5, 5])).toMatch(/^[2-9A-HJKMNP-Z]{5}-[2-9A-HJKMNP-Z]{5}$/);
@@ -65,7 +65,7 @@ describe("códigos de ativação e recuperação", () => {
     }
   });
 
-  it("hash ignora hífen, espaço e minúsculas, e separa ativação de recuperação", async () => {
+  it("hash ignores hyphens, spaces and case, and keeps activation apart from recovery", async () => {
     const { codeHash, setupCodeHash } = await load();
     expect(codeHash("recuperacao", "k7qm2 xr9td")).toBe(codeHash("recuperacao", "K7QM2-XR9TD"));
     expect(setupCodeHash("k7qm-2xr9-tdab")).toBe(setupCodeHash("K7QM-2XR9-TDAB"));
@@ -73,12 +73,12 @@ describe("códigos de ativação e recuperação", () => {
     expect(codeHash("recuperacao", "K7QM2-XR9TD")).not.toContain("K7QM2");
   });
 
-  it("código de ativação não depende do segredo do servidor (o script local gera, a produção aceita)", async () => {
+  it("activation code doesn't depend on the server secret (the local script issues it, production accepts it)", async () => {
     const a = (await load()).setupCodeHash("ABCD-EFGH-JKMN");
     vi.resetModules();
     process.env.CHECKIN_SECRET = "z".repeat(64);
     expect((await load()).setupCodeHash("ABCD-EFGH-JKMN")).toBe(a);
-    // HMAC dos códigos de recuperação, ao contrário, muda com o segredo
+    // The recovery codes' HMAC, on the other hand, changes with the secret
     expect((await load()).codeHash("recuperacao", "K7QM2-XR9TD")).not.toBe(a);
   });
 });

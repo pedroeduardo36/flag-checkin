@@ -2,8 +2,8 @@ import "server-only";
 import { createHmac, randomBytes } from "node:crypto";
 
 /**
- * Códigos de app autenticador (TOTP, RFC 6238): HMAC-SHA1, 6 dígitos, passo de 30 s.
- * Compatível com Google Authenticator, Microsoft Authenticator, 1Password, Authy etc.
+ * Authenticator app codes (TOTP, RFC 6238): HMAC-SHA1, 6 digits, 30 s step.
+ * Works with Google Authenticator, Microsoft Authenticator, 1Password, Authy, etc.
  */
 export const TOTP_STEP_SECONDS = 30;
 const DIGITS = 6;
@@ -38,7 +38,7 @@ export function base32Decode(s: string): Buffer {
   return Buffer.from(out);
 }
 
-export const newTotpSecret = () => randomBytes(20); // 160 bits, o tamanho recomendado pela RFC 4226
+export const newTotpSecret = () => randomBytes(20); // 160 bits, the size RFC 4226 recommends
 
 export const totpStep = (now = Date.now()) => Math.floor(now / 1000 / TOTP_STEP_SECONDS);
 
@@ -51,9 +51,9 @@ export function totpAt(secret: Buffer, step: number, digits = DIGITS): string {
 }
 
 /**
- * Confere o código aceitando 1 passo antes ou depois (relógio do celular adiantado/atrasado).
- * Devolve o passo que bateu, ou null. Só aceita passos depois de `lastStep`: o mesmo código
- * não entra duas vezes (o servidor grava o passo aceito).
+ * Checks the code, accepting 1 step before or after (phone clock running fast or slow).
+ * Returns the matching step, or null. Only steps after `lastStep` are accepted, so the same code
+ * can't be used twice (the server stores the accepted step).
  */
 export function verifyTotp(secret: Buffer, code: unknown, lastStep: number, now = Date.now()): number | null {
   const c = String(code ?? "").replace(/\s/g, "");

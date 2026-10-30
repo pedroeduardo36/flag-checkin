@@ -29,8 +29,8 @@ const view = (c: VisitCheckin, photoUrl: string | null = null) => {
 };
 
 /**
- * GET: a visita deste aparelho hoje (para a tela de saída e para reabrir o check-in). Só com a sessão
- * da visita, gravada quando o check-in foi concluído neste aparelho. Sem ela: { visit: null }.
+ * GET: this device's visit today (for the checkout screen and for reopening the check-in). Only with the
+ * visit session, stored when the check-in was completed on this device. Without it: { visit: null }.
  */
 export const GET = withErrors(async (req: Request) => {
   const v = visitFromRequest(req);
@@ -41,9 +41,9 @@ export const GET = withErrors(async (req: Request) => {
 });
 
 /**
- * POST { lat?, lng?, accuracy? }: confirma a saída com um toque. O horário é o do servidor. A
- * localização é opcional (só a distância é guardada) e não bloqueia: quem já saiu do prédio também
- * pode confirmar. Repetir a confirmação devolve a saída já gravada, sem criar outra.
+ * POST { lat?, lng?, accuracy? }: confirms the checkout with one tap. The time is the server's. Location
+ * is optional (only the distance is stored) and never blocks: someone who already left the building can
+ * still confirm. Repeating the confirmation returns the checkout already recorded instead of creating another.
  */
 export const POST = withErrors(async (req: Request) => {
   const v = visitFromRequest(req);
@@ -57,7 +57,7 @@ export const POST = withErrors(async (req: Request) => {
   const at = new Date();
   const saved = await recordCheckout(c.id, { at, by: "participante", distance });
   if (!saved) {
-    // Já havia saída (toque repetido, outra aba, ou um líder registrou): mostra a que vale.
+    // A checkout already existed (repeated tap, another tab, or a leader recorded it): show the one that counts.
     const { data } = await db().from("checkins").select("checked_out_at, checkout_by").eq("id", c.id).single();
     log("repetido");
     return NextResponse.json({ ok: true, alreadyCheckedOut: true, ...view({ ...c, ...data }) });

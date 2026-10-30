@@ -1,5 +1,5 @@
-// Gera o QR code que leva à página de check-in.
-// Uso: npm run qrcode -- https://seu-app.vercel.app
+// Generates the QR code pointing to the check-in page.
+// Usage: npm run qrcode -- https://your-app.vercel.app
 import QRCode from "qrcode";
 import { readFileSync } from "node:fs";
 
@@ -10,7 +10,7 @@ if (!base) {
   } catch {}
 }
 if (!base) {
-  console.error("Informe a URL: npm run qrcode -- https://seu-app.vercel.app");
+  console.error("Pass the URL: npm run qrcode -- https://your-app.vercel.app");
   process.exit(1);
 }
 const url = `${base.replace(/\/$/, "")}/checkin`;
@@ -18,4 +18,4 @@ const opts = { errorCorrectionLevel: "H", margin: 2, width: 1200, color: { dark:
 
 await QRCode.toFile("qrcode-checkin.png", url, opts);
 await QRCode.toFile("qrcode-checkin.svg", url, { ...opts, type: "svg" });
-console.log(`QR code gerado para ${url}\n → qrcode-checkin.png (impressão)\n → qrcode-checkin.svg (gráfica / banner)`);
+console.log(`QR code generated for ${url}\n → qrcode-checkin.png (print)\n → qrcode-checkin.svg (print shop / banner)`);

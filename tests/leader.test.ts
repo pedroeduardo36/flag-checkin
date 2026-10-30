@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// O banco não deve nem ser consultado quando não há cookie de líder.
+// The database shouldn't even be queried when there is no leader cookie.
 const from = vi.fn();
 vi.mock("@/lib/server/supabase", () => ({ db: () => ({ from, rpc: vi.fn() }) }));
 
@@ -12,8 +12,8 @@ beforeEach(() => {
 
 const req = (cookie?: string) => new Request("http://x/api/pastor/feed", { headers: cookie ? { cookie } : {} });
 
-describe("sessão de líder", () => {
-  it("cookie da visita do adolescente não abre área de líder", async () => {
+describe("leader session", () => {
+  it("the teen's visit cookie doesn't open the leader area", async () => {
     const { createVisitSession, VISIT_COOKIE } = await import("@/lib/server/visit");
     const { requireLeader, readSession } = await import("@/lib/server/leader");
     const { value } = createVisitSession("ana", "2026-10-25");
@@ -23,7 +23,7 @@ describe("sessão de líder", () => {
     expect(from).not.toHaveBeenCalled();
   });
 
-  it("só a etapa 'completa' libera dados privados", async () => {
+  it("only the 'completa' stage unlocks private data", async () => {
     const { requireLeader, LEADER_COOKIE } = await import("@/lib/server/leader");
     const token = "t".repeat(43);
     for (const [stage, liberado] of [["senha", false], ["cadastro_totp", false], ["completa", true]] as const) {
@@ -37,7 +37,7 @@ describe("sessão de líder", () => {
     }
   });
 
-  it("sessão revogada, vencida ou de conta desativada é recusada", async () => {
+  it("a revoked, expired or deactivated-account session is rejected", async () => {
     const { readSession, LEADER_COOKIE } = await import("@/lib/server/leader");
     const base = { id: "s1", stage: "completa", expires_at: new Date(Date.now() + 60_000).toISOString(), revoked_at: null, leaders: { id: "l1", name: "L", email: "l@x.com", status: "ativo" } };
     const cases = [
@@ -51,7 +51,7 @@ describe("sessão de líder", () => {
     }
   });
 
-  it("cookie httpOnly, SameSite=strict", async () => {
+  it("httpOnly, SameSite=strict cookie", async () => {
     const { leaderCookieOptions } = await import("@/lib/server/leader");
     expect(leaderCookieOptions(60)).toMatchObject({ httpOnly: true, sameSite: "strict", path: "/", maxAge: 60 });
   });

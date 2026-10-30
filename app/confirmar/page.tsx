@@ -23,9 +23,9 @@ async function call(token: string, body: Record<string, unknown>) {
 }
 
 /**
- * Link do e-mail de confirmação. O token vem no fragmento (#t=…): não vai para logs de servidor.
- * O responsável lê a explicação e decide; abrir a página sozinha não confirma nada (filtros de e-mail
- * que abrem links não aprovam o cadastro por ninguém).
+ * Link from the confirmation email. The token comes in the fragment (#t=…), so it never reaches server logs.
+ * The guardian reads the explanation and decides; just opening the page confirms nothing (email filters
+ * that open links can't approve a registration on anyone's behalf).
  */
 export default function ConfirmarPage() {
   const [token, setToken] = useState("");
@@ -38,7 +38,7 @@ export default function ConfirmarPage() {
   useEffect(() => {
     const t = new URLSearchParams(window.location.hash.slice(1)).get("t") ?? "";
     setToken(t);
-    history.replaceState(null, "", window.location.pathname); // tira o token da barra de endereço
+    history.replaceState(null, "", window.location.pathname); // removes the token from the address bar
     call(t, { action: "ver" }).then(({ ok, data }) =>
       setState(ok ? { name: "pergunta", info: data as Info } : { name: "invalido", msg: data.error ?? "Link inválido." }),
     );

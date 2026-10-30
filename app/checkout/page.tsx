@@ -23,8 +23,8 @@ const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
 
 /**
- * Localização na saída: opcional. Só é lida se o celular JÁ deu permissão (sem pedir de novo) e
- * nunca segura a confirmação por mais de alguns segundos. Sem ela, a saída vale do mesmo jeito.
+ * Location at checkout: optional. Only read if the phone ALREADY granted permission (no new prompt) and
+ * never holds the confirmation for more than a few seconds. Without it the checkout counts just the same.
  */
 async function optionalCoords(): Promise<{ lat: number; lng: number; accuracy: number } | null> {
   try {
@@ -43,8 +43,8 @@ async function optionalCoords(): Promise<{ lat: number; lng: number; accuracy: n
   }
 }
 
-// Saída do culto: aberta pelo botão "Estou indo embora", pelo QR code da saída ou por uma etiqueta NFC.
-// Não pede dados de novo: vale a sessão da visita que o check-in gravou neste celular.
+// Leaving the service: opened from the "Estou indo embora" button, the checkout QR code or an NFC tag.
+// Asks for no data again: the visit session the check-in stored on this phone is enough.
 export default function CheckoutPage() {
   const [state, setState] = useState<State>({ name: "loading" });
   const [busy, setBusy] = useState(false);

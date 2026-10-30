@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  qualidade:
+  quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,9 +15,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Tipos (TypeScript strict)
+      - name: Type check (strict TypeScript)
         run: npm run typecheck
-      - name: Testes unitários (Vitest)
+      - name: Unit tests (Vitest)
         run: npm test
-      - name: Build de produção
+      - name: Production build
         run: npm run build

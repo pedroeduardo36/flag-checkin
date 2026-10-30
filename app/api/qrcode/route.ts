@@ -4,10 +4,10 @@ import { withErrors } from "@/lib/server/http";
 export const dynamic = "force-dynamic";
 
 /**
- * QR code que leva à página de check-in, gerado na hora pelo servidor.
+ * QR code pointing to the check-in page, generated on the fly by the server.
  * GET /api/qrcode               → PNG (1024 px)
- * GET /api/qrcode?format=svg    → SVG (para gráfica / banner)
- * GET /api/qrcode?destino=saida → QR da SAÍDA (página /checkout), para a porta
+ * GET /api/qrcode?format=svg    → SVG (for print shops / banners)
+ * GET /api/qrcode?destino=saida → CHECKOUT QR (/checkout page), for the door
  */
 export const GET = withErrors(async (req: Request) => {
   const url = new URL(req.url);

@@ -1,11 +1,12 @@
-// Regras do checkout (funções puras, testadas sem banco).
+// Checkout rules (pure functions, tested without a database).
 
+/** Stored as-is in checkins.checkout_by: participant or leader. */
 export type CheckoutBy = "participante" | "lider";
 
 /**
- * Horário informado pelo líder ao corrigir uma saída esquecida ("HH:MM", horário de Brasília) →
- * instante. Brasília não tem horário de verão desde 2019: o fuso é sempre -03:00. Um culto que passa
- * da meia-noite aceita o horário do dia seguinte. A saída precisa ficar entre a chegada e agora.
+ * Time a leader enters when fixing a forgotten checkout ("HH:MM", Brasília time) → instant. Brasília
+ * has had no daylight saving time since 2019, so the offset is always -03:00. A service that runs past
+ * midnight accepts a time on the next day. The checkout must fall between the arrival and now.
  */
 export function leaderCheckoutTime(
   serviceDate: string,
@@ -17,7 +18,7 @@ export function leaderCheckoutTime(
   if (!m || !/^\d{4}-\d{2}-\d{2}$/.test(serviceDate)) return { error: "Informe o horário da saída (HH:MM)." };
   const arrival = new Date(checkedInAt).getTime();
   let at = new Date(`${serviceDate}T${m[1]}:${m[2]}:00-03:00`);
-  // A chegada é guardada com segundos: 19:42 vale para quem chegou às 19:42:30.
+  // Arrivals are stored with seconds: 19:42 is valid for someone who arrived at 19:42:30.
   if (at.getTime() + 60_000 <= arrival) at = new Date(at.getTime() + 86_400_000);
   if (at.getTime() < arrival) at = new Date(arrival);
   if (at.getTime() > now.getTime()) return { error: "A saída não pode ser num horário que ainda não chegou." };
@@ -25,9 +26,9 @@ export function leaderCheckoutTime(
   return { at };
 }
 
-/** Texto curto da situação da saída, igual no app do adolescente e no feed dos líderes. */
+/** Short checkout status text, the same in the teen's app and in the leaders' feed. */
 export function checkoutLabel(checkedOutAt: string | null, by: CheckoutBy | null): string {
   if (!checkedOutAt) return "Saída não registrada";
-  const hora = new Date(checkedOutAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
-  return by === "lider" ? `Saída às ${hora} · registrada por um líder` : `Saída às ${hora}`;
+  const time = new Date(checkedOutAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+  return by === "lider" ? `Saída às ${time} · registrada por um líder` : `Saída às ${time}`;
 }

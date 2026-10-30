@@ -7,7 +7,7 @@ import { checkGeofence, decodePhoto, parseCoords, serviceDate } from "@/lib/serv
 import { isValidPhone, nameTokens, onlyDigits } from "@/lib/format";
 import { VISIT_COOKIE, createVisitSession, visitCookieOptions } from "@/lib/server/visit";
 
-// Check-in de visitante: só nome e telefone; a foto criativa é opcional.
+// Visitor check-in: only name and phone; the creative photo is optional.
 export const POST = withErrors(async (req: Request) => {
   const body = await req.json().catch(() => null);
   const coords = parseCoords(body);
@@ -38,7 +38,7 @@ export const POST = withErrors(async (req: Request) => {
 
   let path: string | null = null;
   if (photo) {
-    path = `checkins/${date}/visitante-${randomUUID()}.jpg`; // sem o telefone no nome do arquivo
+    path = `checkins/${date}/visitante-${randomUUID()}.jpg`; // no phone number in the file name
     const up = await db().storage.from(PHOTO_BUCKET).upload(path, photo.buffer, { contentType: photo.contentType });
     if (up.error) throw up.error;
   }
@@ -64,8 +64,8 @@ export const POST = withErrors(async (req: Request) => {
     if (error.code === "23505") return NextResponse.json({ ok: true, alreadyCheckedIn: true, name }, { status: 200 });
     throw error;
   }
-  // Sessão da visita: só este aparelho confirma a saída deste visitante. Repetir nome e telefone em
-  // outro aparelho (acima, "já fez check-in") não dá a sessão: quem sabe o telefone não fecha a visita.
+  // Visit session: only this device confirms this visitor's checkout. Repeating name and phone on
+  // another device ("already checked in" above) doesn't grant the session: knowing the phone number doesn't close someone's visit.
   const visit = createVisitSession(null, date, Date.now(), data.id);
   const res = NextResponse.json({ ok: true, alreadyCheckedIn: false, name, checkedInAt: data.checked_in_at });
   res.cookies.set(VISIT_COOKIE, visit.value, visitCookieOptions(visit.maxAge));

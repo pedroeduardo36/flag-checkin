@@ -3,10 +3,12 @@ import nodemailer, { type Transporter } from "nodemailer";
 import { firstName } from "@/lib/format";
 
 /**
- * Aviso ao responsável por e-mail via SMTP (Gmail, Brevo, Resend… qualquer provedor SMTP).
- * Variáveis: SMTP_HOST, SMTP_PORT (465 = SSL, 587 = STARTTLS), SMTP_USER, SMTP_PASS, EMAIL_FROM.
+ * Guardian notices by email over SMTP (Gmail, Brevo, Resend… any SMTP provider).
+ * Variables: SMTP_HOST, SMTP_PORT (465 = SSL, 587 = STARTTLS), SMTP_USER, SMTP_PASS, EMAIL_FROM.
+ * Email copy is written for Brazilian families, so it stays in Portuguese.
  */
 
+/** Stored as-is in the *_email_status columns. */
 export type EmailStatus = "enviado" | "falhou" | "sem_email" | "sem_config" | "desligado";
 
 export function emailConfigured(): boolean {
@@ -41,7 +43,7 @@ export type CheckinEmailData = {
   checkedInAt: string | Date;
 };
 
-/** Moldura comum dos e-mails (cabeçalho da marca e rodapé). */
+/** Shared email frame (brand header and footer). */
 function layout(title: string, body: string, footer: string) {
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>${esc(title)}</title></head>
@@ -61,28 +63,28 @@ function layout(title: string, body: string, footer: string) {
 }
 
 /**
- * Aviso de check-in (função pura, testada sem enviar nada). SÓ TEXTO: a foto criativa pode ter outros
- * adolescentes e não sai do app por e-mail. Os líderes veem a foto no feed; ela é apagada em 30 dias.
+ * Check-in notice (pure function, tested without sending anything). TEXT ONLY: the creative photo may
+ * show other teens, so it never leaves the app by email. Leaders see it in the feed; it's deleted after 30 days.
  */
 export function buildCheckinEmail(d: CheckinEmailData) {
   const at = new Date(d.checkedInAt);
-  const hora = at.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: TZ });
-  const dia = at.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", timeZone: TZ });
+  const time = at.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: TZ });
+  const day = at.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", timeZone: TZ });
   const teen = firstName(d.teenName);
   const guardian = firstName(d.guardianName);
 
-  const subject = `✅ ${teen} chegou ao culto da O2 · Flag (${hora})`;
-  const rodape = "Você recebe este aviso porque confirmou o cadastro do(a) adolescente no check-in do Ministério Flag.";
+  const subject = `✅ ${teen} chegou ao culto da O2 · Flag (${time})`;
+  const footer = "Você recebe este aviso porque confirmou o cadastro do(a) adolescente no check-in do Ministério Flag.";
 
   const text = [
     `Olá, ${guardian}!`,
     "",
     `${d.teenName} chegou ao culto da Juventude O2 · Ministério Flag e já fez o check-in.`,
     "",
-    `Horário do check-in: ${hora} (${dia})`,
+    `Horário do check-in: ${time} (${day})`,
     "",
     "Ministério Flag · Juventude O2",
-    rodape,
+    footer,
     "Para deixar de receber ou pedir a exclusão dos dados, responda a este e-mail ou fale com a liderança da O2.",
   ].join("\n");
 
@@ -93,23 +95,23 @@ export function buildCheckinEmail(d: CheckinEmailData) {
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#e6f5fb;border-radius:12px;margin:0 0 18px">
       <tr><td style="padding:14px 16px">
         <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#006a93">Horário do check-in</div>
-        <div style="font-size:28px;font-weight:800;margin-top:2px">${esc(hora)}</div>
-        <div style="font-size:14px;color:#5b6b77">${esc(dia)}</div>
+        <div style="font-size:28px;font-weight:800;margin-top:2px">${esc(time)}</div>
+        <div style="font-size:14px;color:#5b6b77">${esc(day)}</div>
       </td></tr>
     </table>
     <p style="margin:0;font-size:14px;line-height:1.5;color:#5b6b77">${esc(d.teenName)} está com a gente na Juventude O2 do Ministério Flag. Bom culto! 🙌</p>`,
-    `${rodape} Para deixar de receber ou pedir a exclusão dos dados, responda a este e-mail ou fale com a liderança da Juventude O2.`,
+    `${footer} Para deixar de receber ou pedir a exclusão dos dados, responda a este e-mail ou fale com a liderança da Juventude O2.`,
   );
 
   return { subject, text, html };
 }
 
-/** Lista sem repetidos e sem vazios dos e-mails do responsável. */
+/** The guardian's emails, without duplicates or blanks. */
 function recipientList(recipients: string | null | undefined | (string | null | undefined)[]): string[] {
   return [...new Set((Array.isArray(recipients) ? recipients : [recipients]).map((e) => e?.trim().toLowerCase()).filter(Boolean) as string[])];
 }
 
-/** Envia um aviso (todos os e-mails na mesma mensagem). Nunca lança erro: devolve o status para gravar. */
+/** Sends a notice (all recipients on one message). Never throws: returns the status to store. */
 async function sendNotice(
   recipients: string | null | undefined | (string | null | undefined)[],
   message: { subject: string; text: string; html: string },
@@ -122,12 +124,12 @@ async function sendNotice(
     await transport().sendMail({ from: process.env.EMAIL_FROM, to: list.join(", "), ...message });
     return "enviado";
   } catch (err) {
-    console.error(`Falha ao enviar e-mail de ${kind}:`, err instanceof Error ? err.message : err);
+    console.error(`Failed to send ${kind} email:`, err instanceof Error ? err.message : err);
     return "falhou";
   }
 }
 
-/** Envia o aviso de check-in para um ou mais e-mails do responsável. */
+/** Sends the check-in notice to one or more of the guardian's emails. */
 export const sendCheckinEmail = (
   recipients: string | null | undefined | (string | null | undefined)[],
   d: CheckinEmailData,
@@ -137,33 +139,33 @@ export type CheckoutEmailData = {
   guardianName: string;
   teenName: string;
   checkedOutAt: string | Date;
-  /** "lider": um líder registrou a saída (o adolescente esqueceu de confirmar). */
+  /** "lider": a leader recorded the checkout (the teen forgot to confirm it). */
   by: "participante" | "lider";
 };
 
-/** Aviso de saída (função pura). Só texto, como o de check-in. */
+/** Checkout notice (pure function). Text only, like the check-in notice. */
 export function buildCheckoutEmail(d: CheckoutEmailData) {
   const at = new Date(d.checkedOutAt);
-  const hora = at.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: TZ });
-  const dia = at.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", timeZone: TZ });
+  const time = at.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: TZ });
+  const day = at.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", timeZone: TZ });
   const teen = firstName(d.teenName);
   const guardian = firstName(d.guardianName);
-  const quem = d.by === "lider"
+  const who = d.by === "lider"
     ? `A saída de ${d.teenName} foi registrada por um líder da O2.`
     : `${d.teenName} confirmou a saída pelo celular.`;
 
-  const subject = `👋 ${teen} saiu do culto da O2 · Flag (${hora})`;
-  const rodape = "Você recebe este aviso porque confirmou o cadastro do(a) adolescente no check-in do Ministério Flag.";
+  const subject = `👋 ${teen} saiu do culto da O2 · Flag (${time})`;
+  const footer = "Você recebe este aviso porque confirmou o cadastro do(a) adolescente no check-in do Ministério Flag.";
 
   const text = [
     `Olá, ${guardian}!`,
     "",
-    quem,
+    who,
     "",
-    `Horário da saída: ${hora} (${dia})`,
+    `Horário da saída: ${time} (${day})`,
     "",
     "Ministério Flag · Juventude O2",
-    rodape,
+    footer,
     "Para deixar de receber ou pedir a exclusão dos dados, responda a este e-mail ou fale com a liderança da O2.",
   ].join("\n");
 
@@ -174,27 +176,27 @@ export function buildCheckoutEmail(d: CheckoutEmailData) {
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#e6f5fb;border-radius:12px;margin:0 0 18px">
       <tr><td style="padding:14px 16px">
         <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#006a93">Horário da saída</div>
-        <div style="font-size:28px;font-weight:800;margin-top:2px">${esc(hora)}</div>
-        <div style="font-size:14px;color:#5b6b77">${esc(dia)}</div>
+        <div style="font-size:28px;font-weight:800;margin-top:2px">${esc(time)}</div>
+        <div style="font-size:14px;color:#5b6b77">${esc(day)}</div>
       </td></tr>
     </table>
-    <p style="margin:0;font-size:14px;line-height:1.5;color:#5b6b77">${esc(quem)}</p>`,
-    `${rodape} Para deixar de receber ou pedir a exclusão dos dados, responda a este e-mail ou fale com a liderança da Juventude O2.`,
+    <p style="margin:0;font-size:14px;line-height:1.5;color:#5b6b77">${esc(who)}</p>`,
+    `${footer} Para deixar de receber ou pedir a exclusão dos dados, responda a este e-mail ou fale com a liderança da Juventude O2.`,
   );
 
   return { subject, text, html };
 }
 
-/** Aviso de saída. CHECKOUT_NOTICE=false desliga (o horário continua gravado e visível aos líderes). */
+/** Checkout notice. CHECKOUT_NOTICE=false turns it off (the time is still stored and visible to leaders). */
 export function sendCheckoutEmail(
   recipients: string | null | undefined | (string | null | undefined)[],
   d: CheckoutEmailData,
 ): Promise<EmailStatus> {
   if (process.env.CHECKOUT_NOTICE === "false") return Promise.resolve("desligado");
-  return sendNotice(recipients, buildCheckoutEmail(d), "saída");
+  return sendNotice(recipients, buildCheckoutEmail(d), "checkout");
 }
 
-/** Endereço do remetente (de EMAIL_FROM), para avisar o responsável de quem esperar o e-mail. */
+/** Sender address (from EMAIL_FROM), so the guardian knows who the email will come from. */
 export function senderAddress(): string | null {
   const from = process.env.EMAIL_FROM ?? "";
   return /<([^>]+)>/.exec(from)?.[1] ?? (from.includes("@") ? from.trim() : null);
@@ -204,12 +206,12 @@ export type VerificationEmailData = {
   guardianName: string;
   teenName: string;
   link: string;
-  /** true: e-mail principal (dá o consentimento). false: segundo e-mail (só confirma que quer os avisos). */
+  /** true: primary email (gives consent). false: second email (only confirms it wants the notices). */
   primary: boolean;
   validDays: number;
 };
 
-/** Pedido de confirmação do cadastro (função pura). Sem confirmar, não há check-in e o cadastro é apagado. */
+/** Registration confirmation request (pure function). Without confirmation there's no check-in and the registration is deleted. */
 export function buildVerificationEmail(d: VerificationEmailData) {
   const teen = firstName(d.teenName);
   const guardian = firstName(d.guardianName);
@@ -217,10 +219,10 @@ export function buildVerificationEmail(d: VerificationEmailData) {
   const intro = d.primary
     ? `Recebemos o cadastro de ${d.teenName} no check-in da Juventude O2 · Ministério Flag, com este e-mail como contato do responsável.`
     : `${d.guardianName || "O responsável"} cadastrou ${d.teenName} no check-in da Juventude O2 · Ministério Flag e indicou este e-mail para receber os avisos de check-in.`;
-  const pedido = d.primary
+  const ask = d.primary
     ? "Abra o link, leia como usamos os dados (inclusive o reconhecimento facial) e confirme. Só depois disso o check-in funciona."
     : "Abra o link para confirmar que quer receber os avisos.";
-  const ignorar = d.primary
+  const ignore = d.primary
     ? `Se não foi você, ignore: sem confirmação, o cadastro é apagado em ${d.validDays} dias.`
     : `Se não foi você, ignore: este e-mail não recebe nenhum aviso sem confirmação.`;
 
@@ -229,11 +231,11 @@ export function buildVerificationEmail(d: VerificationEmailData) {
     "",
     intro,
     "",
-    pedido,
+    ask,
     d.link,
     `O link vale ${d.validDays} dias e funciona uma vez.`,
     "",
-    ignorar,
+    ignore,
     "",
     "Ministério Flag · Juventude O2",
   ].join("\n");
@@ -243,15 +245,15 @@ export function buildVerificationEmail(d: VerificationEmailData) {
     `<p style="margin:0 0 6px;font-size:15px;color:#5b6b77">Olá${d.primary && guardian ? `, ${esc(guardian)}` : ""}!</p>
     <h1 style="margin:0 0 14px;font-size:22px;line-height:1.3">${esc(subject)}</h1>
     <p style="margin:0 0 12px;font-size:15px;line-height:1.5">${esc(intro)}</p>
-    <p style="margin:0 0 18px;font-size:15px;line-height:1.5">${esc(pedido)}</p>
+    <p style="margin:0 0 18px;font-size:15px;line-height:1.5">${esc(ask)}</p>
     <a href="${esc(d.link)}" style="display:inline-block;background:#008ec3;color:#ffffff;text-decoration:none;font-weight:700;padding:14px 22px;border-radius:12px">${d.primary ? "Ler e confirmar o cadastro" : "Confirmar este e-mail"}</a>
-    <p style="margin:18px 0 0;font-size:13px;line-height:1.5;color:#5b6b77">O link vale ${d.validDays} dias e funciona uma vez. ${esc(ignorar)}</p>`,
+    <p style="margin:18px 0 0;font-size:13px;line-height:1.5;color:#5b6b77">O link vale ${d.validDays} dias e funciona uma vez. ${esc(ignore)}</p>`,
     "Este e-mail foi enviado porque alguém informou este endereço no cadastro do check-in do Ministério Flag.",
   );
   return { subject, text, html };
 }
 
-/** Envia o pedido de confirmação. Nunca lança erro. */
+/** Sends the confirmation request. Never throws. */
 export async function sendVerificationEmail(to: string, d: VerificationEmailData): Promise<EmailStatus> {
   if (!to) return "sem_email";
   if (!emailConfigured()) return "sem_config";
@@ -259,7 +261,7 @@ export async function sendVerificationEmail(to: string, d: VerificationEmailData
     await transport().sendMail({ from: process.env.EMAIL_FROM, to, ...buildVerificationEmail(d) });
     return "enviado";
   } catch (err) {
-    console.error("Falha ao enviar e-mail de confirmação:", err instanceof Error ? err.message : err);
+    console.error("Failed to send confirmation email:", err instanceof Error ? err.message : err);
     return "falhou";
   }
 }

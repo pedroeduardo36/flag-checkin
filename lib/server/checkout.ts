@@ -37,13 +37,13 @@ export type VisitCheckin = {
 export const memberOf = (c: VisitCheckin): Guardian | null => (Array.isArray(c.members) ? c.members[0] ?? null : c.members);
 
 /**
- * O check-in que a sessão da visita deste aparelho comprova. Precisa ser do mesmo culto da sessão:
- * um check-in corrigido ou movido para outro dia não pode ser fechado por um cookie antigo.
+ * The check-in proven by this device's visit session. It must belong to the session's service: a
+ * check-in that was corrected or moved to another day can't be closed by an old cookie.
  */
 export async function checkinOfVisit(v: Visit): Promise<VisitCheckin | null> {
   let q = db().from("checkins").select(VISIT_COLUMNS).eq("service_date", v.date);
   if (v.cid) q = q.eq("id", v.cid);
-  else if (v.mid) q = q.eq("member_id", v.mid); // cookie emitido antes do checkout existir
+  else if (v.mid) q = q.eq("member_id", v.mid); // cookie issued before checkout existed
   else return null;
   const { data, error } = await q.maybeSingle();
   if (error) throw error;
@@ -53,9 +53,9 @@ export async function checkinOfVisit(v: Visit): Promise<VisitCheckin | null> {
 }
 
 /**
- * Grava a saída UMA vez. A atualização só acontece se a saída ainda não existe: duas confirmações
- * ao mesmo tempo (toque duplo, rede lenta) gravam uma só, e o registro de chegada não é tocado.
- * Devolve a saída gravada agora, ou null se já havia uma.
+ * Records the checkout ONCE. The update only runs while there is no checkout yet: two simultaneous
+ * confirmations (double tap, slow network) record a single one, and the arrival is never touched.
+ * Returns the checkout recorded now, or null if one already existed.
  */
 export async function recordCheckout(
   checkinId: string,
@@ -79,7 +79,7 @@ export async function recordCheckout(
   return data;
 }
 
-/** Desfaz uma saída (correção do líder). Só o checkout é apagado; a presença continua. */
+/** Undoes a checkout (leader correction). Only the checkout is cleared; the attendance stays. */
 export async function undoCheckout(checkinId: string) {
   const { data, error } = await db()
     .from("checkins")
@@ -96,8 +96,8 @@ export async function undoCheckout(checkinId: string) {
 }
 
 /**
- * Aviso de saída ao responsável (só texto, só e-mails confirmados), como o de chegada. Visitante não
- * tem responsável cadastrado. A correção feita por um líder em outro dia não avisa: chegaria fora de hora.
+ * Checkout notice to the guardian (text only, confirmed emails only), like the arrival notice. Visitors
+ * have no registered guardian. A leader correction made on another day sends nothing: it would arrive too late.
  */
 export async function notifyCheckout(c: VisitCheckin, at: Date, by: CheckoutBy) {
   const m = memberOf(c);

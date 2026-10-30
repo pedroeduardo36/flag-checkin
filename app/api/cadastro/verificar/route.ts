@@ -8,11 +8,11 @@ import { firstName } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 /**
- * Link do e-mail de confirmação (página /confirmar). O token prova que quem está aqui lê aquele e-mail.
- *   { token, action: "ver" }        → primeiro nome do adolescente e o tipo do link
- *   { token, action: "confirmar" }  → e-mail principal: exige consent e consentBiometric
- *   { token, action: "recusar" }    → principal: apaga o cadastro; segundo e-mail: tira o e-mail do cadastro
- * O link é de uso único e vale 7 dias.
+ * Link from the confirmation email (/confirmar page). The token proves whoever is here reads that inbox.
+ *   { token, action: "ver" }        → the teen's first name and the link type
+ *   { token, action: "confirmar" }  → primary email: requires consent and consentBiometric
+ *   { token, action: "recusar" }    → primary: deletes the registration; second email: removes that email from it
+ * The link is single-use and valid for 7 days.
  */
 export const POST = withErrors(async (req: Request) => {
   const b = await req.json().catch(() => null);
@@ -31,12 +31,12 @@ export const POST = withErrors(async (req: Request) => {
   const m = v && (Array.isArray(v.members) ? v.members[0] : v.members);
   if (!v || !m || v.used_at || Date.parse(v.expires_at) < Date.now()) return invalid();
   const primary = v.email === m.guardian_email;
-  if (!primary && v.email !== m.guardian_email2) return invalid(); // o e-mail do cadastro mudou depois do envio
+  if (!primary && v.email !== m.guardian_email2) return invalid(); // the registration's email changed after the link was sent
 
   if (action === "ver")
     return NextResponse.json({ teenFirstName: firstName(m.name), guardianFirstName: firstName(m.guardian_name ?? ""), primary });
 
-  // Marca o link como usado antes de agir: dois cliques simultâneos não fazem a ação duas vezes.
+  // Mark the link as used before acting: two simultaneous clicks don't run the action twice.
   const { data: claimed } = await db()
     .from("guardian_verifications")
     .update({ used_at: new Date().toISOString() })
@@ -67,7 +67,7 @@ export const POST = withErrors(async (req: Request) => {
       .update({ guardian_email_verified_at: now, guardian_consent_at: now, biometric_consent_at: now, consent_version: CONSENT_VERSION, verify_by: null })
       .eq("id", m.id);
     if (upd.error) throw upd.error;
-    // Registro do consentimento (sem nome: o id basta para provar quando e em que versão foi dado).
+    // Consent record (no name: the id is enough to prove when and under which version it was given).
     await adminAudit(req, { action: "consentimento_registrado", outcome: "ok", targetType: "cadastro", targetId: m.id, details: { versao: CONSENT_VERSION } });
   } else {
     const upd = await db().from("members").update({ guardian_email2_verified_at: now }).eq("id", m.id);
