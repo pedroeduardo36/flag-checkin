@@ -217,7 +217,7 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .success__photo--icon { display: grid; place-items: center; width: 120px; height: 120px; border-radius: 50%; background: #e7f7ee; color: var(--ok); font-size: 56px; font-weight: 900; margin: 8px 0 18px; }
 .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
 
-/* ---------- Check-in: escolha membro/visitante e fotos ---------- */
+/* ---------- Check-in: member/visitor choice and photos ---------- */
 .segmented { display: flex; gap: 4px; background: var(--flag-soft); padding: 4px; border-radius: 12px; margin-bottom: 18px; }
 .segmented button { flex: 1; font: inherit; font-weight: 700; font-size: 14px; min-height: 42px; border: 0; border-radius: 9px; background: transparent; color: var(--flag-dark); cursor: pointer; }
 .segmented button.on { background: #fff; color: var(--ink); box-shadow: 0 2px 8px rgba(13,34,48,.12); }
