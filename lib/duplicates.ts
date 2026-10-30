@@ -3,9 +3,9 @@ import { nameMatchScore, nameTokens } from "@/lib/format";
 export type Existing = { id: string; name: string; guardian_email: string | null; guardian_email2: string | null };
 
 /**
- * Procura, entre os nascidos no mesmo dia, um cadastro com nome compatível (o mesmo critério do
- * check-in: acento, "de/da" e nome do meio omitido não diferenciam). Usa só nome, nascimento e
- * e-mail do responsável, que o formulário já pede.
+ * Among people born on the same day, looks for a registration with a compatible name (the same rule
+ * as check-in: accents, "de/da" and an omitted middle name don't count). Uses only the name, birth
+ * date and guardian email, which the form already asks for.
  */
 export function findDuplicate(
   data: { name: string; guardian_email: string; guardian_email2: string | null },

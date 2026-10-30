@@ -4,22 +4,23 @@ import { env } from "./env";
 import { safeEqual } from "./security";
 
 /**
- * Sessão da VISITA: prova de que ESTE aparelho concluiu ESTE check-in HOJE.
+ * VISIT session: proof that THIS device completed THIS check-in TODAY.
  *
- * Nome + data de nascimento (+ coordenadas, que o próprio celular informa) NÃO autorizam ler a foto
- * ou o horário de um check-in. Só quem passou pela conferência de rosto recebe este cookie (o visitante,
- * ao fazer o próprio check-in): httpOnly, SameSite=strict, restrito a /api/checkin, válido até o fim
- * do dia do culto. É ele que permite confirmar a saída (checkout) sem digitar nada de novo.
+ * Name + birth date (+ coordinates, which the phone itself reports) do NOT authorize reading a
+ * check-in's photo or time. Only someone who passed the face match gets this cookie (a visitor gets it
+ * on their own check-in): httpOnly, SameSite=strict, scoped to /api/checkin, valid until the end of the
+ * service day. It is what lets the person confirm their checkout without typing anything again.
  */
 export const VISIT_COOKIE = "o2_visita";
 
-/** mid: adolescente (null = visitante). cid: o check-in (cookies de antes do checkout não têm). */
+/** mid: the teen (null = visitor). cid: the check-in (cookies issued before checkout don't have it). */
 export type Visit = { mid: string | null; cid?: string; date: string; exp: number };
 
+// The "visita:" prefix and the cookie name are part of the signature: renaming them would log everyone out.
 const sign = (data: string) => createHmac("sha256", env.checkinSecret).update(`visita:${data}`).digest("base64url");
 
 export function createVisitSession(memberId: string | null, serviceDate: string, now = Date.now(), checkinId?: string) {
-  const maxAge = 18 * 3600; // cobre o culto da noite com folga, some no dia seguinte
+  const maxAge = 18 * 3600; // comfortably covers the evening service and expires the next day
   const visit: Visit = { mid: memberId, ...(checkinId ? { cid: checkinId } : {}), date: serviceDate, exp: now + maxAge * 1000 };
   const data = Buffer.from(JSON.stringify(visit)).toString("base64url");
   return { value: `${data}.${sign(data)}`, maxAge };
@@ -37,13 +38,13 @@ export function readVisitSession(value: string | null | undefined, now = Date.no
   }
 }
 
-/** Sessão da visita gravada neste aparelho (cookie da requisição), se válida. */
+/** The visit session stored on this device (the request cookie), if valid. */
 export function visitFromRequest(req: Request, now = Date.now()): Visit | null {
   const m = new RegExp(`(?:^|;\\s*)${VISIT_COOKIE}=([^;]+)`).exec(req.headers.get("cookie") ?? "");
   return readVisitSession(m ? decodeURIComponent(m[1]) : null, now);
 }
 
-/** Verdadeiro só se o cookie da requisição é deste adolescente e deste dia de culto. */
+/** True only if the request cookie belongs to this teen and this service day. */
 export function hasVisitSession(req: Request, memberId: string, serviceDate: string): boolean {
   const v = visitFromRequest(req);
   return !!v && v.mid === memberId && v.date === serviceDate;

@@ -9,8 +9,8 @@ import { leaderCheckoutTime } from "@/lib/checkout";
 export const dynamic = "force-dynamic";
 
 /**
- * DELETE { id, reason }: correção de presença. Remove um check-in registrado por engano (e a foto
- * dele), com o motivo. Fica na trilha de auditoria: quem, quando, qual presença e por quê.
+ * DELETE { id, reason }: attendance correction. Removes a check-in made by mistake (and its photo),
+ * with the reason. It goes to the audit trail: who, when, which attendance and why.
  */
 export const DELETE = withErrors(async (req: Request) => {
   const s = await requireLeader(req);
@@ -45,10 +45,10 @@ const ddmmyyyy = (d: string) => d.split("-").reverse().join("/");
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
 
 /**
- * PATCH { id, action, reason, time? }: correção da SAÍDA, com motivo e registro de ações.
- * - "registrar_saida" + time ("HH:MM"): o adolescente esqueceu de confirmar. Marca a saída como
- *   registrada por um líder. Não sobrescreve uma saída que já existe (desfaça antes).
- * - "desfazer_saida": saída confirmada por engano (ou o adolescente voltou). A presença continua.
+ * PATCH { id, action, reason, time? }: CHECKOUT correction, with a reason and an action log entry.
+ * - "registrar_saida" + time ("HH:MM"): the teen forgot to confirm. Marks the checkout as recorded by
+ *   a leader. Never overwrites an existing checkout (undo it first).
+ * - "desfazer_saida": checkout confirmed by mistake (or the teen came back). The attendance stays.
  */
 export const PATCH = withErrors(async (req: Request) => {
   const s = await requireLeader(req);

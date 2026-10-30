@@ -7,7 +7,7 @@ import { buildDashboard, type CheckinRow } from "@/lib/stats";
 
 export const dynamic = "force-dynamic";
 
-/** Todos os check-ins (só as colunas do cálculo), em páginas de 1000. */
+/** Every check-in (only the columns the calculation needs), in pages of 1000. */
 async function allCheckins(): Promise<CheckinRow[]> {
   const out: CheckinRow[] = [];
   for (let from = 0; ; from += 1000) {
@@ -22,13 +22,13 @@ async function allCheckins(): Promise<CheckinRow[]> {
   }
 }
 
-// GET /api/pastor/dashboard → indicadores, evolução por encontro e ranking de frequência.
+// GET /api/pastor/dashboard → KPIs, per-service trend and attendance ranking.
 export const GET = withErrors(async (req: Request) => {
   if (!(await requireLeader(req))) return unauthorized();
 
   const dash = buildDashboard(await allCheckins());
 
-  // Nome e foto do cadastro só de quem está no ranking.
+  // Registration name and photo only for people in the ranking.
   const ids = dash.ranking.map((r) => r.memberId);
   const { data: members } = ids.length
     ? await db().from("members").select("id, name, photo_path").in("id", ids)

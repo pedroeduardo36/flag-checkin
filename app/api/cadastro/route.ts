@@ -9,16 +9,16 @@ import { findDuplicate } from "@/lib/duplicates";
 const clean = (v: unknown, max = 120) => String(v ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
 /**
- * Cadastro feito pelo RESPONSÁVEL antes do culto (página /cadastro) ou pelo pastor.
- * Sem foto e sem senha do fiscal: a foto de referência é tirada no primeiro check-in.
- * Sem CPF: o check-in usa nome + nascimento e as presenças apontam para o id interno do cadastro.
- * Cadastro parecido com um existente é gravado com a marca "possível duplicado" para um líder revisar.
- * O cadastro só vale depois que o dono do e-mail confirma pelo link (lib/server/guardian.ts).
+ * Registration made by the GUARDIAN before the service (/cadastro page) or by the pastor.
+ * No photo and no door-keeper password: the reference photo is taken at the first check-in.
+ * No CPF: check-in uses name + birth date, and attendances point to the registration's internal id.
+ * A registration similar to an existing one is stored flagged as a "possible duplicate" for a leader to review.
+ * The registration only counts once the email owner confirms it through the link (lib/server/guardian.ts).
  */
 export const POST = withErrors(async (req: Request) => {
   const b = await req.json().catch(() => null);
   if (!b) return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
-  // Campo invisível para pessoas: só robôs o preenchem.
+  // Field invisible to people: only bots fill it in.
   if (b.website) return NextResponse.json({ ok: true });
 
   const data = {
@@ -56,8 +56,8 @@ export const POST = withErrors(async (req: Request) => {
   const ok = () => NextResponse.json({ ok: true, confirmationSent: emailConfigured(), sender: senderAddress(), validDays: VERIFY_TTL_DAYS });
   const base = appUrl(req);
 
-  // Mesmo responsável reenviando o mesmo cadastro: nada a gravar; reenvia o link para o que falta confirmar.
-  // A resposta é igual à de um cadastro novo, então o formulário não revela se alguém já está cadastrado.
+  // Same guardian resubmitting the same registration: nothing to store; resend the link for whatever is still unconfirmed.
+  // The response is the same as for a new registration, so the form doesn't reveal whether someone is already registered.
   if (match?.resubmission) {
     const existing = sameDay!.find((x) => x.id === match.id)!;
     after(() => sendVerifications(existing, base));
@@ -68,7 +68,7 @@ export const POST = withErrors(async (req: Request) => {
     .from("members")
     .insert({
       ...data,
-      guardian_consent_at: new Date().toISOString(), // declaração no formulário; o consentimento vale com a confirmação
+      guardian_consent_at: new Date().toISOString(), // statement made on the form; consent only counts once confirmed
       consent_version: CONSENT_VERSION,
       verify_by: null,
       possible_duplicate_of: match?.id ?? null,
@@ -76,7 +76,7 @@ export const POST = withErrors(async (req: Request) => {
     .select("id, name, guardian_name, guardian_email, guardian_email2, guardian_email_verified_at, guardian_email2_verified_at")
     .single();
   if (error) throw error;
-  // Link de confirmação depois da resposta: o responsável já confere se caiu no spam.
+  // Confirmation link after the response: the guardian can already check their spam folder.
   after(() => sendVerifications(created, base));
   return ok();
 });

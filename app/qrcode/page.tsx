@@ -4,7 +4,7 @@ import { Shell } from "@/components/Brand";
 
 export const metadata: Metadata = { title: "QR code do check-in · Flag" };
 
-// Página para imprimir ou projetar: QR da entrada (check-in) e QR da saída (checkout), para a porta.
+// Page to print or project: entrance QR (check-in) and exit QR (checkout), for the door.
 export default async function QrCodePage({ searchParams }: { searchParams: Promise<{ tipo?: string }> }) {
   const exit = (await searchParams).tipo === "saida";
   const h = await headers();

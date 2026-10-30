@@ -1,211 +1,221 @@
-# Guia de instalação e operação
+# Setup and operations guide
 
-> **Fluxo atual:** o responsável cadastra o adolescente em `/cadastro`, sem foto nem senha. Na igreja, o adolescente faz o
-> check-in com nome completo e data de nascimento. No 1º check-in tira a foto de registro, que precisa ter um rosto só;
-> nos seguintes, a foto criativa dentro do culto. Visitantes entram só com nome e telefone.
+> **Current flow:** the guardian registers the teen at `/cadastro`, with no photo or password. At church, the teen checks
+> in with their full name and birth date. The first check-in takes the registration photo, which must contain a single
+> face; later ones take the creative photo during the service. Visitors only give a name and phone number. On the way
+> out, the teen confirms the checkout with one tap.
 
-App web (abre no navegador do celular, sem instalar nada) para o check-in dos adolescentes na chegada ao culto.
+A web app (it opens in the phone's browser, with nothing to install) for teens to check in when they arrive at the service.
 
 ```
-Antes do culto ──► /cadastro (o RESPONSÁVEL preenche)
-   Dados do adolescente (nome, nascimento, celular opcional; sem CPF) +
-   dados do responsável (nome, telefone, e-mail e um 2º e-mail opcional) + autorização geral e da biometria.
-   Sem foto, sem senha. O responsável confirma pelo link do e-mail; antes disso não há check-in.
+Before the service ──► /cadastro (filled in by the GUARDIAN)
+   Teen's details (name, birth date, optional phone; no CPF) +
+   guardian's details (name, phone, email and an optional second email) + general and biometric consent.
+   No photo, no password. The guardian confirms through the emailed link; until then there's no check-in.
 
-QR code / tag NFC ──► /checkin
-   1. Localização  → confere se o celular está dentro do raio da igreja
-   2. "Tenho cadastro": nome completo + nascimento   |   "Sou visitante": nome + telefone (+ foto opcional)
-   3. 1º check-in: foto de REGISTRO (1 rosto, vira a foto do cadastro) → explicação → foto CRIATIVA
-      Demais: explicação → foto CRIATIVA dentro do culto (pode ter amigos; um rosto precisa ser o dele)
-   4. Tela de sucesso + e-mail ao responsável só com o horário
+QR code / NFC tag ──► /checkin
+   1. Location  → checks that the phone is inside the church radius
+   2. "Tenho cadastro" (registered): full name + birth date   |   "Sou visitante" (visitor): name + phone (+ optional photo)
+   3. First check-in: REGISTRATION photo (1 face, becomes the registration photo) → explanation → CREATIVE photo
+      Later ones: explanation → CREATIVE photo during the service (friends are fine; one face must be the teen's)
+   4. Success screen + text-only email to the guardian with the time
+
+"Estou indo embora" button, exit QR code or NFC ──► /checkout
+   5. One tap confirms the checkout (visit session stored by the check-in; nothing to type)
 ```
 
 ## Stack
 
-| Parte | Escolha | Por quê |
+| Part | Choice | Why |
 | --- | --- | --- |
-| Front + API | **Next.js 15** (React 19, rotas de API) | um projeto só, roda grátis na Vercel |
-| Banco | **Supabase** (Postgres) | grátis, inclui armazenamento de fotos, painel para ver as presenças |
-| Fotos | Supabase Storage, bucket **privado** | fotos de menores nunca ficam públicas |
-| Hospedagem | **Vercel** (plano Hobby, grátis) | HTTPS automático — câmera e GPS exigem HTTPS |
+| Frontend + API | **Next.js 15** (React 19, API routes) | a single project, free on Vercel |
+| Database | **Supabase** (Postgres) | free, includes photo storage and a dashboard to browse attendance |
+| Photos | Supabase Storage, **private** bucket | photos of minors are never public |
+| Hosting | **Vercel** (free Hobby plan) | automatic HTTPS — camera and GPS require HTTPS |
 
-### Bancos de dados gratuitos considerados
+### Free databases considered
 
-| Provedor | Plano grátis | Observação |
+| Provider | Free plan | Notes |
 | --- | --- | --- |
-| **Supabase** ✅ escolhido | Postgres 500 MB + 1 GB de arquivos | banco **e** fotos no mesmo lugar; projeto pausa após 7 dias sem uso (basta abrir o painel para reativar) |
-| Neon | Postgres 0,5 GB | ótimo Postgres, mas precisaria de outro serviço para as fotos |
-| Firebase (Firestore + Storage) | 1 GiB Firestore; Storage exige plano Blaze | NoSQL; armazenamento de fotos pede cartão cadastrado |
-| Turso | SQLite distribuído, 5 GB | sem armazenamento de arquivos |
-| MongoDB Atlas | 512 MB | NoSQL, sem armazenamento de arquivos |
+| **Supabase** ✅ chosen | 500 MB Postgres + 1 GB of files | database **and** photos in one place; the project pauses after 7 idle days (opening the dashboard wakes it up) |
+| Neon | 0.5 GB Postgres | great Postgres, but photos would need another service |
+| Firebase (Firestore + Storage) | 1 GiB Firestore; Storage requires the Blaze plan | NoSQL; photo storage needs a card on file |
+| Turso | distributed SQLite, 5 GB | no file storage |
+| MongoDB Atlas | 512 MB | NoSQL, no file storage |
 
-Estimativa: 200 adolescentes × 52 cultos × ~80 KB por selfie ≈ 830 MB/ano em fotos, mas a retenção
-apaga as fotos de check-in em 30 dias — veja "Manutenção".
+Estimate: 200 teens × 52 services × ~80 KB per selfie ≈ 830 MB/year of photos, but retention deletes check-in photos
+after 30 days — see "Maintenance".
 
-## Passo a passo para colocar no ar
+## Going live, step by step
 
 ### 1. Supabase
-> ✅ Já feito: projeto **flag-checkin** (ref `kcmlgoffvympjalsrwdn`, São Paulo), migration aplicada e `.env.local` preenchido.
-> Painel: <https://supabase.com/dashboard/project/kcmlgoffvympjalsrwdn>
+> ✅ Done: project **flag-checkin** (ref `kcmlgoffvympjalsrwdn`, São Paulo), migrations applied and `.env.local` filled in.
+> Dashboard: <https://supabase.com/dashboard/project/kcmlgoffvympjalsrwdn>
 
-1. Crie a conta em <https://supabase.com> → **New project** (região *South America (São Paulo)*).
-2. Aplique o schema por **um** destes caminhos:
-   - **CLI (recomendado):** `npx supabase login` → `npx supabase link --project-ref SEU_REF` → `npm run db:push`
-   - **Manual:** SQL Editor → New query → cole [`supabase/migrations/20261015000000_init.sql`](../supabase/migrations/20261015000000_init.sql) → Run.
-3. **Project Settings → API**: copie a *Project URL* e a chave **service_role**.
+1. Create an account at <https://supabase.com> → **New project** (region *South America (São Paulo)*).
+2. Apply the schema in **one** of these ways:
+   - **CLI (recommended):** `npx supabase login` → `npx supabase link --project-ref YOUR_REF` → `npm run db:push`
+   - **Manual:** SQL Editor → New query → paste each file in [`supabase/migrations/`](../supabase/migrations/), in order → Run.
+3. **Project Settings → API**: copy the *Project URL* and the **service_role** key.
 
-### 2. Variáveis de ambiente
-Copie `.env.example` para `.env.local` e preencha:
+### 2. Environment variables
+Copy `.env.example` to `.env.local` and fill it in:
 
-| Variável | O que é |
+| Variable | What it is |
 | --- | --- |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | do passo anterior (a service_role **só** no servidor) |
-| `CHURCH_LAT` / `CHURCH_LNG` | coordenadas da igreja — no Google Maps, clique com o botão direito no prédio e copie |
-| `CHURCH_RADIUS_METERS` | raio aceito; comece com **150** (GPS dentro de prédio erra 20–60 m) |
-| `FACE_MATCH_THRESHOLD` | opcional, padrão `0.65`. Distância máxima entre um rosto da foto criativa e a foto de registro. Menor = mais rígido; se adolescentes forem recusados, teste `0.7` |
-| `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `EMAIL_FROM` | envio do e-mail ao responsável a cada check-in (veja "E-mail para o responsável" abaixo). Sem elas, o check-in funciona e o aviso fica como `sem_config` |
-| `GEOFENCE_DISABLED` | `true` = **modo teste**: pula a localização (check-in de qualquer lugar, aviso amarelo na tela). Deixe `false` no culto |
-| `CHECKIN_SECRET` | gere com `openssl rand -hex 32`. Também cifra o segredo do autenticador dos líderes: **trocar este valor obriga todos os líderes a recadastrar o autenticador** (redefinir acesso) |
-| `PUBLIC_APP_URL` | endereço final do app (usado no QR code) |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | from the previous step (service_role on the server **only**) |
+| `CHURCH_LAT` / `CHURCH_LNG` | church coordinates — in Google Maps, right-click the building and copy them |
+| `CHURCH_RADIUS_METERS` | accepted radius; start with **150** (indoor GPS is off by 20–60 m) |
+| `FACE_MATCH_THRESHOLD` | optional, default `0.65`. Maximum distance between a face in the creative photo and the registration photo. Lower = stricter; if teens get rejected, try `0.7` |
+| `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `EMAIL_FROM` | guardian emails (see "Guardian email" below). Without them check-in still works and the notice is recorded as `sem_config` |
+| `GEOFENCE_DISABLED` | `true` = **test mode**: skips the location check (check in from anywhere, with a yellow warning on screen). Keep it `false` for real services |
+| `CHECKIN_SECRET` | generate with `openssl rand -hex 32`. It also encrypts the leaders' authenticator secret: **changing it forces every leader to re-enroll their authenticator** (access reset) |
+| `PUBLIC_APP_URL` | the app's final address (used by the QR code and email links) |
+| `CRON_SECRET` | protects the daily retention cron (`/api/cron/retencao`) |
+| `CHECKOUT_NOTICE` | `false` turns off the checkout email to the guardian (the time is still stored) |
+| `PRIVACY_EMAIL` | contact for privacy requests shown on `/privacidade` (defaults to the `EMAIL_FROM` sender) |
 
-### 3. Rodar no computador
+### 3. Run it locally
 ```bash
 npm install
 npm run dev
 ```
-Abra <http://localhost:3000>. Confira a integração:
+Open <http://localhost:3000>. Check the integration:
 
-- <http://localhost:3000/api/health> deve responder `"ok": true` (variáveis, tabelas, view e bucket).
-- `npm run test:fluxo` faz um cadastro e um check-in de teste no banco real e apaga tudo no final.
+- <http://localhost:3000/api/health> should return `"ok": true` (variables, tables, view and bucket).
+- `npm run test:e2e` runs a test registration, check-in and checkout against the real database and deletes everything at the end.
 
- Para testar no celular, use o endereço HTTPS da Vercel (a câmera e o GPS não funcionam
-em `http://` fora do localhost).
+To test on a phone, use the Vercel HTTPS address (camera and GPS don't work over `http://` outside localhost).
 
-### 4. Publicar na Vercel
-1. Suba a pasta para um repositório no GitHub.
-2. Em <https://vercel.com> → **Add New → Project** → importe o repositório.
-3. Em **Environment Variables**, cadastre as mesmas variáveis do `.env.local`.
-4. **Deploy**. Atualize `PUBLIC_APP_URL` com o endereço gerado (ou seu domínio).
+### 4. Deploy to Vercel
+1. Push the folder to a GitHub repository.
+2. At <https://vercel.com> → **Add New → Project** → import the repository.
+3. Under **Environment Variables**, add the same variables as `.env.local`.
+4. **Deploy**. Update `PUBLIC_APP_URL` with the generated address (or your domain).
 
-### 5. QR code e NFC
-**QR code**
+### 5. QR codes and NFC
+**QR codes**
 
-Já gerado pelo próprio app: abra **https://flag-checkin.vercel.app/qrcode** para imprimir ou baixar em PNG/SVG
-(imagem direta: `/api/qrcode` · `/api/qrcode?format=svg`). Para gerar localmente:
+The app generates them: open **https://flag-checkin.vercel.app/qrcode** to print or download PNG/SVG
+(direct images: `/api/qrcode` · `/api/qrcode?format=svg`). The **Saída** tab
+(`/qrcode?tipo=saida`, image `/api/qrcode?destino=saida`) is the exit QR code for the door, pointing to `/checkout`.
+To generate the entrance code locally:
 ```bash
-npm run qrcode -- https://SEU-APP.vercel.app
+npm run qrcode -- https://YOUR-APP.vercel.app
 ```
-Gera `qrcode-checkin.png` (impressão) e `qrcode-checkin.svg` (gráfica/banner), apontando para `/checkin`.
+It creates `qrcode-checkin.png` (print) and `qrcode-checkin.svg` (print shop/banner), pointing to `/checkin`.
 
-**Tag NFC** (compre NTAG213 ou NTAG215 — adesivos ou chaveiros, poucos reais cada)
-1. Instale o app gratuito **NFC Tools** (Android ou iPhone).
-2. *Escrever → Adicionar registro → URL/URI* → `https://SEU-APP.vercel.app/checkin`.
-3. *Escrever* e encoste a tag no celular. Opcional: *Outros → Bloquear tag* para ninguém regravar.
-4. O adolescente encosta o celular na tag (no iPhone, a parte de cima do aparelho) e o link abre sozinho.
+**NFC tags** (buy NTAG213 or NTAG215 — stickers or key fobs, a few cents each)
+1. Install the free **NFC Tools** app (Android or iPhone).
+2. *Write → Add a record → URL/URI* → `https://YOUR-APP.vercel.app/checkin` (or `/checkout` for the exit tag).
+3. *Write* and hold the tag to the phone. Optional: *Other → Lock tag* so nobody can rewrite it.
+4. The teen holds their phone to the tag (on iPhone, the top of the device) and the link opens on its own.
 
-## E-mail para o responsável
+## Guardian email
 
-O responsável recebe um **link de confirmação** no cadastro e, a cada check-in, um e-mail **só com o horário** (sem
-foto). Escolha **um** provedor SMTP gratuito:
+The guardian gets a **confirmation link** at registration and, at every check-in and checkout, a **text-only** email with
+the time (no photo). Pick **one** free SMTP provider:
 
-| Provedor | Limite grátis | Precisa de domínio próprio? | Configuração |
+| Provider | Free limit | Needs your own domain? | Settings |
 | --- | --- | --- | --- |
-| **Gmail** (recomendado para começar) | ~500 e-mails/dia | não | `smtp.gmail.com` · porta `465` · usuário = o Gmail · senha = **senha de app** |
-| Brevo | 300/dia | não (verifica o remetente) | `smtp-relay.brevo.com` · `587` · login e chave SMTP do painel |
-| Resend | 3.000/mês | **sim**, para enviar a qualquer pessoa | `smtp.resend.com` · `465` · usuário `resend` · senha = API key |
+| **Gmail** (recommended to start) | ~500 emails/day | no | `smtp.gmail.com` · port `465` · user = the Gmail address · password = an **app password** |
+| Brevo | 300/day | no (verifies the sender) | `smtp-relay.brevo.com` · `587` · SMTP login and key from the dashboard |
+| Resend | 3,000/month | **yes**, to send to anyone | `smtp.resend.com` · `465` · user `resend` · password = API key |
 
-**Gmail passo a passo** (de preferência numa conta do ministério, por exemplo `checkin.o2flag@gmail.com`):
-1. Ative a **verificação em duas etapas** na conta Google.
-2. Abra <https://myaccount.google.com/apppasswords>, crie uma senha de app chamada "Check-in O2" e copie as 16 letras.
-3. Preencha no `.env.local` **e** na Vercel (Settings › Environment Variables):
-   `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER=<o gmail>`, `SMTP_PASS=<senha de app>`,
-   `EMAIL_FROM="Check-in O2 Flag <o gmail>"`.
-4. Publique de novo (Deployments › Redeploy).
+**Gmail, step by step** (ideally a ministry account, e.g. `checkin.o2flag@gmail.com`):
+1. Turn on **2-Step Verification** on the Google account.
+2. Open <https://myaccount.google.com/apppasswords>, create an app password named "Check-in O2" and copy the 16 letters.
+3. Fill in `.env.local` **and** Vercel (Settings › Environment Variables):
+   `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER=<the gmail>`, `SMTP_PASS=<app password>`,
+   `EMAIL_FROM="Check-in O2 Flag <the gmail>"`.
+4. Redeploy (Deployments › Redeploy).
 
-O status de cada aviso aparece na coluna `aviso_responsavel` da view `presencas`.
+Each notice's status shows in the `aviso_responsavel` column of the `presencas` view.
 
-**Confirmação em lote dos cadastros antigos** (anteriores ao consentimento que explica a biometria):
-`npm run verificacao:enviar` só simula; `npm run verificacao:enviar -- --enviar` manda o link de confirmação, com 1,5 s
-de intervalo. O registro fica em `logs/verificacao.json` (fora do git, só ids): rodar de novo pula quem já recebeu.
-Quem não confirmar até 30/11/2026 tem o cadastro apagado.
+**Batch confirmation for legacy registrations** (older than the consent that explains biometrics):
+`npm run verification:send` is a dry run; `npm run verification:send -- --send` sends the confirmation link, 1.5 s
+apart. The log goes to `logs/verificacao.json` (git-ignored, ids only): running it again skips whoever already got one.
+Registrations not confirmed by 2026-11-30 are deleted.
 
-## Área do pastor
+## Pastor area
 
-Cada líder tem a própria conta: **e-mail + senha + código do app autenticador** (Google Authenticator, Microsoft
-Authenticator, 1Password…). A sessão dura 12 h no aparelho. Não existe senha compartilhada.
+Each leader has their own account: **email + password + authenticator app code** (Google Authenticator, Microsoft
+Authenticator, 1Password…). The session lasts 12 h on the device. There's no shared password.
 
-**Primeiro líder** (uma vez só, no computador com o `.env.local`):
+**First leader** (once, on the computer with `.env.local`):
 ```bash
-npm run lider:criar -- "Nome Sobrenome" email@exemplo.com
+npm run leader:create -- "First Last" email@example.com
 ```
-O comando mostra um **código de ativação** (uso único, 24 h). A pessoa abre **https://flag-checkin.vercel.app/pastor →
-Ativar conta**, informa e-mail e código, cria a senha, escaneia o QR code no app autenticador e guarda os **10 códigos
-de recuperação**. Os demais líderes são criados na aba **Líderes**, do mesmo jeito.
+The command prints an **activation code** (single use, 24 h). The person opens **https://flag-checkin.vercel.app/pastor →
+Ativar conta**, enters their email and the code, creates a password, scans the QR code with the authenticator app and
+saves the **10 recovery codes**. Other leaders are created the same way from the **Líderes** tab.
 
-**Celular perdido:** na tela do código, "Perdi o celular" aceita um código de recuperação (cada um vale uma vez; as outras
-sessões caem e um autenticador novo é cadastrado na hora). Sem códigos, **outro líder** confirma pessoalmente quem é e
-usa **Redefinir acesso** na aba Líderes: sai um código de ativação novo, entregue em mãos.
+**Lost phone:** on the code screen, "Perdi o celular" accepts a recovery code (each works once; the other sessions end
+and a new authenticator is enrolled right away). Without codes, **another leader** confirms who they are in person and
+uses **Redefinir acesso** on the Líderes tab: a new activation code is issued and handed over in person.
 
-- **Líderes:** criar conta, desativar (as sessões da pessoa caem na hora), reativar, redefinir acesso, encerrar sessões,
-  gerar novos códigos de recuperação e o **registro de ações** (somente leitura).
-- **Ao vivo:** quem fez check-in hoje, do mais recente para o mais antigo, atualizando sozinho a cada 4 s.
-- **Dashboard:** encontros, média por encontro, último encontro comparado ao anterior, gráfico da frequência a cada
-  culto (cadastrados e visitantes) e ranking dos 10 mais frequentes. O botão "↻ Atualizar" recarrega os números.
-- **Cadastrar:** o mesmo cadastro do responsável, para cadastrar vários em sequência.
+- **Leaders:** create accounts, deactivate (that person's sessions end immediately), reactivate, reset access, end
+  sessions, issue new recovery codes and the **action log** (read-only). Also possible duplicates and family privacy requests.
+- **Live:** who checked in today, newest first, refreshing every 4 s. Each item shows the checkout status; leaders can
+  record a forgotten checkout (with the time) or undo one, always with a reason.
+- **Dashboard:** services, average per service, latest service vs. the previous one, confirmed checkouts, the attendance
+  chart per service (registered teens and visitors) and the top-10 ranking. "↻ Atualizar" reloads the numbers.
+- **Register:** the guardian's registration form, for registering several teens in a row.
 
-Para ver o dashboard com dados: `node scripts/simular-dashboard.mjs` cria 8 domingos simulados (adolescentes e visitantes
-com o prefixo "Simulação"); `node scripts/simular-dashboard.mjs --limpar` apaga tudo depois.
+To see the dashboard with data: `node scripts/simulate-dashboard.mjs` creates 8 simulated Sundays (teens and visitors
+prefixed "Simulação"); `node scripts/simulate-dashboard.mjs --clean` deletes them afterwards.
 
-Para ver o feed funcionando sem ninguém na igreja: `npm run simular` (e `node scripts/simular-checkins.mjs --limpar`
-para apagar os cadastros de simulação depois).
+To see the feed working with nobody at church: `npm run simulate` (and `node scripts/simulate-checkins.mjs --clean`
+to delete the simulated registrations afterwards).
 
-## Ver as presenças
-No Supabase: **Table Editor → `presencas`** (lista por culto, com horário, responsável e distância). Para ver uma foto,
-abra **Storage → fotos** e o caminho indicado na coluna `foto_checkin` ou `foto_cadastro`. Dá para exportar em CSV pelo
-próprio painel.
+## Viewing attendance
+In Supabase: **Table Editor → `presencas`** (list per service, with time, checkout, guardian and distance). To see a
+photo, open **Storage → fotos** and the path in the `foto_checkin` or `foto_cadastro` column. The dashboard can export CSV.
 
-## Segurança e LGPD
-- Banco com RLS ligado e sem políticas públicas: o navegador nunca fala direto com o banco, só com as rotas `/api`.
-- Fotos em bucket privado; quando o app precisa mostrar uma foto, gera um link temporário (10 min).
-- Nome inexistente e data errada dão a **mesma** mensagem, para não revelar quem está cadastrado.
-- O token entre a identificação e a foto é assinado (HMAC) e vale 4 h (a foto criativa é dentro do culto); um check-in
-  por pessoa por dia, e um por telefone de visitante por dia.
-- O cadastro é aberto (sem senha), com validação no servidor e um campo escondido contra robôs. Não pede CPF.
-- Cadastro parecido com um existente (mesmo nascimento e nome compatível) entra marcado como **possível duplicado**.
-  Na aba **Líderes → Possíveis cadastros duplicados**, um líder escolhe "mesclar" (as presenças vão para o cadastro
-  mais antigo e o novo é apagado) ou "são pessoas diferentes". Enquanto houver dois cadastros com o mesmo nome, o
-  check-in pede o nome completo ou um líder. As duas decisões ficam no registro de ações.
-- Cadastro exige a autorização geral e a específica da biometria (LGPD art. 11 e 14), confirmadas pelo dono do e-mail.
-  Detalhes, prazos e pedidos das famílias: [docs/privacidade](privacidade/README.md).
-- **Limites conhecidos:** GPS de celular pode ser falsificado com apps de "fake GPS" — por isso existe a foto com
-  reconhecimento facial, que os líderes também podem conferir no feed do pastor. Não há limite de tentativas por IP; se precisar, adicione
-  Upstash Ratelimit (grátis) nas rotas `/api/checkin/identificar` e `/api/cadastro`.
+## Security and LGPD
+- RLS on and no public policies: the browser never talks to the database directly, only to the `/api` routes.
+- Photos live in a private bucket; when the app needs to show one, it generates a temporary link (10 min).
+- An unknown name and a wrong date get the **same** message, so nobody can find out who is registered.
+- The token between identification and photo is signed (HMAC) and valid for 4 h (the creative photo is taken during the
+  service); one check-in per person per day, and one per visitor phone per day.
+- Registration is open (no password), with server-side validation and a hidden field against bots. It doesn't ask for a CPF.
+- A registration similar to an existing one (same birth date and a compatible name) is flagged as a **possible duplicate**.
+  Under **Líderes → Possíveis cadastros duplicados**, a leader picks "mesclar" (merge: attendances move to the older
+  registration and the new one is deleted) or "são pessoas diferentes" (different people). While two registrations share
+  a name, check-in asks for the full name or a leader. Both decisions go to the action log.
+- Registration requires the general and the biometric-specific consent (LGPD art. 11 and 14), confirmed by the email
+  owner. Details, retention periods and family requests: [docs/privacy](privacy/README.md).
+- **Known limits:** phone GPS can be spoofed with "fake GPS" apps — which is why there's a photo with face recognition,
+  which leaders can also check in the pastor feed. The identification routes have no per-IP limit; if needed, add
+  Upstash Ratelimit (free) to `/api/checkin/identificar` and `/api/cadastro`.
 
-## Manutenção
-Os prazos de retenção ([inventário](privacidade/inventario-de-dados.md)) são aplicados todo dia às 03:00 pelo Vercel
-Cron (`/api/cron/retencao`, exige `CRON_SECRET` na Vercel). Para conferir ou rodar à mão:
-`npm run retencao` (simula) e `npm run retencao -- --aplicar`.
+## Maintenance
+The retention periods ([inventory](privacy/data-inventory.md)) are applied daily at 03:00 by Vercel Cron
+(`/api/cron/retencao`, requires `CRON_SECRET` on Vercel). To check or run it by hand:
+`npm run retention` (dry run) and `npm run retention -- --apply`.
 
-## Estrutura
+## Structure
 ```
-app/checkin/page.tsx              fluxo de check-in (local → nome e nascimento ou visitante → foto → sucesso)
-app/cadastro/page.tsx             cadastro pelo responsável (sem foto, sem senha)
-app/api/checkin/local             confere a localização
-app/api/checkin/identificar       confere nome + nascimento, emite token
-app/api/checkin/confirmar         foto de registro (1º) ou criativa → grava o check-in
-app/api/cadastro                  grava novo adolescente
-components/Brand.tsx              cabeçalho Flag (destaque) + Juventude O2
-components/Camera.tsx             câmera frontal ao vivo com fallback
-lib/format.ts                     telefone, datas, nomes, distância (Haversine)
-lib/duplicates.ts                 possível cadastro duplicado (nome + nascimento + e-mail do responsável)
-lib/server/*                      Supabase, variáveis, token e validações (só servidor)
-supabase/migrations/              tabelas, view de presença e bucket
-app/api/health                    diagnóstico da conexão com o Supabase
-scripts/testar-fluxo.mjs          teste ponta a ponta no banco real
-scripts/gerar-qrcode.mjs          gera o QR code
+app/checkin/page.tsx              check-in flow (location → name and birth date or visitor → photo → success)
+app/checkout/page.tsx             one-tap checkout
+app/cadastro/page.tsx             registration by the guardian (no photo, no password)
+app/api/checkin/local             checks the location
+app/api/checkin/identificar       checks name + birth date, issues the token
+app/api/checkin/confirmar         registration (first) or creative photo → stores the check-in
+app/api/checkin/checkout          confirms the checkout (visit session)
+app/api/cadastro                  stores a new teen
+components/Brand.tsx              Flag header (prominent) + Juventude O2
+components/Camera.tsx             live front camera with a fallback
+lib/format.ts                     phone, dates, names, distance (haversine)
+lib/duplicates.ts                 possible duplicate registration (name + birth date + guardian email)
+lib/server/*                      Supabase, variables, tokens and validation (server only)
+supabase/migrations/              tables, attendance view, bucket and retention
+app/api/health                    Supabase connection diagnostics
+scripts/e2e-flow.mjs              end-to-end test against the real database
+scripts/generate-qrcode.mjs       generates the QR code
 ```
 
-## Logo da Juventude O2
-O logo do Flag está em `public/brand/flag-logo.jpg` (já traz o "O2" pequeno). O link do Instagram do logo da O2 é um
-post, que não dá para baixar automaticamente: salve a imagem como `public/brand/o2-logo.png` se quiser usá-la em
-algum lugar. Para trocar o logo do Flag por uma versão maior/sem fundo, substitua o arquivo mantendo o nome.
+## O2 youth group logo
+The Flag logo lives at `public/brand/flag-logo.jpg` (it already includes a small "O2"). The Instagram link for the O2
+logo is a post that can't be downloaded automatically: save the image as `public/brand/o2-logo.png` if you want to use
+it somewhere. To swap the Flag logo for a larger or transparent version, replace the file and keep the name.

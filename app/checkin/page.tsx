@@ -7,7 +7,7 @@ import { brDateToIso, isValidBirthDate, isValidPhone, maskDate, maskPhone, nameT
 
 type Coords = { lat: number; lng: number; accuracy: number };
 type PhotoKind = "registro" | "criativa";
-/** Identificação feita na entrada, guardada no celular até a foto (que pode ser já dentro do culto). */
+/** Identification done at the entrance, kept on the phone until the photo (which may be taken once inside). */
 type Pending = { token: string; firstName: string; photoKind: PhotoKind; expiresAt: string };
 
 type Step =
@@ -21,7 +21,7 @@ type Step =
   | { name: "photo"; pending: Pending }
   | {
       name: "success"; who: string; photo: string | null; at: string | null; repeat: boolean; kind: "registro" | "criativa" | "visitante";
-      /** Saída: null = não registrada. canExit = este celular tem a sessão da visita (pode confirmar a saída). */
+      /** Checkout: null = not recorded. canExit = this phone holds the visit session (it can confirm the checkout). */
       out: string | null; outByLeader?: boolean; canExit: boolean;
     };
 
@@ -67,7 +67,7 @@ export default function CheckinPage() {
 
   useEffect(() => {
     (async () => {
-      // Check-in já feito hoje neste celular: mostra a visita e a saída.
+      // Already checked in today on this phone: show the visit and the checkout.
       const v = await fetch("/api/checkin/checkout", { cache: "no-store" }).then((r) => r.json()).catch(() => ({}));
       if (v.visit)
         return setStep({
@@ -79,7 +79,7 @@ export default function CheckinPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** Início do check-in (também para "fazer o check-in de outra pessoa" neste celular). */
+  /** Start of the check-in (also used for "check in someone else" on this phone). */
   function start() {
     setName("");
     setBirth("");
@@ -87,7 +87,7 @@ export default function CheckinPage() {
     setPhoto(null);
     setError(null);
     (async () => {
-      // Já se identificou na entrada? Vai direto para a foto.
+      // Already identified at the entrance? Go straight to the photo.
       const pending = loadPending();
       if (pending) return setStep({ name: "photo", pending });
 
@@ -150,7 +150,7 @@ export default function CheckinPage() {
     const pending: Pending = { token: r.data.token, firstName: r.data.firstName, photoKind: r.data.photoKind, expiresAt: r.data.expiresAt };
     savePending(pending);
     setPhoto(null);
-    // 1º check-in: foto de registro primeiro. Demais: explica a foto criativa antes da câmera.
+    // First check-in: registration photo first. Otherwise: explain the creative photo before the camera.
     setStep(pending.photoKind === "registro" ? { name: "photo", pending } : { name: "explain", pending, justRegistered: false });
   }
 
@@ -167,7 +167,7 @@ export default function CheckinPage() {
         return setStep({ name: "intro" });
       }
       if (r.data.code === "DUPLICADO") {
-        // Rosto conferido e já havia check-in hoje: mostra o check-in existente.
+        // Face matched and there was already a check-in today: show the existing check-in.
         savePending(null);
         return setStep({ name: "success", who: r.data.name, photo: r.data.photoUrl, at: r.data.checkedInAt, repeat: true, kind: "criativa", out: r.data.checkedOutAt ?? null, canExit: true });
       }
@@ -175,7 +175,7 @@ export default function CheckinPage() {
       return setError({ msg: r.data.error ?? "Erro inesperado.", code: r.data.code });
     }
     if (r.data.registered) {
-      // Foto de registro salva no cadastro. Falta a foto criativa para concluir o check-in.
+      // Registration photo saved. The creative photo is still needed to complete the check-in.
       const next: Pending = { ...pending, photoKind: "criativa" };
       savePending(next);
       setPhoto(null);
@@ -197,7 +197,7 @@ export default function CheckinPage() {
       if (r.data.code === "FORA_DO_LOCAL") return locate();
       return setError({ msg: r.data.error ?? "Erro inesperado." });
     }
-    // Visitante repetido (nome e telefone de novo) não ganha a sessão da visita: a saída fica com um líder.
+    // A repeat visitor (same name and phone again) doesn't get the visit session: the checkout is left to a leader.
     setStep({
       name: "success", who: r.data.name, photo, at: r.data.checkedInAt ?? null, repeat: !!r.data.alreadyCheckedIn, kind: "visitante",
       out: null, canExit: !r.data.alreadyCheckedIn,
@@ -430,7 +430,7 @@ export default function CheckinPage() {
   );
 }
 
-/** Situação da saída na tela de check-in. Sem confirmação, fica "não registrada": nada a grava sozinho. */
+/** Checkout status on the check-in screen. Without confirmation it stays "not recorded": nothing records it automatically. */
 function Exit({ out, byLeader, canExit }: { out: string | null; byLeader: boolean; canExit: boolean }) {
   if (out)
     return (

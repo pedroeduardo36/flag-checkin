@@ -1,6 +1,6 @@
 import Image from "next/image";
 
-/** Cabeçalho da marca: "Flag" em destaque, "Juventude O2" como apoio. */
+/** Brand header: "Flag" prominent, "Juventude O2" as the supporting line. */
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <header className={`brand ${compact ? "brand--compact" : ""}`}>

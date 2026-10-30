@@ -1,22 +1,22 @@
--- P1 · Regras de privacidade e coleta mínima (issue #1, item 4).
+-- P1 · Privacy rules and data minimization (issue #1, item 4).
 --
--- 1. Verificação do e-mail do responsável: o dono do e-mail confirma o cadastro e dá o consentimento,
---    inclusive o específico para a biometria facial (LGPD art. 11 e 14). Sem isso, não há check-in.
--- 2. Coordenadas: o app passa a guardar só a distância até a igreja.
--- 3. Retenção: expurgar_dados() aplica os prazos de docs/privacidade/inventario-de-dados.md.
+-- 1. Guardian email verification: the email owner confirms the registration and gives consent,
+--    including the specific consent for facial biometrics (LGPD art. 11 and 14). Without it, no check-in.
+-- 2. Coordinates: the app now stores only the distance to the church.
+-- 3. Retention: expurgar_dados() applies the periods in docs/privacy/data-inventory.md.
 --
--- Esta migration não apaga nenhum dado. Quem apaga é expurgar_dados(), que roda todo dia (Vercel Cron)
+-- This migration deletes no data. Deletion is done by expurgar_dados(), which runs daily (Vercel Cron)
 -- e pode ser simulada antes: select public.expurgar_dados(true);
 
--- ---------- 1. Verificação e consentimento ----------
+-- ---------- 1. Verification and consent ----------
 alter table public.members
   add column if not exists guardian_email_verified_at  timestamptz,
   add column if not exists guardian_email2_verified_at timestamptz,
-  add column if not exists biometric_consent_at        timestamptz, -- consentimento específico, dado pelo dono do e-mail
+  add column if not exists biometric_consent_at        timestamptz, -- specific consent, given by the email owner
   add column if not exists consent_version             text,
-  -- Prazo para confirmar. Cadastros anteriores a esta versão (consentimento antigo, que não explicava a
-  -- biometria) fazem check-in até o prazo; os novos (o app grava null) só depois de confirmar.
-  -- O default cobre quem se cadastrar pela versão anterior do app até o deploy desta.
+  -- Deadline to confirm. Registrations older than this version (legacy consent, which didn't explain
+  -- biometrics) can check in until the deadline; new ones (the app writes null) only after confirming.
+  -- The default covers anyone registering through the previous app version until this one is deployed.
   add column if not exists verify_by                   date default (current_date + 30);
 
 update public.members set verify_by = date '2026-11-30'
@@ -26,7 +26,7 @@ create table if not exists public.guardian_verifications (
   id         uuid primary key default gen_random_uuid(),
   member_id  uuid not null references public.members(id) on delete cascade,
   email      text not null,
-  token_hash text not null unique,  -- sha256 do token do link; o token só existe no e-mail
+  token_hash text not null unique,  -- sha256 of the link token; the token only exists in the email
   created_at timestamptz not null default now(),
   expires_at timestamptz not null,
   used_at    timestamptz
@@ -34,12 +34,12 @@ create table if not exists public.guardian_verifications (
 create index if not exists guardian_verifications_member_idx on public.guardian_verifications (member_id);
 alter table public.guardian_verifications enable row level security;
 
--- ---------- 2. Distância em vez de coordenadas na auditoria do check-in ----------
+-- ---------- 2. Distance instead of coordinates in the check-in audit ----------
 alter table public.audit_events add column if not exists distance_m real;
 
--- ---------- 3. Retenção ----------
--- A auditoria continua imutável para o app. A única exceção é o expurgo por prazo, feito por
--- expurgar_dados() (que liga app.expurgo só dentro da própria transação) e só para registros vencidos.
+-- ---------- 3. Retention ----------
+-- The audit trail stays immutable for the app. The only exception is the retention purge done by
+-- expurgar_dados() (which sets app.expurgo only inside its own transaction), and only for expired entries.
 create or replace function public.audit_imutavel()
 returns trigger
 language plpgsql
@@ -53,7 +53,7 @@ begin
       if old.at < now() - interval '2 years' then return old; end if;
     end if;
   end if;
-  -- Apagar um adolescente zera o member_id em audit_events (on delete set null).
+  -- Deleting a teen nulls member_id in audit_events (on delete set null).
   if tg_table_name = 'audit_events' and tg_op = 'UPDATE' then
     if new.member_id is null
        and (new.id, new.at, new.event, new.outcome, new.ip_hash, new.user_agent, new.lat, new.lng, new.distance_m)
@@ -66,8 +66,8 @@ begin
 end;
 $$;
 
--- Aplica os prazos de retenção. Devolve o que fez e os caminhos de foto para o servidor apagar do Storage.
--- p_simular = true: faz tudo, conta e desfaz (nada muda). Serve para conferir antes de rodar de verdade.
+-- Applies the retention periods. Returns what it did and the photo paths for the server to delete from Storage.
+-- p_simular = true: does everything, counts and rolls back (nothing changes). Use it to check before the real run.
 create or replace function public.expurgar_dados(p_simular boolean default false)
 returns jsonb
 language plpgsql
@@ -84,7 +84,7 @@ declare
 begin
   perform set_config('app.expurgo', 'on', true);
 
-  -- Coordenadas precisas: não são guardadas (a distância basta). Limpa as que ainda existirem.
+  -- Precise coordinates: not stored (the distance is enough). Clears any that still exist.
   update public.checkins set latitude = null, longitude = null where latitude is not null or longitude is not null;
   get diagnostics n = row_count;
   r := r || jsonb_build_object('coordenadas_checkin', n);
@@ -92,7 +92,7 @@ begin
   get diagnostics n = row_count;
   r := r || jsonb_build_object('coordenadas_auditoria', n);
 
-  -- Foto criativa do check-in: 30 dias (a presença continua; só a foto sai).
+  -- Creative check-in photo: 30 days (the attendance stays; only the photo goes).
   with alvo as (
     select id, photo_path from public.checkins
      where photo_path is not null and not is_example and service_date < hoje - 30
@@ -104,7 +104,7 @@ begin
   r := r || jsonb_build_object('fotos_checkin', cardinality(tmp));
   update public.checkins set user_agent = null where user_agent is not null and service_date < hoje - 30;
 
-  -- Visitante (nome, telefone, foto opcional): 180 dias.
+  -- Visitor (name, phone, optional photo): 180 days.
   with del as (
     delete from public.checkins where member_id is null and not is_example and service_date < hoje - 180 returning photo_path
   )
@@ -112,8 +112,8 @@ begin
   fotos := fotos || tmp;
   r := r || jsonb_build_object('visitantes', n);
 
-  -- Cadastro: sem confirmação do responsável no prazo, ou sem presença há 12 meses.
-  -- Sai inteiro: dados, foto de referência, descritor facial e presenças (em cascata).
+  -- Registration: not confirmed by the guardian in time, or no attendance for 12 months.
+  -- Removed entirely: data, reference photo, face descriptor and attendances (cascade).
   create temporary table alvo_cadastro on commit drop as
   select m.id,
          m.guardian_email_verified_at is null
@@ -136,7 +136,7 @@ begin
   update public.members set possible_duplicate_of = null where possible_duplicate_of in (select id from alvo_cadastro);
   delete from public.members where id in (select id from alvo_cadastro);
 
-  -- Registros técnicos.
+  -- Technical logs.
   delete from public.audit_events where at < now() - interval '90 days';
   get diagnostics n = row_count;
   r := r || jsonb_build_object('auditoria_checkin', n);

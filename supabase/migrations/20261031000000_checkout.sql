@@ -1,12 +1,12 @@
--- P2: checkout pelo navegador. A saída é gravada NA MESMA linha do check-in, em colunas próprias:
--- o registro de presença (horário de chegada, foto, distância, rosto) não muda, e confirmar de novo
--- não cria outra linha. Nada grava a saída sozinho: sem confirmação, a saída fica "não registrada".
+-- P2: browser checkout. The checkout is stored ON THE SAME row as the check-in, in its own columns:
+-- the attendance record (arrival time, photo, distance, face) doesn't change, and confirming again
+-- doesn't create another row. Nothing records a checkout automatically: without confirmation it stays "not recorded".
 
-alter table public.checkins add column if not exists checked_out_at       timestamptz; -- horário da saída (do servidor, ou o informado pelo líder na correção)
+alter table public.checkins add column if not exists checked_out_at       timestamptz; -- checkout time (the server's, or the one a leader entered as a correction)
 alter table public.checkins add column if not exists checkout_by          text;        -- participante | lider
 alter table public.checkins add column if not exists checkout_leader_id   uuid references public.leaders(id) on delete set null;
-alter table public.checkins add column if not exists checkout_recorded_at timestamptz; -- quando a saída foi gravada ou desfeita (o feed acompanha por aqui)
-alter table public.checkins add column if not exists checkout_distance_m  real;        -- só a distância até a igreja, se o celular informou
+alter table public.checkins add column if not exists checkout_recorded_at timestamptz; -- when the checkout was recorded or undone (the feed follows this)
+alter table public.checkins add column if not exists checkout_distance_m  real;        -- only the distance to the church, if the phone reported it
 alter table public.checkins add column if not exists checkout_email_status text;
 
 alter table public.checkins drop constraint if exists checkins_checkout_valido;
@@ -16,10 +16,10 @@ alter table public.checkins add constraint checkins_checkout_valido check (
       and (checkout_by = 'participante' and checkout_leader_id is null or checkout_by = 'lider'))
 );
 
--- Feed ao vivo: "o que mudou desde X" (check-ins novos ou saídas gravadas/desfeitas).
+-- Live feed: "what changed since X" (new check-ins or recorded/undone checkouts).
 create index if not exists checkins_checkout_recorded_idx on public.checkins (service_date, checkout_recorded_at);
 
--- Lista de presença no Table Editor ganha a saída.
+-- The Table Editor attendance list gains the checkout.
 drop view if exists public.presencas;
 create view public.presencas
 with (security_invoker = true) as

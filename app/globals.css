@@ -1,5 +1,5 @@
 :root {
-  --flag: #008ec3;        /* azul do logo Flag */
+  --flag: #008ec3;        /* Flag logo blue */
   --flag-dark: #006a93;
   --flag-soft: #e6f5fb;
   --ink: #0d2230;
@@ -34,7 +34,7 @@ img { max-width: 100%; display: block; }
   flex-direction: column;
 }
 .shell::before {
-  /* faixa azul atrás da marca, lembrando as listras da bandeira do logo */
+  /* blue band behind the brand, echoing the stripes of the flag in the logo */
   content: "";
   position: fixed;
   inset: 0 0 auto 0;
@@ -78,7 +78,7 @@ h2 { font-size: 18px; font-weight: 700; margin: 16px 0 4px; }
 .progress li.active { color: var(--flag-dark); }
 .progress li.active::before { background: linear-gradient(90deg, var(--flag) 50%, var(--line) 50%); }
 
-/* ---------- Formulário ---------- */
+/* ---------- Form ---------- */
 form { display: flex; flex-direction: column; }
 fieldset { border: 0; padding: 0; margin: 0 0 20px; }
 legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--flag-dark); margin-bottom: 10px; }
@@ -86,7 +86,7 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .field > span { font-size: 14px; font-weight: 600; }
 .field input {
   font: inherit;
-  font-size: 17px; /* >=16px evita zoom automático no iOS */
+  font-size: 17px; /* >=16px prevents automatic zoom on iOS */
   padding: 13px 14px;
   border: 1.5px solid var(--line);
   border-radius: 12px;
@@ -104,7 +104,7 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .check.field--error { color: var(--danger); }
 .fiscal { background: var(--flag-soft); border-radius: 14px; padding: 14px 14px 2px; }
 
-/* ---------- Botões e avisos ---------- */
+/* ---------- Buttons and notices ---------- */
 .btn {
   font: inherit; font-size: 17px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
@@ -128,7 +128,7 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .steps { padding-left: 18px; color: var(--ink); line-height: 1.55; font-size: 14px; margin: 0 0 20px; }
 .steps li { margin-bottom: 8px; }
 
-/* ---------- Câmera ---------- */
+/* ---------- Camera ---------- */
 .camera { display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; }
 .camera__frame { width: 100%; aspect-ratio: 3 / 4; border-radius: 16px; object-fit: cover; background: #0d2230; overflow: hidden; position: relative; }
 .camera__placeholder { display: flex; align-items: center; justify-content: center; color: #8fb3c6; background: var(--flag-soft); border: 2px dashed #b5d9e9; }
@@ -147,7 +147,7 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
 
-/* ---------- Página do QR code ---------- */
+/* ---------- QR code page ---------- */
 .qr__img { width: 100%; max-width: 320px; height: auto; border-radius: 16px; border: 1.5px solid var(--line); margin: 4px 0 10px; }
 .qr__url { font-weight: 700; color: var(--flag-dark); margin: 0 0 20px; word-break: break-all; }
 .qr__actions { display: flex; flex-direction: column; gap: 10px; width: 100%; }
@@ -157,7 +157,7 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
   .card { box-shadow: none; }
 }
 
-/* ---------- Área do pastor ---------- */
+/* ---------- Pastor area ---------- */
 .pastor__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .pastor__logout { font: inherit; font-weight: 700; font-size: 14px; color: #fff; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35); border-radius: 999px; padding: 8px 14px; cursor: pointer; }
 .pastor__logout:hover { background: rgba(255,255,255,.28); }
@@ -207,7 +207,7 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .post--example { outline: 2px dashed #f0b429; outline-offset: -2px; }
 .tag--example { background: #fff4d6; color: #8a5a00; }
 
-/* ---------- Cadastro pelo responsável ---------- */
+/* ---------- Registration by the guardian ---------- */
 .section { border: 1.5px solid var(--line); border-radius: 16px; padding: 14px 14px 4px; margin-bottom: 16px; }
 .section--teen { background: #f7fbfd; }
 .section legend { display: flex; align-items: center; gap: 8px; padding: 0 6px; margin-bottom: 4px; }
@@ -217,7 +217,7 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .success__photo--icon { display: grid; place-items: center; width: 120px; height: 120px; border-radius: 50%; background: #e7f7ee; color: var(--ok); font-size: 56px; font-weight: 900; margin: 8px 0 18px; }
 .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
 
-/* ---------- Check-in: escolha membro/visitante e fotos ---------- */
+/* ---------- Check-in: member/visitor choice and photos ---------- */
 .segmented { display: flex; gap: 4px; background: var(--flag-soft); padding: 4px; border-radius: 12px; margin-bottom: 18px; }
 .segmented button { flex: 1; font: inherit; font-weight: 700; font-size: 14px; min-height: 42px; border: 0; border-radius: 9px; background: transparent; color: var(--flag-dark); cursor: pointer; }
 .segmented button.on { background: #fff; color: var(--ink); box-shadow: 0 2px 8px rgba(13,34,48,.12); }
@@ -230,7 +230,7 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .tag--visitor { background: #f3e8ff; color: #6b21a8; }
 .tag--first { background: #fff4d6; color: #8a5a00; }
 
-/* ---------- Dashboard do pastor ---------- */
+/* ---------- Pastor dashboard ---------- */
 .tabs button { font-size: 14px; padding: 0 6px; }
 .dash { --series-1: #008ec3; --series-2: #eb6834; }
 .dash__head { display: flex; justify-content: space-between; align-items: center; margin: 2px 2px 10px; }
@@ -290,7 +290,7 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .rank__top .rank__streak { font-size: 12px; white-space: nowrap; flex-shrink: 0; }
 .rank__meta .rank__value { font-size: 12px; }
 
-/* ---------- Segundo e-mail do responsável ---------- */
+/* ---------- Guardian's second email ---------- */
 .add-email { font: inherit; font-size: 14px; font-weight: 700; color: var(--flag-dark); background: transparent; border: 1.5px dashed #b5d9e9; border-radius: 12px; padding: 10px 12px; width: 100%; margin: -4px 0 16px; cursor: pointer; text-align: left; }
 .add-email:hover { background: var(--flag-soft); }
 .email2 { position: relative; }
@@ -298,12 +298,12 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .email2__remove:hover { color: var(--danger); }
 .email2 .field > span { padding-right: 72px; }
 
-/* ---------- Explicação da foto criativa ---------- */
+/* ---------- Creative photo explanation ---------- */
 .explain__list { list-style: none; padding: 0; margin: 0 0 20px; display: flex; flex-direction: column; gap: 10px; }
 .explain__list li { display: flex; gap: 12px; align-items: center; background: var(--flag-soft); border-radius: 12px; padding: 12px 14px; font-size: 15px; line-height: 1.35; }
 .explain__icon { font-size: 22px; flex-shrink: 0; }
 
-/* ---------- Sucesso do cadastro ---------- */
+/* ---------- Registration success ---------- */
 .success-cadastro .lead { text-align: center; }
 .spam-alert { display: flex; gap: 12px; align-items: flex-start; background: #fff4d6; border: 2px solid #f0b429; border-radius: 16px; padding: 14px 16px; margin: 4px 0 18px; color: #5c3d00; }
 .spam-alert__icon { font-size: 30px; line-height: 1; }
@@ -319,7 +319,7 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .summary dd { margin: 0; font-weight: 600; text-align: right; word-break: break-word; }
 .summary__note { margin: 12px 0 0; font-size: 13px; }
 
-/* ---------- Contas de líder: login em 2 etapas, autenticador, administração ---------- */
+/* ---------- Leader accounts: 2-step login, authenticator, administration ---------- */
 .field input.otp { font-size: 26px; font-weight: 800; letter-spacing: .35em; text-align: center; font-variant-numeric: tabular-nums; }
 .field input.otp--text { font-size: 20px; letter-spacing: .12em; }
 .qr-box { display: block; width: 200px; height: 200px; margin: 0 auto 12px; border-radius: 12px; border: 1px solid var(--line); background: #fff; padding: 6px; }
@@ -367,11 +367,11 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .post__fix--open { border-top: 1px solid var(--line); padding-top: 12px; }
 .post__fix-actions { display: flex; gap: 8px; }
 
-/* 4 abas cabem num celular de 360 px */
+/* 4 tabs fit on a 360 px phone */
 .tabs { gap: 4px; }
 .tabs button { padding: 0 4px; font-size: 13px; gap: 5px; }
 
-/* Privacidade e consentimento */
+/* Privacy and consent */
 .check--strong { color: var(--ink); }
 .consent-info { margin-top: 14px; }
 .privacy h2 { margin-top: 22px; }
@@ -394,7 +394,7 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
   .privacy-table td:last-child { color: var(--flag-dark); font-weight: 600; }
 }
 
-/* P2: checkout (saída do culto) */
+/* P2: checkout (leaving the service) */
 .exit { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
 .exit .btn { margin-top: 8px; }
 .exit .hint { margin: 8px 0 0; font-size: 13px; }

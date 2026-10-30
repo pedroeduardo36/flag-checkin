@@ -7,15 +7,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "qrcode": "node scripts/gerar-qrcode.mjs",
-    "test:fluxo": "node scripts/testar-fluxo.mjs",
-    "db:push": "supabase db push",
+    "qrcode": "node scripts/generate-qrcode.mjs",
     "test": "vitest run",
+    "test:e2e": "node scripts/e2e-flow.mjs",
     "typecheck": "tsc --noEmit",
-    "simular": "node scripts/simular-checkins.mjs",
-    "lider:criar": "tsx --conditions=react-server scripts/criar-lider.mts",
-    "retencao": "tsx --conditions=react-server scripts/retencao.mts",
-    "verificacao:enviar": "tsx --conditions=react-server scripts/enviar-verificacao.mts"
+    "db:push": "supabase db push",
+    "simulate": "node scripts/simulate-checkins.mjs",
+    "leader:create": "tsx --conditions=react-server scripts/create-leader.mts",
+    "retention": "tsx --conditions=react-server scripts/retention.mts",
+    "verification:send": "tsx --conditions=react-server scripts/send-verification.mts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

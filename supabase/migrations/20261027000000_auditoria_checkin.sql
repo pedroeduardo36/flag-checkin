@@ -1,12 +1,12 @@
--- Trilha de auditoria das rotas públicas de check-in (resposta ao P0: os logs da Vercel Hobby e do
--- Supabase Free não guardavam o suficiente para investigar abusos). Só o servidor lê e grava (RLS sem políticas).
+-- Audit trail for the public check-in routes (response to P0: Vercel Hobby and Supabase Free logs
+-- didn't keep enough to investigate abuse). Only the server reads and writes (RLS without policies).
 create table if not exists public.audit_events (
   id         bigserial primary key,
   at         timestamptz not null default now(),
   event      text not null,          -- identificar | confirmar
   outcome    text not null,          -- token | detalhes_visita | NAO_ENCONTRADO | FORA_DO_LOCAL | ROSTO_NAO_CONFERE | ok | DUPLICADO ...
   member_id  uuid references public.members(id) on delete set null,
-  ip_hash    text,                   -- HMAC do IP (nunca o IP em claro)
+  ip_hash    text,                   -- HMAC of the IP (never the raw IP)
   user_agent text,
   lat        double precision,
   lng        double precision

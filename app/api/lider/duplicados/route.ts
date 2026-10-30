@@ -7,9 +7,9 @@ import { adminAudit, requireLeader, unauthorized } from "@/lib/server/leader";
 export const dynamic = "force-dynamic";
 
 /**
- * Possíveis cadastros duplicados (mesmo nascimento e nome compatível), para revisão de um líder.
- * Mostra só o necessário para decidir: nome, nascimento, responsável, data do cadastro, presenças
- * e se o e-mail ou o telefone do responsável coincidem (sem exibir os contatos).
+ * Possible duplicate registrations (same birth date and a compatible name), for a leader to review.
+ * Shows only what's needed to decide: name, birth date, guardian, registration date, attendances,
+ * and whether the guardian's email or phone match (without displaying the contacts).
  */
 
 type Row = {
@@ -54,8 +54,8 @@ export const GET = withErrors(async (req: Request) => {
 
 type Action = "pessoas_diferentes" | "mesclar";
 
-// PATCH { id, action }: id é o cadastro marcado como duplicado.
-// pessoas_diferentes: limpa a marcação. mesclar: junta presenças e foto no original e apaga o duplicado.
+// PATCH { id, action }: id is the registration flagged as a duplicate.
+// pessoas_diferentes: clears the flag. mesclar: moves attendances and photo to the original and deletes the duplicate.
 export const PATCH = withErrors(async (req: Request) => {
   const s = await requireLeader(req);
   if (!s) return unauthorized();

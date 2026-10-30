@@ -1,18 +1,18 @@
-// Regras de privacidade mostradas às famílias (página /privacidade, formulário e confirmação).
-// Os prazos precisam bater com public.expurgar_dados() (supabase/migrations/20261030000000_privacidade.sql)
-// e com docs/privacidade/inventario-de-dados.md.
+// Privacy rules shown to families (the /privacidade page, the registration form and the confirmation page).
+// The periods must match public.expurgar_dados() (supabase/migrations/20261030000000_privacidade.sql)
+// and docs/privacy/data-inventory.md.
 
 export const RETENTION = {
-  confirmDays: 7, // cadastro novo sem confirmação do responsável
-  checkinPhotoDays: 30, // foto criativa do check-in
-  visitorDays: 180, // visitante: nome, telefone e foto opcional
-  inactiveMonths: 12, // cadastro sem nenhuma presença nesse período
-  auditDays: 90, // registro técnico das tentativas de check-in
-  leaderAuditYears: 2, // registro das ações dos líderes e contas de líder desativadas
+  confirmDays: 7, // new registration the guardian hasn't confirmed
+  checkinPhotoDays: 30, // creative check-in photo
+  visitorDays: 180, // visitor: name, phone and optional photo
+  inactiveMonths: 12, // registration with no attendance in this period
+  auditDays: 90, // technical log of check-in attempts
+  leaderAuditYears: 2, // leader action log and deactivated leader accounts
 } as const;
 
-/** Prazo de resposta aos pedidos das famílias (LGPD art. 19, II). */
+/** Deadline to answer family requests (LGPD, Brazil's data protection law, art. 19, II). */
 export const REQUEST_DAYS = 15;
 
-/** Quem responde pelos pedidos. Ajustar quando a igreja definir o encarregado. */
+/** Who answers the requests. Update once the church appoints a data protection officer. */
 export const PRIVACY_OWNER = "Liderança da Juventude O2 (Ministério Flag)";
