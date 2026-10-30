@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { withErrors } from "@/lib/server/http";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/server/supabase";
@@ -36,7 +37,7 @@ export const POST = withErrors(async (req: Request) => {
 
   let path: string | null = null;
   if (photo) {
-    path = `checkins/${date}/visitante-${phone}-${Date.now()}.jpg`;
+    path = `checkins/${date}/visitante-${randomUUID()}.jpg`; // no phone number in the file name
     const up = await db().storage.from(PHOTO_BUCKET).upload(path, photo.buffer, { contentType: photo.contentType });
     if (up.error) throw up.error;
   }
@@ -48,8 +49,6 @@ export const POST = withErrors(async (req: Request) => {
       visitor_name: name,
       visitor_phone: phone,
       service_date: date,
-      latitude: coords?.lat ?? null,
-      longitude: coords?.lng ?? null,
       accuracy_m: coords?.accuracy ?? null,
       distance_m: geo.distance,
       photo_path: path,

@@ -1,7 +1,8 @@
 import { withErrors } from "@/lib/server/http";
 import { NextResponse, after } from "next/server";
 import { db } from "@/lib/server/supabase";
-import { emailConfigured, sendRegistrationEmail, senderAddress } from "@/lib/server/email";
+import { emailConfigured, senderAddress } from "@/lib/server/email";
+import { CONSENT_VERSION, VERIFY_TTL_DAYS, appUrl, sendVerifications } from "@/lib/server/guardian";
 import { isValidBirthDate, isValidEmail, isValidPhone, nameTokens, onlyDigits } from "@/lib/format";
 import { findDuplicate } from "@/lib/duplicates";
 
@@ -12,6 +13,7 @@ const clean = (v: unknown, max = 120) => String(v ?? "").trim().replace(/\s+/g, 
  * No photo and no door-keeper password: the reference photo is taken at the first check-in.
  * No CPF: check-in uses name + birth date, and attendances point to the registration's internal id.
  * A registration similar to an existing one is stored flagged as a "possible duplicate" for a leader to review.
+ * The registration only counts once the email owner confirms it through the link (lib/server/guardian.ts).
  */
 export const POST = withErrors(async (req: Request) => {
   const b = await req.json().catch(() => null);
@@ -39,32 +41,42 @@ export const POST = withErrors(async (req: Request) => {
   if (data.guardian_email2 && !isValidEmail(data.guardian_email2)) errors.guardianEmail2 = "O segundo e-mail está inválido.";
   else if (data.guardian_email2 && data.guardian_email2 === data.guardian_email) errors.guardianEmail2 = "Use um e-mail diferente do primeiro.";
   if (b.consent !== true) errors.consent = "É preciso autorizar o uso dos dados.";
+  if (b.consentBiometric !== true) errors.consentBiometric = "É preciso autorizar o reconhecimento facial para usar o check-in.";
   if (Object.keys(errors).length)
     return NextResponse.json({ error: "Corrija os campos destacados.", errors }, { status: 400 });
 
   const { data: sameDay, error: findError } = await db()
     .from("members")
-    .select("id, name, guardian_email, guardian_email2, created_at")
+    .select("id, name, guardian_name, guardian_email, guardian_email2, guardian_email_verified_at, guardian_email2_verified_at, created_at")
     .eq("birth_date", data.birth_date)
     .order("created_at");
   if (findError) throw findError;
   const match = findDuplicate(data, sameDay ?? []);
 
-  // Same guardian resubmitting the same registration: nothing to store. The response is the same as for a new
-  // registration, so the form doesn't reveal whether someone is already registered.
+  const ok = () => NextResponse.json({ ok: true, confirmationSent: emailConfigured(), sender: senderAddress(), validDays: VERIFY_TTL_DAYS });
+  const base = appUrl(req);
+
+  // Same guardian resubmitting the same registration: nothing to store; resend the link for whatever is still unconfirmed.
+  // The response is the same as for a new registration, so the form doesn't reveal whether someone is already registered.
   if (match?.resubmission) {
-    after(() => sendRegistrationEmail([data.guardian_email, data.guardian_email2], { guardianName: data.guardian_name, teenName: data.name }));
-    return NextResponse.json({ ok: true, confirmationSent: emailConfigured(), sender: senderAddress() });
+    const existing = sameDay!.find((x) => x.id === match.id)!;
+    after(() => sendVerifications(existing, base));
+    return ok();
   }
 
-  const { error } = await db().from("members").insert({
-    ...data,
-    guardian_consent_at: new Date().toISOString(),
-    possible_duplicate_of: match?.id ?? null,
-  });
+  const { data: created, error } = await db()
+    .from("members")
+    .insert({
+      ...data,
+      guardian_consent_at: new Date().toISOString(), // statement made on the form; consent only counts once confirmed
+      consent_version: CONSENT_VERSION,
+      verify_by: null,
+      possible_duplicate_of: match?.id ?? null,
+    })
+    .select("id, name, guardian_name, guardian_email, guardian_email2, guardian_email_verified_at, guardian_email2_verified_at")
+    .single();
   if (error) throw error;
-  // Confirmation email after the response: the guardian can already check their spam folder.
-  after(() => sendRegistrationEmail([data.guardian_email, data.guardian_email2], { guardianName: data.guardian_name, teenName: data.name }));
-
-  return NextResponse.json({ ok: true, confirmationSent: emailConfigured(), sender: senderAddress() });
+  // Confirmation link after the response: the guardian can already check their spam folder.
+  after(() => sendVerifications(created, base));
+  return ok();
 });

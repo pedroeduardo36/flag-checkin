@@ -9,14 +9,16 @@ A web app (it opens in the phone's browser, with nothing to install) for teens t
 ```
 Before the service ──► /cadastro (filled in by the GUARDIAN)
    Teen's details (name, birth date, optional phone; no CPF) +
-   guardian's details (name, phone, email and an optional second email) + LGPD consent. No photo, no password.
+   guardian's details (name, phone, email and an optional second email) + general and biometric consent.
+   No photo, no password. The guardian confirms through the emailed link; until then there's no check-in.
 
 QR code / NFC tag ──► /checkin
    1. Location  → checks that the phone is inside the church radius
    2. "Tenho cadastro" (registered): full name + birth date   |   "Sou visitante" (visitor): name + phone (+ optional photo)
    3. First check-in: REGISTRATION photo (1 face, becomes the registration photo) → explanation → CREATIVE photo
       Later ones: explanation → CREATIVE photo during the service (friends are fine; one face must be the teen's)
-   4. Success screen + email to the guardian with the time and photo
+   4. Success screen + text-only email to the guardian with the time
+
 ```
 
 ## Stack
@@ -38,8 +40,8 @@ QR code / NFC tag ──► /checkin
 | Turso | distributed SQLite, 5 GB | no file storage |
 | MongoDB Atlas | 512 MB | NoSQL, no file storage |
 
-Estimate: 200 teens × 52 services × ~80 KB per selfie ≈ 830 MB/year of photos. Delete old selfies
-(e.g. older than 6 months) to stay on the free plan — see "Maintenance".
+Estimate: 200 teens × 52 services × ~80 KB per selfie ≈ 830 MB/year of photos, but retention deletes check-in photos
+after 30 days — see "Maintenance".
 
 ## Going live, step by step
 
@@ -62,10 +64,12 @@ Copy `.env.example` to `.env.local` and fill it in:
 | `CHURCH_LAT` / `CHURCH_LNG` | church coordinates — in Google Maps, right-click the building and copy them |
 | `CHURCH_RADIUS_METERS` | accepted radius; start with **150** (indoor GPS is off by 20–60 m) |
 | `FACE_MATCH_THRESHOLD` | optional, default `0.65`. Maximum distance between a face in the creative photo and the registration photo. Lower = stricter; if teens get rejected, try `0.7` |
-| `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `EMAIL_FROM` | the email sent to the guardian at every check-in (see "Guardian email" below). Without them check-in still works and the notice is recorded as `sem_config` |
+| `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `EMAIL_FROM` | guardian emails (see "Guardian email" below). Without them check-in still works and the notice is recorded as `sem_config` |
 | `GEOFENCE_DISABLED` | `true` = **test mode**: skips the location check (check in from anywhere, with a yellow warning on screen). Keep it `false` for real services |
 | `CHECKIN_SECRET` | generate with `openssl rand -hex 32`. It also encrypts the leaders' authenticator secret: **changing it forces every leader to re-enroll their authenticator** (access reset) |
-| `PUBLIC_APP_URL` | the app's final address (used by the QR code) |
+| `PUBLIC_APP_URL` | the app's final address (used by the QR code and email links) |
+| `CRON_SECRET` | protects the daily retention cron (`/api/cron/retencao`) |
+| `PRIVACY_EMAIL` | contact for privacy requests shown on `/privacidade` (defaults to the `EMAIL_FROM` sender) |
 
 ### 3. Run it locally
 ```bash
@@ -103,8 +107,8 @@ It creates `qrcode-checkin.png` (print) and `qrcode-checkin.svg` (print shop/ban
 
 ## Guardian email
 
-At every check-in, the guardian gets an email with the **time** and the **check-in photo** (see
-[the preview](previa-email-checkin.html)). Pick **one** free SMTP provider:
+The guardian gets a **confirmation link** at registration and, at every check-in, a **text-only** email with
+the time (no photo). Pick **one** free SMTP provider:
 
 | Provider | Free limit | Needs your own domain? | Settings |
 | --- | --- | --- | --- |
@@ -122,10 +126,10 @@ At every check-in, the guardian gets an email with the **time** and the **check-
 
 Each notice's status shows in the `aviso_responsavel` column of the `presencas` view.
 
-**Batch registration confirmation** (for teens registered before the confirmation email existed):
-`npm run email:confirmation` is a dry run that shows how many emails would go out; `npm run email:confirmation -- --send`
-sends one per teen, 1.5 s apart. The log goes to `logs/confirmacao-cadastro.json` (git-ignored): running it again skips
-whoever already got one.
+**Batch confirmation for legacy registrations** (older than the consent that explains biometrics):
+`npm run verification:send` is a dry run; `npm run verification:send -- --send` sends the confirmation link, 1.5 s
+apart. The log goes to `logs/verificacao.json` (git-ignored, ids only): running it again skips whoever already got one.
+Registrations not confirmed by 2026-11-30 are deleted.
 
 ## Pastor area
 
@@ -145,7 +149,7 @@ and a new authenticator is enrolled right away). Without codes, **another leader
 uses **Redefinir acesso** on the Líderes tab: a new activation code is issued and handed over in person.
 
 - **Leaders:** create accounts, deactivate (that person's sessions end immediately), reactivate, reset access, end
-  sessions, issue new recovery codes and the **action log** (read-only).
+  sessions, issue new recovery codes and the **action log** (read-only). Also possible duplicates and family privacy requests.
 - **Live:** who checked in today, newest first, refreshing on its own every 4 s.
 - **Dashboard:** services, average per service, latest service vs. the previous one, the attendance
   chart per service (registered teens and visitors) and the top-10 ranking. "↻ Atualizar" reloads the numbers.
@@ -172,17 +176,16 @@ photo, open **Storage → fotos** and the path in the `foto_checkin` or `foto_ca
   Under **Líderes → Possíveis cadastros duplicados**, a leader picks "mesclar" (merge: attendances move to the older
   registration and the new one is deleted) or "são pessoas diferentes" (different people). While two registrations share
   a name, check-in asks for the full name or a leader. Both decisions go to the action log.
-- Registration requires ticking the guardian's consent (minors' data — LGPD art. 14); the date is stored.
+- Registration requires the general and the biometric-specific consent (LGPD art. 11 and 14), confirmed by the email
+  owner. Details, retention periods and family requests: [docs/privacy](privacy/README.md).
 - **Known limits:** phone GPS can be spoofed with "fake GPS" apps — which is why there's a photo with face recognition,
   which leaders can also check in the pastor feed. The identification routes have no per-IP limit; if needed, add
   Upstash Ratelimit (free) to `/api/checkin/identificar` and `/api/cadastro`.
 
 ## Maintenance
-Delete check-in selfies older than 6 months (SQL Editor):
-```sql
-delete from storage.objects
-where bucket_id = 'fotos' and name like 'checkins/%' and created_at < now() - interval '6 months';
-```
+The retention periods ([inventory](privacy/data-inventory.md)) are applied daily at 03:00 by Vercel Cron
+(`/api/cron/retencao`, requires `CRON_SECRET` on Vercel). To check or run it by hand:
+`npm run retention` (dry run) and `npm run retention -- --apply`.
 
 ## Structure
 ```
@@ -197,7 +200,7 @@ components/Camera.tsx             live front camera with a fallback
 lib/format.ts                     phone, dates, names, distance (haversine)
 lib/duplicates.ts                 possible duplicate registration (name + birth date + guardian email)
 lib/server/*                      Supabase, variables, tokens and validation (server only)
-supabase/migrations/              tables, attendance view and bucket
+supabase/migrations/              tables, attendance view, bucket and retention
 app/api/health                    Supabase connection diagnostics
 scripts/e2e-flow.mjs              end-to-end test against the real database
 scripts/generate-qrcode.mjs       generates the QR code
