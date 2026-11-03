@@ -7,6 +7,38 @@ import { findDuplicate } from "@/lib/duplicates";
 
 const clean = (v: unknown, max = 120) => String(v ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
+type Registration = {
+  name: string; phone: string | null; birth_date: string; guardian_name: string; guardian_phone: string;
+  guardian_email: string; guardian_email2: string | null;
+};
+
+/**
+ * Decides "new / possible duplicate / resubmission" from the same-day registrations, then inserts through
+ * cadastrar_membro(), which refuses (40001) if a same-day registration appeared after this read. Two
+ * simultaneous submissions therefore never both insert unflagged: the second one reads again and becomes
+ * a resubmission (nothing stored) or a flagged possible duplicate.
+ */
+async function register(data: Registration, attempts = 3): Promise<"created" | "resubmission"> {
+  for (let attempt = 1; ; attempt++) {
+    const { data: sameDay, error: findError } = await db()
+      .from("members")
+      .select("id, name, guardian_email, guardian_email2, created_at")
+      .eq("birth_date", data.birth_date)
+      .order("created_at");
+    if (findError) throw findError;
+    const match = findDuplicate(data, sameDay ?? []);
+    if (match?.resubmission) return "resubmission";
+
+    const { error } = await db().rpc("cadastrar_membro", {
+      p_dados: data,
+      p_vistos: (sameDay ?? []).map((m) => m.id),
+      p_duplicado_de: match?.id ?? null,
+    });
+    if (!error) return "created";
+    if (error.code !== "40001" || attempt >= attempts) throw error;
+  }
+}
+
 /**
  * Registration made by the GUARDIAN before the service (/cadastro page) or by the pastor.
  * No photo and no door-keeper password: the reference photo is taken at the first check-in.
@@ -42,27 +74,9 @@ export const POST = withErrors(async (req: Request) => {
   if (Object.keys(errors).length)
     return NextResponse.json({ error: "Corrija os campos destacados.", errors }, { status: 400 });
 
-  const { data: sameDay, error: findError } = await db()
-    .from("members")
-    .select("id, name, guardian_email, guardian_email2, created_at")
-    .eq("birth_date", data.birth_date)
-    .order("created_at");
-  if (findError) throw findError;
-  const match = findDuplicate(data, sameDay ?? []);
-
-  // Same guardian resubmitting the same registration: nothing to store. The response is the same as for a new
+  // A resubmission by the same guardian stores nothing, but gets the same response and email as a new
   // registration, so the form doesn't reveal whether someone is already registered.
-  if (match?.resubmission) {
-    after(() => sendRegistrationEmail([data.guardian_email, data.guardian_email2], { guardianName: data.guardian_name, teenName: data.name }));
-    return NextResponse.json({ ok: true, confirmationSent: emailConfigured(), sender: senderAddress() });
-  }
-
-  const { error } = await db().from("members").insert({
-    ...data,
-    guardian_consent_at: new Date().toISOString(),
-    possible_duplicate_of: match?.id ?? null,
-  });
-  if (error) throw error;
+  await register(data);
   // Confirmation email after the response: the guardian can already check their spam folder.
   after(() => sendRegistrationEmail([data.guardian_email, data.guardian_email2], { guardianName: data.guardian_name, teenName: data.name }));
 

@@ -107,6 +107,10 @@ try {
   const { data: justOne } = await testRegistrations();
   check("P1 CPF: the same guardian resubmitting doesn't duplicate the registration (1 row)", r.status === 200 && justOne?.length === 1, justOne?.length);
   check("P1 CPF: a resubmission responds like a new registration (doesn't reveal who is registered)", JSON.stringify(Object.keys(r.data).sort()) === firstResponse, r.data);
+  const regBurst = await Promise.all(Array.from({ length: 4 }, () => post("/api/cadastro", reg)));
+  const { data: stillOne } = await testRegistrations();
+  check("P1 CPF: 4 simultaneous resubmissions still leave a single registration (atomic duplicate decision)",
+    regBurst.every((x) => x.status === 200) && stillOne?.length === 1, { statuses: regBurst.map((x) => x.status), rows: stillOne?.length });
   const noPhoto = justOne[0];
   const cpfColumn = await sb.from("members").select("cpf").eq("id", noPhoto.id).maybeSingle();
   check("P1 CPF: no CPF stored (column dropped or empty)", cpfColumn.error?.code === "42703" || cpfColumn.data?.cpf === null, cpfColumn.error?.code ?? cpfColumn.data);

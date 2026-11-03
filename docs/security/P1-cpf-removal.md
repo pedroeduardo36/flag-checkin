@@ -32,7 +32,10 @@ them goes against data minimization (LGPD art. 6, III, and art. 14). On top of t
 2. **`20261029120000_remover_coluna_cpf.sql`**: drops the column. It goes **after** the new version is live, because
    the previous version still writes a CPF on registration.
 
-Internal ids, attendances, check-ins and photos aren't touched by either step.
+Between the two, **`20261029060000_cadastro_serializado.sql`** adds `cadastrar_membro()` (see "Simultaneous
+submissions" below). It only creates a function, so it's safe to apply while the previous version is live.
+
+Internal ids, attendances, check-ins and photos aren't touched by any step.
 
 ### Possible duplicates, reviewed by a leader
 
@@ -60,6 +63,24 @@ Both decisions go to the action log (`duplicado_descartado` and `cadastro_mescla
 While both registrations share a name, check-in answers "more than one similar registration" and asks for the full name
 or a leader. That way no teen checks in on the wrong registration without noticing.
 
+### Simultaneous submissions (mentor review)
+
+The CPF's unique constraint used to stop two identical registrations even when they arrived at the same
+moment. Without it, the decision above is made in TypeScript (name comparison) and then the row is inserted,
+so two simultaneous submissions could both read "nothing similar" and insert two unflagged registrations:
+check-in would answer "more than one similar registration", and neither row would show up for review.
+
+The insert now goes through **`cadastrar_membro(dados, vistos, duplicado_de)`**, which:
+
+1. takes a transaction-scoped advisory lock per birth date, so registrations for the same day are serialized;
+2. refuses with `40001` (`CADASTRO_CONCORRENTE`) if a same-day registration exists that the server didn't see
+   when deciding, or if the registration it flagged as the original no longer exists;
+3. otherwise inserts, with the flag the server decided.
+
+On `40001` the server reads and decides again (up to 3 times): an identical resubmission then stores nothing, and
+a similar registration from another guardian is stored flagged for review. Legitimate similar registrations
+(siblings, a different guardian) are still stored, as before.
+
 ## Copies outside the database
 
 | Where | Status |
@@ -81,15 +102,22 @@ or a leader. That way no teen checks in on the wrong registration without notici
 | The app neither collects nor returns a CPF | No form field, the API discards the value and the duplicate review exposes no CPF, email or phone |
 | Duplicates flagged with less invasive data | A resubmission by the same guardian doesn't duplicate and gets the same response; a name written differently with another email is flagged; check-in stays ambiguous until reviewed; the list requires a leader (401); "different people" and "merge" work and show up in the trail |
 
+`tests/db/registration.test.ts` runs the real registration route against the real migrations (Postgres in-process,
+via PGlite) and forces every request to read before any of them inserts: two or five identical simultaneous
+submissions leave one registration, and two guardians registering the same teen at once leave one flagged
+duplicate. The same test fails against the previous route. The end-to-end test also sends 4 simultaneous
+resubmissions.
+
 A new unit test, `tests/duplicates.test.ts`, covers the resubmission, the flag, a sibling with the same email, a
 different name and picking the most similar registration.
 
 ## Deployment
 
 1. Apply step 1 (`20261029000000_cpf_opcional_duplicados.sql`). The live version keeps working, and existing CPFs are deleted here.
-2. Ship the code (merge the PR into `main`).
-3. Apply step 2 (`20261029120000_remover_coluna_cpf.sql`).
-4. Write down the step 1 date and the plan's backup window. That's when the last copy of the CPF expires.
+2. Apply `20261029060000_cadastro_serializado.sql` (only creates `cadastrar_membro()`). The new code needs it.
+3. Ship the code (merge the PR into `main`).
+4. Apply step 2 (`20261029120000_remover_coluna_cpf.sql`).
+5. Write down the step 1 date and the plan's backup window. That's when the last copy of the CPF expires.
 
 **Step 1 applied in production on 2026-10-29.** Before: 112 registrations (112 with a CPF), 48 with a reference photo and
 59 attendances. After: 112 registrations (**0 with a CPF**), 48 with a photo and 59 attendances. The end-to-end test (98

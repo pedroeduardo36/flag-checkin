@@ -30,6 +30,7 @@
     "server-only": "^0.0.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.3.14",
     "@types/node": "^22.20.5",
     "@types/nodemailer": "^6.4.24",
     "@types/qrcode": "^1.5.6",
