@@ -39,6 +39,19 @@ Documents:
 | Requests have an owner and a working process | [family-requests.md](family-requests.md) and the Leaders tab, covered by the end-to-end test. **The data protection officer still needs to be named** |
 | Families get an accurate explanation of face recognition and photo sharing | `/privacidade`, the form and the confirmation page, which collect the specific consent |
 
+## Retention and merge fixes (mentor review)
+
+| Problem found in review | Fix |
+| --- | --- |
+| Clearing the coordinates of older check-in audit entries was refused by the immutability trigger, which rolled back the **whole** purge (photos and unconfirmed registrations included) | `audit_imutavel()` allows exactly that redaction during the purge: `lat`/`lng` become null and every other column must stay the same. Any other change is still refused, even during the purge |
+| Merging a **confirmed** duplicate into an **unconfirmed** original kept the original's unconfirmed guardian and deleted the duplicate's confirmation links, so the surviving registration couldn't check in and was later purged with its attendance | `mesclar_cadastro()` moves the guardian contact and consent as one block: if only the duplicate was confirmed, the original takes its guardian, emails, verification and consent (never one address with another's verification). Confirmation links move to the original. If neither was confirmed, it keeps the later deadline |
+| Photo files were deleted from Storage after the database commit, and a Storage error was only logged: the path was gone, so the file was never retried | Every function that removes a photo from the database queues its path in **`photo_deletions` in the same transaction** (`expurgar_dados()`, `mesclar_cadastro()` and the new `apagar_cadastro()` and `revogar_biometria()`). The server deletes the files and drops a row only when Storage confirms; failures stay queued, with the attempt counted, and are retried by the next deletion or the daily purge. The purge log records `fotos_pendentes` |
+| Deleting a leader deactivated for 2 years violated `leaders.created_by` when they had created another account, aborting the purge | `created_by` is now `on delete set null`. The accounts they created stay; who created them stays in `admin_audit` |
+
+These are covered by `tests/db/privacy.test.ts`, which applies every migration to an in-process Postgres (PGlite)
+and runs the real retention and family-request code with synthetic records and a Storage that can fail. Each of
+these tests fails against the previous version.
+
 ## Verification
 
 - Unit tests: `tests/guardian.test.ts` (check-in only with consent, transition period, notices only to confirmed
@@ -52,6 +65,9 @@ Documents:
   - retention dry run, which changes nothing;
   - cron without the secret rejected, and the `/privacidade` page;
   - every action logged.
+- Database integration tests (`tests/db/privacy.test.ts`): retention over historical audit data, merges between
+  confirmed and unconfirmed registrations followed by the purge, a Storage outage followed by recovery (retention,
+  deletion and biometric withdrawal) and a retired leader who created another account.
 
 ## Deployment
 

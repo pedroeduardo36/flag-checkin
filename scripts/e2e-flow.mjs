@@ -120,6 +120,10 @@ try {
   const { data: justOne } = await testRegistrations();
   check("P1 CPF: the same guardian resubmitting doesn't duplicate the registration (1 row)", r.status === 200 && justOne?.length === 1, justOne?.length);
   check("P1 CPF: a resubmission responds like a new registration (doesn't reveal who is registered)", JSON.stringify(Object.keys(r.data).sort()) === firstResponse, r.data);
+  const regBurst = await Promise.all(Array.from({ length: 4 }, () => post("/api/cadastro", reg)));
+  const { data: stillOne } = await testRegistrations();
+  check("P1 CPF: 4 simultaneous resubmissions still leave a single registration (atomic duplicate decision)",
+    regBurst.every((x) => x.status === 200) && stillOne?.length === 1, { statuses: regBurst.map((x) => x.status), rows: stillOne?.length });
   const noPhoto = justOne[0];
   const cpfColumn = await sb.from("members").select("cpf").eq("id", noPhoto.id).maybeSingle();
   check("P1 CPF: no CPF stored (column dropped or empty)", cpfColumn.error?.code === "42703" || cpfColumn.data?.cpf === null, cpfColumn.error?.code ?? cpfColumn.data);
@@ -462,6 +466,9 @@ try {
   r = await verify(await createLink(declined.id, reg.guardianEmail), "recusar");
   const { data: declinedAfter } = await sb.from("members").select("id").eq("id", declined.id).maybeSingle();
   check("P1 privacy: 'não autorizo' on the link deletes the registration", r.status === 200 && r.data.removed === "cadastro" && !declinedAfter, r.data);
+
+  const { count: queuedPhotos } = await sb.from("photo_deletions").select("path", { count: "exact", head: true });
+  check("P1 privacy: photos of deleted registrations left Storage (nothing stuck in the deletion queue)", queuedPhotos === 0, queuedPhotos);
 
   // Retention: the dry run counts and changes nothing; only the server can call it; the cron requires the secret.
   const { count: beforePurge } = await sb.from("members").select("id", { count: "exact", head: true });

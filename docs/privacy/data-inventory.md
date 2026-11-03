@@ -49,14 +49,15 @@ The **legal basis** column is our proposed hypothesis. The legal review ([legal-
 | `admin_audit` | Leader actions, consents, exports and deletions. Stores no teen name, password, code or biometrics | **2 years** |
 | `guardian_verifications` | Confirmation link hash, email, expiry | 30 days after being used or expiring |
 | `auth_rate_limits` | Attempt counters (key with the leader's email or the IP as an HMAC) | 1 day |
-| `leaders`, `leader_recovery_codes` | Leader account: name, email, password hash (scrypt), encrypted TOTP secret | While active. **Deactivated: 2 years** |
+| `leaders`, `leader_recovery_codes` | Leader account: name, email, password hash (scrypt), encrypted TOTP secret | While active. **Deactivated: 2 years** (accounts they created stay, without the reference) |
 | `leader_sessions` | Leader sessions (token hash, browser) | 30 days after expiring or being revoked |
 
 ## Outside the database
 
 | Where | What's there | Retention / action |
 | --- | --- | --- |
-| `fotos` Storage bucket (Supabase) | Registration and check-in photos | Removed together with the database row (the purge returns the paths and the server deletes them) |
+| `fotos` Storage bucket (Supabase) | Registration and check-in photos | Removed together with the database row: the same transaction queues the path in `photo_deletions`, and the server deletes the file, retrying until Storage confirms |
+| `photo_deletions` | Paths of photo files still to delete from Storage (no names; the path holds only ids and dates), attempts and the last error | Until Storage confirms the deletion |
 | **Supabase backups** | Daily database copy | Plan window: none on Free, 7 days on Pro, 14 on Team, up to 30 on Enterprise. Never restore a backup without running `npm run retention -- --apply` right after |
 | Sent folder of the sending Gmail (`EMAIL_FROM`) | A copy of every email sent. **Old notices had the photo attached** | Delete the old notices with photos (see [operations-and-incidents.md](operations-and-incidents.md#pending-tasks)). From now on, notices are text only. Keep the sent folder for at most 30 days |
 | Guardians' inboxes | Notices received | Outside our control. That's why new notices carry no photo |

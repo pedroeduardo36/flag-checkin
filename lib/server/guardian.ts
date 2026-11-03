@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { db } from "./supabase";
-import { PHOTO_BUCKET } from "./env";
+import { flushPhotoDeletions } from "./photo-deletions";
 import { serviceDate } from "./security";
 import { emailConfigured, sendVerificationEmail } from "./email";
 
@@ -53,7 +53,7 @@ export function appUrl(req?: Request): string {
   return (process.env.PUBLIC_APP_URL || (req ? new URL(req.url).origin : "http://localhost:3000")).replace(/\/$/, "");
 }
 
-type MemberForVerification = {
+export type MemberForVerification = {
   id: string;
   name: string;
   guardian_name: string | null;
@@ -101,15 +101,12 @@ export async function sendVerifications(m: MemberForVerification, baseUrl: strin
 
 /** Deletes the whole registration: data, reference photo, face descriptor, attendances and check-in photos. */
 export async function deleteMember(id: string): Promise<{ deleted: boolean; photos: number }> {
-  const { data: m } = await db().from("members").select("id, photo_path").eq("id", id).maybeSingle();
-  if (!m) return { deleted: false, photos: 0 };
-  const { data: cks } = await db().from("checkins").select("photo_path").eq("member_id", id);
-  const paths = [m.photo_path, ...(cks ?? []).map((c) => c.photo_path)].filter((p): p is string => !!p);
-  await db().from("members").update({ possible_duplicate_of: null }).eq("possible_duplicate_of", id);
-  const del = await db().from("members").delete().eq("id", id);
-  if (del.error) throw del.error;
-  if (paths.length) await db().storage.from(PHOTO_BUCKET).remove(paths);
-  return { deleted: true, photos: paths.length };
+  // The database deletes the rows and queues the photos in one transaction; the files go right after.
+  const { data: photos, error } = await db().rpc("apagar_cadastro", { p_id: id });
+  if (error) throw error;
+  if (photos === null) return { deleted: false, photos: 0 };
+  await flushPhotoDeletions();
+  return { deleted: true, photos: photos as number };
 }
 
 /**
@@ -117,20 +114,13 @@ export async function deleteMember(id: string): Promise<{ deleted: boolean; phot
  * "awaiting confirmation": without new consent within 7 days it is deleted. A new link can be resent.
  */
 export async function revokeBiometrics(id: string): Promise<boolean> {
-  const { data: m } = await db().from("members").select("photo_path").eq("id", id).maybeSingle();
-  if (!m) return false;
-  const upd = await db()
-    .from("members")
-    .update({
-      photo_path: null,
-      face_descriptor: null,
-      biometric_consent_at: null,
-      guardian_email_verified_at: null,
-      consent_version: CONSENT_VERSION,
-      verify_by: serviceDate(new Date(Date.now() + VERIFY_TTL_DAYS * 86400_000)),
-    })
-    .eq("id", id);
-  if (upd.error) throw upd.error;
-  if (m.photo_path) await db().storage.from(PHOTO_BUCKET).remove([m.photo_path]);
+  const { data: found, error } = await db().rpc("revogar_biometria", {
+    p_id: id,
+    p_versao: CONSENT_VERSION,
+    p_prazo: serviceDate(new Date(Date.now() + VERIFY_TTL_DAYS * 86400_000)),
+  });
+  if (error) throw error;
+  if (!found) return false;
+  await flushPhotoDeletions();
   return true;
 }
