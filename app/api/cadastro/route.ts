@@ -2,11 +2,44 @@ import { withErrors } from "@/lib/server/http";
 import { NextResponse, after } from "next/server";
 import { db } from "@/lib/server/supabase";
 import { emailConfigured, senderAddress } from "@/lib/server/email";
-import { CONSENT_VERSION, VERIFY_TTL_DAYS, appUrl, sendVerifications } from "@/lib/server/guardian";
+import { CONSENT_VERSION, VERIFY_TTL_DAYS, appUrl, sendVerifications, type MemberForVerification } from "@/lib/server/guardian";
 import { isValidBirthDate, isValidEmail, isValidPhone, nameTokens, onlyDigits } from "@/lib/format";
 import { findDuplicate } from "@/lib/duplicates";
 
 const clean = (v: unknown, max = 120) => String(v ?? "").trim().replace(/\s+/g, " ").slice(0, max);
+
+type Registration = {
+  name: string; phone: string | null; birth_date: string; guardian_name: string; guardian_phone: string;
+  guardian_email: string; guardian_email2: string | null;
+};
+const COLUMNS = "id, name, guardian_name, guardian_email, guardian_email2, guardian_email_verified_at, guardian_email2_verified_at, created_at";
+
+/**
+ * Decides "new / possible duplicate / resubmission" from the same-day registrations, then inserts through
+ * cadastrar_membro(), which refuses (40001) if a same-day registration appeared after this read. Two
+ * simultaneous submissions therefore never both insert unflagged: the second one reads again and becomes
+ * a resubmission (nothing stored) or a flagged possible duplicate. Returns the registration to send the link to.
+ */
+async function register(data: Registration, attempts = 3): Promise<MemberForVerification> {
+  for (let attempt = 1; ; attempt++) {
+    const { data: sameDay, error: findError } = await db()
+      .from("members")
+      .select(COLUMNS)
+      .eq("birth_date", data.birth_date)
+      .order("created_at");
+    if (findError) throw findError;
+    const match = findDuplicate(data, sameDay ?? []);
+    if (match?.resubmission) return sameDay!.find((x) => x.id === match.id)!;
+
+    const { data: id, error } = await db().rpc("cadastrar_membro", {
+      p_dados: { ...data, consent_version: CONSENT_VERSION },
+      p_vistos: (sameDay ?? []).map((m) => m.id),
+      p_duplicado_de: match?.id ?? null,
+    });
+    if (!error) return { id: id as string, ...data, guardian_email_verified_at: null, guardian_email2_verified_at: null };
+    if (error.code !== "40001" || attempt >= attempts) throw error;
+  }
+}
 
 /**
  * Registration made by the GUARDIAN before the service (/cadastro page) or by the pastor.
@@ -45,38 +78,12 @@ export const POST = withErrors(async (req: Request) => {
   if (Object.keys(errors).length)
     return NextResponse.json({ error: "Corrija os campos destacados.", errors }, { status: 400 });
 
-  const { data: sameDay, error: findError } = await db()
-    .from("members")
-    .select("id, name, guardian_name, guardian_email, guardian_email2, guardian_email_verified_at, guardian_email2_verified_at, created_at")
-    .eq("birth_date", data.birth_date)
-    .order("created_at");
-  if (findError) throw findError;
-  const match = findDuplicate(data, sameDay ?? []);
-
   const ok = () => NextResponse.json({ ok: true, confirmationSent: emailConfigured(), sender: senderAddress(), validDays: VERIFY_TTL_DAYS });
   const base = appUrl(req);
-
-  // Same guardian resubmitting the same registration: nothing to store; resend the link for whatever is still unconfirmed.
-  // The response is the same as for a new registration, so the form doesn't reveal whether someone is already registered.
-  if (match?.resubmission) {
-    const existing = sameDay!.find((x) => x.id === match.id)!;
-    after(() => sendVerifications(existing, base));
-    return ok();
-  }
-
-  const { data: created, error } = await db()
-    .from("members")
-    .insert({
-      ...data,
-      guardian_consent_at: new Date().toISOString(), // statement made on the form; consent only counts once confirmed
-      consent_version: CONSENT_VERSION,
-      verify_by: null,
-      possible_duplicate_of: match?.id ?? null,
-    })
-    .select("id, name, guardian_name, guardian_email, guardian_email2, guardian_email_verified_at, guardian_email2_verified_at")
-    .single();
-  if (error) throw error;
+  // A resubmission by the same guardian stores nothing (the link is resent for whatever is still unconfirmed),
+  // but gets the same response as a new registration, so the form doesn't reveal whether someone is already registered.
+  const member = await register(data);
   // Confirmation link after the response: the guardian can already check their spam folder.
-  after(() => sendVerifications(created, base));
+  after(() => sendVerifications(member, base));
   return ok();
 });

@@ -63,6 +63,17 @@ as with check-in. Per the Geolocation specification, browsers don't provide posi
 - Unit tests: `tests/checkout.test.ts` (leader-entered time, service past midnight, checkout before arrival, future
   time), `tests/visit.test.ts` (session with the check-in, visitor, forged cookie, old cookie),
   `tests/email.test.ts` (text-only checkout notice, can be turned off) and `tests/stats.test.ts` (checkouts per service).
+- Integration tests (`tests/db/checkout.test.ts`): the real checkout, visitor, correction and feed routes against every
+  migration on an in-process Postgres (PGlite), with SMTP recorded:
+  - missing, forged and other-day sessions rejected; the session opens the visit as "not recorded";
+  - one tap with the server time, the attendance row unchanged and a text-only notice to the confirmed email;
+  - repeated confirmations returning the same checkout, one email, and `ok`/`repetido` in the check-in audit;
+  - `CHECKOUT_NOTICE=false` (status `desligado`, no email);
+  - visitor: session only on the phone that checked in, checkout without a guardian notice;
+  - leader corrections: the teen's session refused, mandatory reason, no overwrite (`JA_SAIU`), undo reflected in the
+    incremental feed and on the phone, future time refused, leader-recorded checkout, the action log and the
+    `presencas` view.
+  Removing the conditional write (`where checked_out_at is null`) makes these tests fail.
 - End-to-end test (`npm run test:e2e`), covering:
   - missing, forged or other-day sessions rejected;
   - one-tap checkout with the server time;
