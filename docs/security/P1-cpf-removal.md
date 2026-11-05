@@ -115,6 +115,9 @@ different name and picking the most similar registration.
 
 1. Apply step 1 (`20261029000000_cpf_opcional_duplicados.sql`). The live version keeps working, and existing CPFs are deleted here.
 2. Apply `20261029060000_cadastro_serializado.sql` (only creates `cadastrar_membro()`). The new code needs it.
+   Apply this file on its own, in the SQL Editor or with `supabase db query --linked -f <file>`, then record it with
+   `supabase migration repair --status applied 20261029060000`. Don't use `supabase db push` from this branch: it would
+   also run step 2 and drop the column while the live version still writes a CPF, which breaks registration.
 3. Ship the code (merge the PR into `main`).
 4. Apply step 2 (`20261029120000_remover_coluna_cpf.sql`).
 5. Write down the step 1 date and the plan's backup window. That's when the last copy of the CPF expires.
