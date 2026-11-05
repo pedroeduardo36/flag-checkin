@@ -240,7 +240,7 @@ the next step would be Upstash Ratelimit there.
 ## Tests
 
 ```bash
-npm test             # 100 tests (Vitest): dashboard, name search, masks, dates, haversine, HMAC, geofence, upload, faces, email, TOTP (RFC 6238 vectors), passwords, sessions, possible duplicates, guardian consent, and database integration tests (migrations on an in-process Postgres)
+npm test             # 103 tests (Vitest): dashboard, name search, masks, dates, haversine, HMAC, geofence, upload, faces, email, TOTP (RFC 6238 vectors), passwords, sessions, possible duplicates, guardian consent, and database integration tests (migrations on an in-process Postgres)
 npm run typecheck    # TypeScript in strict mode
 npm run test:e2e     # end-to-end checks (including the P0, leader accounts, CPF removal and privacy regressions) against the real Supabase project, cleaning up the data at the end
 npm run simulate     # two synthetic teens check in 8 s apart (to watch the live feed)

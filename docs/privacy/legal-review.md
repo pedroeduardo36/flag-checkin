@@ -27,7 +27,7 @@ data protection law), the ECA (Child and Adolescent Statute) and the ECA Digital
    (an in-person community whose leaders know the families), is that enough, combined with in-person confirmation when
    in doubt? Art. 14, §5, asks for "all reasonable efforts".
 7. Registrations older than this version accepted a text that **didn't explain biometrics**. The chosen path was asking
-   for new consent by 2026-11-30, deleting whoever doesn't confirm and keeping check-in working in the meantime. Should
+   for new consent within 30 days of the migration, deleting whoever got the link and doesn't confirm and keeping check-in working in the meantime. Should
    biometrics for those registrations be suspended right away, until the new confirmation?
 
 ### Photos

@@ -129,7 +129,7 @@ Each notice's status shows in the `aviso_responsavel` column of the `presencas` 
 **Batch confirmation for legacy registrations** (older than the consent that explains biometrics):
 `npm run verification:send` is a dry run; `npm run verification:send -- --send` sends the confirmation link, 1.5 s
 apart. The log goes to `logs/verificacao.json` (git-ignored, ids only): running it again skips whoever already got one.
-Registrations not confirmed by 2026-11-30 are deleted.
+Registrations not confirmed within 30 days of the migration can't check in, and are deleted once their guardian got a link.
 
 ## Pastor area
 
