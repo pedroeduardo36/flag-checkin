@@ -6,13 +6,13 @@ import { pgClient } from "./pg-client";
 // The registration route runs for real; only its database client, email and after() are swapped.
 const current: { client: ReturnType<typeof pgClient> | null } = { client: null };
 vi.mock("@/lib/server/supabase", () => ({ db: () => current.client }));
-vi.mock("@/lib/server/email", () => ({ emailConfigured: () => false, senderAddress: () => null, sendRegistrationEmail: async () => "sem_config" }));
+vi.mock("@/lib/server/email", () => ({ emailConfigured: () => false, senderAddress: () => null, sendRegistrationEmail: async () => "sem_config", sendVerificationEmail: async () => "sem_config" }));
 vi.mock("next/server", async (orig) => ({ ...(await orig<typeof import("next/server")>()), after: () => {} }));
 const { POST } = await import("@/app/api/cadastro/route");
 
 const form = (over: Record<string, unknown> = {}) => ({
   name: "Ana Beatriz de Souza", birthDate: "2011-03-04", guardianName: "Maria Souza", guardianPhone: "61988880000",
-  guardianEmail: "mae@example.com", consent: true, ...over,
+  guardianEmail: "mae@example.com", consent: true, consentBiometric: true, ...over,
 });
 const submit = (body: object) =>
   POST(new Request("http://test/api/cadastro", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));

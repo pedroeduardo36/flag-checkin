@@ -35,6 +35,7 @@ for (let i = 7; i >= 0; i--) {
 const { data: members, error } = await sb.from("members").insert(names.map((n) => ({
   name: `${PREFIX} ${n}`, birth_date: "2010-05-20", guardian_name: "Responsável Simulação",
   guardian_phone: "61988880000", guardian_email: "responsavel@example.com", guardian_consent_at: new Date().toISOString(),
+  guardian_email_verified_at: new Date().toISOString(), biometric_consent_at: new Date().toISOString(), consent_version: "simulacao", verify_by: null,
 }))).select("id");
 if (error) throw error;
 

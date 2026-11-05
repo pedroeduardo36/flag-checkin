@@ -24,6 +24,10 @@ type AuditRow = {
 };
 type DupMember = { id: string; name: string; birthDate: string; guardianName: string; createdAt: string; checkins: number; hasPhoto: boolean };
 type DupPair = { duplicate: DupMember; original: DupMember; sameGuardian: boolean };
+type MemberRow = {
+  id: string; name: string; birthDate: string; guardianName: string | null; createdAt: string;
+  confirmed: boolean; canCheckin: boolean; legacy: boolean; confirmBy: string | null; hasBiometrics: boolean;
+};
 type Issued = { name: string; email: string; code: string; expiresAt: string; reason: string };
 
 const ACTION_LABEL: Record<string, string> = {
@@ -42,6 +46,12 @@ const ACTION_LABEL: Record<string, string> = {
   presenca_removida: "Removeu presença",
   duplicado_descartado: "Marcou como pessoas diferentes",
   cadastro_mesclado: "Mesclou cadastros duplicados",
+  consentimento_registrado: "Responsável confirmou o cadastro",
+  cadastro_apagado: "Apagou cadastro",
+  biometria_revogada: "Retirou a biometria",
+  dados_exportados: "Exportou dados de um cadastro",
+  confirmacao_reenviada: "Reenviou confirmação ao responsável",
+  expurgo_retencao: "Limpeza automática por prazo",
 };
 
 const fmtWhen = (iso: string) =>
@@ -109,6 +119,7 @@ export function LeadersAdmin({ onUnauthorized }: { onUnauthorized: () => void })
       {notice && <div className="info" role="status">{notice}</div>}
       {issued && <IssuedCode issued={issued} onClose={() => setIssued(null)} />}
 
+      <FamilyRequests onUnauthorized={onUnauthorized} onDone={load} />
       <Duplicates onUnauthorized={onUnauthorized} onDone={load} />
 
       <div className="card dash__card">
@@ -169,7 +180,7 @@ export function LeadersAdmin({ onUnauthorized }: { onUnauthorized: () => void })
                 <b>{a.actor_name ?? "Sem login"}</b> · {ACTION_LABEL[a.action] ?? a.action}
                 {a.target_label && <> · <span className="audit__target">{a.target_label}</span></>}
                 {a.outcome !== "ok" && <span className="audit__outcome"> ({a.outcome})</span>}
-                {typeof a.details?.motivo === "string" && a.action === "presenca_removida" && <div className="hint">Motivo: {a.details.motivo}</div>}
+                {typeof a.details?.motivo === "string" && <div className="hint">Motivo: {a.details.motivo}</div>}
               </div>
             </li>
           ))}
@@ -177,6 +188,116 @@ export function LeadersAdmin({ onUnauthorized }: { onUnauthorized: () => void })
         </ol>
       </div>
     </section>
+  );
+}
+
+const fmtDate = (iso: string) => iso.slice(0, 10).split("-").reverse().join("/");
+
+/**
+ * Family requests: view (export), resend the confirmation, withdraw biometrics and delete.
+ * Before acting, confirm the requester is the guardian (docs/privacy/family-requests.md).
+ */
+function FamilyRequests({ onUnauthorized, onDone }: { onUnauthorized: () => void; onDone: () => void }) {
+  const [q, setQ] = useState("");
+  const [items, setItems] = useState<MemberRow[] | null>(null);
+  const [title, setTitle] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function list(path: string, label: string) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    const r = await send("GET", path);
+    setBusy(false);
+    if (r.status === 401) return onUnauthorized();
+    if (r.status !== 200) return setError(r.data.error ?? "Não foi possível buscar.");
+    setItems(r.data.items);
+    setTitle(label);
+  }
+
+  async function exportData(m: MemberRow) {
+    const r = await send("GET", `/api/lider/cadastros?exportar=${m.id}`);
+    if (r.status === 401) return onUnauthorized();
+    if (r.status !== 200) return setError(r.data.error ?? "Não foi possível exportar.");
+    const blob = new Blob([JSON.stringify(r.data, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `dados-${m.name.split(" ")[0].toLowerCase()}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setNotice(`Arquivo com os dados de ${m.name} baixado. Envie só para o responsável e apague a sua cópia depois.`);
+    onDone();
+  }
+
+  async function act(m: MemberRow, action: "reenviar" | "revogar_biometria" | "apagar") {
+    setError(null);
+    setNotice(null);
+    let r;
+    if (action === "apagar") {
+      const reason = window.prompt(`Apagar o cadastro de ${m.name}? Saem dados, fotos, dados do rosto e presenças, sem volta.\n\nMotivo (ex.: pedido do responsável por e-mail em 30/10):`);
+      if (!reason) return;
+      r = await send("DELETE", "/api/lider/cadastros", { id: m.id, reason });
+    } else {
+      const ask = action === "reenviar"
+        ? `Enviar um novo link de confirmação para o(s) e-mail(s) do responsável de ${m.name}?`
+        : `Retirar a biometria de ${m.name}? A foto de registro e os dados do rosto são apagados, e o check-in só volta se o responsável confirmar de novo (o cadastro é apagado em 7 dias sem isso).`;
+      if (!window.confirm(ask)) return;
+      r = await send("PATCH", "/api/lider/cadastros", { id: m.id, action });
+    }
+    if (r.status === 401) return onUnauthorized();
+    if (r.status !== 200) return setError(r.data.error ?? "Não foi possível concluir.");
+    setNotice(action === "apagar" ? `Cadastro de ${m.name} apagado.` : action === "reenviar" ? "Link enviado." : "Biometria retirada.");
+    setItems((prev) => (action === "apagar" ? prev?.filter((x) => x.id !== m.id) ?? null : prev));
+    if (action !== "apagar") list(`/api/lider/cadastros?q=${encodeURIComponent(m.name)}`, title);
+    onDone();
+  }
+
+  return (
+    <div className="card dash__card">
+      <h3>Cadastros e pedidos das famílias</h3>
+      <p className="hint dash__sub">
+        Ver, corrigir, apagar ou retirar a autorização. Antes de atender, confirme que quem pede é o responsável.
+      </p>
+      <form className="search-row" onSubmit={(e) => { e.preventDefault(); list(`/api/lider/cadastros?q=${encodeURIComponent(q)}`, `Resultado para "${q}"`); }}>
+        <input placeholder="Nome do adolescente" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
+        <button className="chip" disabled={busy || !q.trim()}>Buscar</button>
+      </form>
+      <button className="add-email" onClick={() => list("/api/lider/cadastros?pendentes=1", "Aguardando confirmação do responsável")}>
+        Ver cadastros aguardando confirmação
+      </button>
+      {error && <div className="alert" role="alert">{error}</div>}
+      {notice && <div className="info" role="status">{notice}</div>}
+      {items && (
+        <>
+          <p className="hint"><b>{title}</b> · {items.length} cadastro(s)</p>
+          <ul className="leader-list">
+            {items.map((m) => (
+              <li key={m.id} className="leader">
+                <div className="dup__side">
+                  <strong>{m.name}</strong>
+                  <span className="hint">Nasc. {fmtDate(m.birthDate)} · resp. {m.guardianName ?? "—"} · cadastrado em {fmtDay(m.createdAt)}</span>
+                </div>
+                <div className="leader__tags">
+                  {m.confirmed ? <span className="tag tag--ok">✓ Confirmado pelo responsável</span>
+                    : <span className="tag tag--warn">{m.legacy ? "Cadastro antigo: confirmar" : "Aguardando confirmação"}{m.confirmBy ? ` até ${fmtDate(m.confirmBy)}` : ""}</span>}
+                  {!m.canCheckin && <span className="tag tag--warn">Check-in bloqueado</span>}
+                  {m.hasBiometrics && <span className="tag">Com dados do rosto</span>}
+                </div>
+                <div className="leader__actions">
+                  <button className="chip" onClick={() => exportData(m)}>Exportar dados</button>
+                  {!m.confirmed && <button className="chip" onClick={() => act(m, "reenviar")}>Reenviar confirmação</button>}
+                  {(m.hasBiometrics || m.confirmed) && <button className="chip" onClick={() => act(m, "revogar_biometria")}>Retirar biometria</button>}
+                  <button className="chip chip--danger" onClick={() => act(m, "apagar")}>Apagar cadastro</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {!items.length && <p className="hint">Nenhum cadastro encontrado.</p>}
+        </>
+      )}
+    </div>
   );
 }
 

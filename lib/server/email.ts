@@ -3,8 +3,9 @@ import nodemailer, { type Transporter } from "nodemailer";
 import { firstName } from "@/lib/format";
 
 /**
- * Email notices to the guardian over SMTP (Gmail, Brevo, Resend… any SMTP provider).
+ * Guardian notices by email over SMTP (Gmail, Brevo, Resend… any SMTP provider).
  * Variables: SMTP_HOST, SMTP_PORT (465 = SSL, 587 = STARTTLS), SMTP_USER, SMTP_PASS, EMAIL_FROM.
+ * Email copy is written for Brazilian families, so it stays in Portuguese.
  */
 
 /** Stored as-is in the *_email_status columns. */
@@ -40,35 +41,12 @@ export type CheckinEmailData = {
   guardianName: string;
   teenName: string;
   checkedInAt: string | Date;
-  photo: Buffer;
 };
 
-/** Builds the email (pure function, tested without sending anything). The photo is embedded via Content-ID. */
-export function buildCheckinEmail(d: CheckinEmailData) {
-  const at = new Date(d.checkedInAt);
-  const time = at.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: TZ });
-  const day = at.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", timeZone: TZ });
-  const teen = firstName(d.teenName);
-  const guardian = firstName(d.guardianName);
-  const cid = "selfie-checkin@flag-o2";
-
-  const subject = `✅ ${teen} chegou ao culto da O2 · Flag (${time})`;
-
-  const text = [
-    `Olá, ${guardian}!`,
-    "",
-    `${d.teenName} chegou ao culto da Juventude O2 · Ministério Flag e já fez o check-in.`,
-    "",
-    `Horário do check-in: ${time} (${day})`,
-    "",
-    "A foto tirada no check-in está anexada a este e-mail.",
-    "",
-    "Ministério Flag · Juventude O2",
-    "Você recebe este aviso porque autorizou o cadastro do(a) adolescente no check-in do ministério.",
-  ].join("\n");
-
-  const html = `<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Check-in O2 · Flag</title></head>
+/** Shared email frame (brand header and footer). */
+function layout(title: string, body: string, footer: string) {
+  return `<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>${esc(title)}</title></head>
 <body style="margin:0;padding:0;background:#f3f8fb;font-family:Montserrat,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0d2230">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f8fb;padding:24px 12px;font-family:Montserrat,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
 <tr><td align="center">
@@ -77,8 +55,42 @@ export function buildCheckinEmail(d: CheckinEmailData) {
     <div style="font-size:30px;font-weight:900;letter-spacing:.06em;line-height:1">FLAG</div>
     <div style="font-size:13px;opacity:.9;margin-top:6px;letter-spacing:.04em">Juventude <b>O2</b></div>
   </td></tr>
-  <tr><td style="padding:24px">
-    <p style="margin:0 0 6px;font-size:15px;color:#5b6b77">Olá, ${esc(guardian)}!</p>
+  <tr><td style="padding:24px">${body}</td></tr>
+  <tr><td style="padding:16px 24px;border-top:1px solid #d9e3ea;font-size:12px;line-height:1.5;color:#5b6b77">${footer}</td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
+}
+
+/**
+ * Check-in notice (pure function, tested without sending anything). TEXT ONLY: the creative photo may
+ * show other teens, so it never leaves the app by email. Leaders see it in the feed; it's deleted after 30 days.
+ */
+export function buildCheckinEmail(d: CheckinEmailData) {
+  const at = new Date(d.checkedInAt);
+  const time = at.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: TZ });
+  const day = at.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", timeZone: TZ });
+  const teen = firstName(d.teenName);
+  const guardian = firstName(d.guardianName);
+
+  const subject = `✅ ${teen} chegou ao culto da O2 · Flag (${time})`;
+  const footer = "Você recebe este aviso porque confirmou o cadastro do(a) adolescente no check-in do Ministério Flag.";
+
+  const text = [
+    `Olá, ${guardian}!`,
+    "",
+    `${d.teenName} chegou ao culto da Juventude O2 · Ministério Flag e já fez o check-in.`,
+    "",
+    `Horário do check-in: ${time} (${day})`,
+    "",
+    "Ministério Flag · Juventude O2",
+    footer,
+    "Para deixar de receber ou pedir a exclusão dos dados, responda a este e-mail ou fale com a liderança da O2.",
+  ].join("\n");
+
+  const html = layout(
+    "Check-in O2 · Flag",
+    `<p style="margin:0 0 6px;font-size:15px;color:#5b6b77">Olá, ${esc(guardian)}!</p>
     <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3">${esc(teen)} chegou ao culto e já fez o check-in ✅</h1>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#e6f5fb;border-radius:12px;margin:0 0 18px">
       <tr><td style="padding:14px 16px">
@@ -87,24 +99,11 @@ export function buildCheckinEmail(d: CheckinEmailData) {
         <div style="font-size:14px;color:#5b6b77">${esc(day)}</div>
       </td></tr>
     </table>
-    <p style="margin:0 0 8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#006a93">Foto do check-in</p>
-    <img src="cid:${cid}" alt="Foto de ${esc(teen)} no check-in" width="432" style="display:block;width:100%;max-width:432px;height:auto;border-radius:14px;border:0" />
-    <p style="margin:18px 0 0;font-size:14px;line-height:1.5;color:#5b6b77">${esc(d.teenName)} está com a gente na Juventude O2 do Ministério Flag. Bom culto! 🙌</p>
-  </td></tr>
-  <tr><td style="padding:16px 24px;border-top:1px solid #d9e3ea;font-size:12px;line-height:1.5;color:#5b6b77">
-    Você recebe este aviso porque autorizou o cadastro do(a) adolescente no check-in do Ministério Flag.
-    Dúvidas ou para deixar de receber, fale com a liderança da Juventude O2.
-  </td></tr>
-</table>
-</td></tr></table>
-</body></html>`;
+    <p style="margin:0;font-size:14px;line-height:1.5;color:#5b6b77">${esc(d.teenName)} está com a gente na Juventude O2 do Ministério Flag. Bom culto! 🙌</p>`,
+    `${footer} Para deixar de receber ou pedir a exclusão dos dados, responda a este e-mail ou fale com a liderança da Juventude O2.`,
+  );
 
-  return {
-    subject,
-    text,
-    html,
-    attachments: [{ filename: `checkin-${teen.toLowerCase() || "foto"}.jpg`, content: d.photo, contentType: "image/jpeg", cid }],
-  };
+  return { subject, text, html };
 }
 
 /**
@@ -128,82 +127,72 @@ export async function sendCheckinEmail(
   }
 }
 
-/** Sender address (from EMAIL_FROM), so the guardian knows who the email comes from. */
+/** Sender address (from EMAIL_FROM), so the guardian knows who the email will come from. */
 export function senderAddress(): string | null {
   const from = process.env.EMAIL_FROM ?? "";
   return /<([^>]+)>/.exec(from)?.[1] ?? (from.includes("@") ? from.trim() : null);
 }
 
-export type RegistrationEmailData = { guardianName: string; teenName: string };
+export type VerificationEmailData = {
+  guardianName: string;
+  teenName: string;
+  link: string;
+  /** true: primary email (gives consent). false: second email (only confirms it wants the notices). */
+  primary: boolean;
+  validDays: number;
+};
 
-/** Confirmation of the registration made by the guardian (pure function). */
-export function buildRegistrationEmail(d: RegistrationEmailData) {
+/** Registration confirmation request (pure function). Without confirmation there's no check-in and the registration is deleted. */
+export function buildVerificationEmail(d: VerificationEmailData) {
   const teen = firstName(d.teenName);
   const guardian = firstName(d.guardianName);
-  const subject = `✅ Cadastro de ${teen} na O2 · Flag confirmado`;
+  const subject = d.primary ? `Confirme o cadastro de ${teen} na O2 · Flag` : `Confirme este e-mail para os avisos de ${teen} na O2 · Flag`;
+  const intro = d.primary
+    ? `Recebemos o cadastro de ${d.teenName} no check-in da Juventude O2 · Ministério Flag, com este e-mail como contato do responsável.`
+    : `${d.guardianName || "O responsável"} cadastrou ${d.teenName} no check-in da Juventude O2 · Ministério Flag e indicou este e-mail para receber os avisos de check-in.`;
+  const ask = d.primary
+    ? "Abra o link, leia como usamos os dados (inclusive o reconhecimento facial) e confirme. Só depois disso o check-in funciona."
+    : "Abra o link para confirmar que quer receber os avisos.";
+  const ignore = d.primary
+    ? `Se não foi você, ignore: sem confirmação, o cadastro é apagado em ${d.validDays} dias.`
+    : `Se não foi você, ignore: este e-mail não recebe nenhum aviso sem confirmação.`;
+
   const text = [
-    `Olá, ${guardian}!`,
+    `Olá${d.primary && guardian ? `, ${guardian}` : ""}!`,
     "",
-    `O cadastro de ${d.teenName} na Juventude O2 · Ministério Flag foi concluído.`,
+    intro,
     "",
-    "Como funciona o check-in:",
-    "1. No culto, o adolescente abre o check-in pelo QR code e informa nome completo e data de nascimento.",
-    "2. No primeiro check-in, tira uma foto do rosto para completar o cadastro.",
-    "3. Dentro do culto, tira uma foto criativa, que conclui o check-in.",
+    ask,
+    d.link,
+    `O link vale ${d.validDays} dias e funciona uma vez.`,
     "",
-    "A cada check-in você recebe um e-mail com o horário e a foto.",
-    "Se este e-mail caiu no spam, marque como \"Não é spam\" para os próximos avisos chegarem na caixa de entrada.",
+    ignore,
     "",
     "Ministério Flag · Juventude O2",
   ].join("\n");
-  const html = `<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Cadastro O2 · Flag</title></head>
-<body style="margin:0;padding:0;background:#f3f8fb;font-family:Montserrat,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0d2230">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f8fb;padding:24px 12px;font-family:Montserrat,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
-<tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:18px;overflow:hidden">
-  <tr><td style="background:#008ec3;padding:22px 24px;color:#ffffff">
-    <div style="font-size:30px;font-weight:900;letter-spacing:.06em;line-height:1">FLAG</div>
-    <div style="font-size:13px;opacity:.9;margin-top:6px;letter-spacing:.04em">Juventude <b>O2</b></div>
-  </td></tr>
-  <tr><td style="padding:24px">
-    <p style="margin:0 0 6px;font-size:15px;color:#5b6b77">Olá, ${esc(guardian)}!</p>
-    <h1 style="margin:0 0 14px;font-size:22px;line-height:1.3">Cadastro de ${esc(teen)} confirmado ✅</h1>
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.5">${esc(d.teenName)} já pode fazer check-in nos cultos da Juventude O2.</p>
-    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#e6f5fb;border-radius:12px;margin:0 0 16px">
-      <tr><td style="padding:14px 16px;font-size:14px;line-height:1.6">
-        <b>Como funciona o check-in</b><br/>
-        1. No culto, o adolescente abre o check-in pelo QR code e informa <b>nome completo</b> e <b>data de nascimento</b>.<br/>
-        2. No primeiro check-in, tira uma <b>foto do rosto</b> para completar o cadastro.<br/>
-        3. Dentro do culto, tira uma <b>foto criativa</b>, que conclui o check-in.
-      </td></tr>
-    </table>
-    <p style="margin:0 0 12px;font-size:14px;line-height:1.5">A cada check-in você recebe um e-mail com o <b>horário</b> e a <b>foto</b>.</p>
-    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#fff4d6;border-radius:12px">
-      <tr><td style="padding:12px 16px;font-size:14px;line-height:1.5;color:#5c3d00">
-        📬 Se este e-mail caiu no <b>spam</b>, marque como <b>"Não é spam"</b>: assim os avisos de check-in chegam na caixa de entrada.
-      </td></tr>
-    </table>
-  </td></tr>
-  <tr><td style="padding:16px 24px;border-top:1px solid #d9e3ea;font-size:12px;line-height:1.5;color:#5b6b77">
-    Você recebe este e-mail porque cadastrou o(a) adolescente no check-in do Ministério Flag.
-  </td></tr>
-</table>
-</td></tr></table>
-</body></html>`;
+
+  const html = layout(
+    "Cadastro O2 · Flag",
+    `<p style="margin:0 0 6px;font-size:15px;color:#5b6b77">Olá${d.primary && guardian ? `, ${esc(guardian)}` : ""}!</p>
+    <h1 style="margin:0 0 14px;font-size:22px;line-height:1.3">${esc(subject)}</h1>
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.5">${esc(intro)}</p>
+    <p style="margin:0 0 18px;font-size:15px;line-height:1.5">${esc(ask)}</p>
+    <a href="${esc(d.link)}" style="display:inline-block;background:#008ec3;color:#ffffff;text-decoration:none;font-weight:700;padding:14px 22px;border-radius:12px">${d.primary ? "Ler e confirmar o cadastro" : "Confirmar este e-mail"}</a>
+    <p style="margin:18px 0 0;font-size:13px;line-height:1.5;color:#5b6b77">O link vale ${d.validDays} dias e funciona uma vez. ${esc(ignore)}</p>`,
+    "Este e-mail foi enviado porque alguém informou este endereço no cadastro do check-in do Ministério Flag.",
+  );
   return { subject, text, html };
 }
 
-/** Sends the registration confirmation. Never throws. */
-export async function sendRegistrationEmail(recipients: (string | null | undefined)[], d: RegistrationEmailData): Promise<EmailStatus> {
-  const list = [...new Set(recipients.map((e) => e?.trim().toLowerCase()).filter(Boolean) as string[])];
-  if (!list.length) return "sem_email";
+/** Sends the confirmation request. Never throws. */
+export async function sendVerificationEmail(to: string, d: VerificationEmailData): Promise<EmailStatus> {
+  if (!to) return "sem_email";
   if (!emailConfigured()) return "sem_config";
   try {
-    await transport().sendMail({ from: process.env.EMAIL_FROM, to: list.join(", "), ...buildRegistrationEmail(d) });
+    await transport().sendMail({ from: process.env.EMAIL_FROM, to, ...buildVerificationEmail(d) });
     return "enviado";
   } catch (err) {
-    console.error("Failed to send registration email:", err instanceof Error ? err.message : err);
+    console.error("Failed to send confirmation email:", err instanceof Error ? err.message : err);
     return "falhou";
   }
 }

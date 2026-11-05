@@ -4,11 +4,10 @@ const sendMail = vi.fn();
 vi.mock("nodemailer", () => ({ default: { createTransport: () => ({ sendMail }) } }));
 
 const SMTP = { SMTP_HOST: "smtp.exemplo.com", SMTP_USER: "user", SMTP_PASS: "pass", EMAIL_FROM: "Check-in O2 <checkin@exemplo.com>" };
-const data = {
+const dados = {
   guardianName: "Maria Souza",
   teenName: "Ana <b>Beatriz</b> Souza",
   checkedInAt: "2026-10-18T22:47:00Z", // 19:47 Brasília time
-  photo: Buffer.from("fake-jpeg"),
 };
 
 beforeEach(() => {
@@ -20,21 +19,22 @@ afterEach(() => vi.restoreAllMocks());
 const load = () => import("@/lib/server/email");
 
 describe("check-in email template", () => {
-  it("includes the name, Brasília time and the embedded photo (cid)", async () => {
+  it("includes the name and Brasília time, TEXT ONLY: no photo leaves by email", async () => {
     const { buildCheckinEmail } = await load();
-    const e = buildCheckinEmail(data);
+    const e = buildCheckinEmail(dados);
     expect(e.subject).toContain("19:47");
     expect(e.subject).toContain("O2 · Flag");
     expect(e.text).toContain("Olá, Maria!");
     expect(e.text).toContain("Horário do check-in: 19:47");
     expect(e.html).toContain("19:47");
-    expect(e.html).toMatch(/<img src="cid:selfie-checkin@flag-o2"/);
-    expect(e.attachments[0]).toMatchObject({ cid: "selfie-checkin@flag-o2", contentType: "image/jpeg", content: data.photo });
+    expect(e.html).not.toMatch(/<img|cid:/);
+    expect(e).not.toHaveProperty("attachments");
+    expect(e.text).toContain("exclusão dos dados");
   });
 
   it("escapes HTML coming from the registration", async () => {
     const { buildCheckinEmail } = await load();
-    const { html } = buildCheckinEmail(data);
+    const { html } = buildCheckinEmail(dados);
     expect(html).not.toContain("<b>Beatriz</b>");
     expect(html).toContain("&lt;b&gt;Beatriz&lt;/b&gt;");
   });
@@ -43,12 +43,12 @@ describe("check-in email template", () => {
 describe("sending", () => {
   it("no registered email → sem_email", async () => {
     const { sendCheckinEmail } = await load();
-    expect(await sendCheckinEmail(null, data)).toBe("sem_email");
+    expect(await sendCheckinEmail(null, dados)).toBe("sem_email");
   });
 
   it("SMTP not configured → sem_config (doesn't try to send)", async () => {
     const { sendCheckinEmail } = await load();
-    expect(await sendCheckinEmail("mae@exemplo.com", data)).toBe("sem_config");
+    expect(await sendCheckinEmail("mae@exemplo.com", dados)).toBe("sem_config");
     expect(sendMail).not.toHaveBeenCalled();
   });
 
@@ -56,21 +56,21 @@ describe("sending", () => {
     Object.assign(process.env, SMTP);
     sendMail.mockResolvedValue({ messageId: "1" });
     const { sendCheckinEmail } = await load();
-    expect(await sendCheckinEmail("mae@exemplo.com", data)).toBe("enviado");
+    expect(await sendCheckinEmail("mae@exemplo.com", dados)).toBe("enviado");
     expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: "mae@exemplo.com", from: SMTP.EMAIL_FROM }));
   });
 
-  it("sends to both guardian emails, without repeats and ignoring blanks", async () => {
+  it("sends to both guardian emails, without duplicates and ignoring blanks", async () => {
     Object.assign(process.env, SMTP);
     sendMail.mockResolvedValue({ messageId: "1" });
     const { sendCheckinEmail } = await load();
-    expect(await sendCheckinEmail(["mae@exemplo.com", "PAI@exemplo.com", null, "mae@exemplo.com"], data)).toBe("enviado");
+    expect(await sendCheckinEmail(["mae@exemplo.com", "PAI@exemplo.com", null, "mae@exemplo.com"], dados)).toBe("enviado");
     expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: "mae@exemplo.com, pai@exemplo.com" }));
   });
 
-  it("list with no email → sem_email", async () => {
+  it("list without any email → sem_email", async () => {
     const { sendCheckinEmail } = await load();
-    expect(await sendCheckinEmail([null, ""], data)).toBe("sem_email");
+    expect(await sendCheckinEmail([null, ""], dados)).toBe("sem_email");
   });
 
   it("SMTP server error → falhou (the check-in doesn't break)", async () => {
@@ -78,26 +78,37 @@ describe("sending", () => {
     sendMail.mockRejectedValue(new Error("535 auth failed"));
     vi.spyOn(console, "error").mockImplementation(() => {});
     const { sendCheckinEmail } = await load();
-    expect(await sendCheckinEmail("mae@exemplo.com", data)).toBe("falhou");
+    expect(await sendCheckinEmail("mae@exemplo.com", dados)).toBe("falhou");
   });
 });
 
-describe("registration confirmation email", () => {
-  it("subject with the first name, check-in steps and a spam notice", async () => {
-    const { buildRegistrationEmail } = await load();
-    const e = buildRegistrationEmail({ guardianName: "Maria Souza", teenName: "Ana <i>Beatriz</i> Souza" });
-    expect(e.subject).toBe("✅ Cadastro de Ana na O2 · Flag confirmado");
-    expect(e.text).toContain("nome completo e data de nascimento");
-    expect(e.html).toContain("Não é spam");
+describe("registration confirmation email (guardian verification)", () => {
+  const base = { guardianName: "Maria Souza", teenName: "Ana <i>Beatriz</i> Souza", link: "https://app.exemplo/confirmar#t=abc", validDays: 7 };
+
+  it("primary email: asks to read and confirm, explains the deadline and escapes HTML", async () => {
+    const { buildVerificationEmail } = await load();
+    const e = buildVerificationEmail({ ...base, primary: true });
+    expect(e.subject).toBe("Confirme o cadastro de Ana na O2 · Flag");
+    expect(e.text).toContain("reconhecimento facial");
+    expect(e.text).toContain("https://app.exemplo/confirmar#t=abc");
+    expect(e.text).toContain("apagado em 7 dias");
+    expect(e.html).toContain('href="https://app.exemplo/confirmar#t=abc"');
     expect(e.html).not.toContain("<i>Beatriz</i>");
   });
 
-  it("sends to both registration emails", async () => {
+  it("second email: only confirms it wants the notices", async () => {
+    const { buildVerificationEmail } = await load();
+    const e = buildVerificationEmail({ ...base, primary: false });
+    expect(e.subject).toContain("Confirme este e-mail");
+    expect(e.text).toContain("indicou este e-mail");
+  });
+
+  it("sends to one address at a time (each has its own link)", async () => {
     Object.assign(process.env, SMTP);
     sendMail.mockResolvedValue({ messageId: "1" });
-    const { sendRegistrationEmail } = await load();
-    expect(await sendRegistrationEmail(["mae@exemplo.com", "pai@exemplo.com"], { guardianName: "Maria", teenName: "Ana Souza" })).toBe("enviado");
-    expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: "mae@exemplo.com, pai@exemplo.com" }));
+    const { sendVerificationEmail } = await load();
+    expect(await sendVerificationEmail("mae@exemplo.com", { ...base, primary: true })).toBe("enviado");
+    expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: "mae@exemplo.com" }));
   });
 
   it("extracts the sender address from EMAIL_FROM", async () => {

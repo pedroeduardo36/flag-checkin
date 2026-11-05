@@ -13,8 +13,9 @@
     "typecheck": "tsc --noEmit",
     "db:push": "supabase db push",
     "simulate": "node scripts/simulate-checkins.mjs",
-    "email:confirmation": "tsx --conditions=react-server scripts/send-registration-confirmation.mts",
-    "leader:create": "tsx --conditions=react-server scripts/create-leader.mts"
+    "leader:create": "tsx --conditions=react-server scripts/create-leader.mts",
+    "retention": "tsx --conditions=react-server scripts/retention.mts",
+    "verification:send": "tsx --conditions=react-server scripts/send-verification.mts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

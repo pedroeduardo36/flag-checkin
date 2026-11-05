@@ -17,7 +17,7 @@ export function ipHash(req: Request): string | null {
  */
 export function audit(
   req: Request,
-  e: { event: "identificar" | "confirmar"; outcome: string; memberId?: string | null; lat?: number | null; lng?: number | null },
+  e: { event: "identificar" | "confirmar"; outcome: string; memberId?: string | null; distance?: number | null },
 ) {
   const row = {
     event: e.event,
@@ -25,8 +25,7 @@ export function audit(
     member_id: e.memberId ?? null,
     ip_hash: ipHash(req),
     user_agent: req.headers.get("user-agent")?.slice(0, 200) ?? null,
-    lat: e.lat ?? null,
-    lng: e.lng ?? null,
+    distance_m: e.distance ?? null, // only the distance to the church: coordinates are never stored
   };
   after(async () => {
     const { error } = await db().from("audit_events").insert(row);

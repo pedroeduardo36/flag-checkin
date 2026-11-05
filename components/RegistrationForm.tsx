@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
+import { RETENTION } from "@/lib/privacy";
 import { brDateToIso, isValidBirthDate, isValidEmail, isValidPhone, maskDate, maskPhone, nameTokens } from "@/lib/format";
 
 type Form = {
@@ -12,10 +14,11 @@ type Form = {
   guardianEmail: string;
   guardianEmail2: string;
   consent: boolean;
+  consentBiometric: boolean;
   website: string; // bot trap (kept hidden)
 };
 
-const empty: Form = { name: "", phone: "", birthDate: "", guardianName: "", guardianPhone: "", guardianEmail: "", guardianEmail2: "", consent: false, website: "" };
+const empty: Form = { name: "", phone: "", birthDate: "", guardianName: "", guardianPhone: "", guardianEmail: "", guardianEmail2: "", consent: false, consentBiometric: false, website: "" };
 
 function validate(f: Form) {
   const e: Record<string, string> = {};
@@ -30,6 +33,7 @@ function validate(f: Form) {
     else if (f.guardianEmail2.toLowerCase() === f.guardianEmail.toLowerCase()) e.guardianEmail2 = "Use um e-mail diferente do primeiro.";
   }
   if (!f.consent) e.consent = "É preciso autorizar o uso dos dados.";
+  if (!f.consentBiometric) e.consentBiometric = "É preciso autorizar o reconhecimento facial para usar o check-in.";
   return e;
 }
 
@@ -107,17 +111,20 @@ export function RegistrationForm({ mode, onSessionExpired }: { mode: Mode; onSes
       <div className="success-cadastro">
         <div className="center">
           <div className="success__photo success__photo--icon" aria-hidden>✓</div>
-          <h1>Cadastro concluído!</h1>
-          <p className="lead">{teen} já pode fazer check-in nos cultos da O2.</p>
+          <h1>Falta {pastor ? "o responsável" : "você"} confirmar</h1>
+          <p className="lead">
+            {pastor ? "O responsável precisa" : "Você precisa"} abrir o e-mail de confirmação e autorizar. Só depois disso {teen} consegue
+            fazer check-in. Sem confirmação em {RETENTION.confirmDays} dias, o cadastro é apagado.
+          </p>
         </div>
 
         <div className="spam-alert" role="status">
           <div className="spam-alert__icon" aria-hidden>📬</div>
           <div>
-            <strong>Confira a caixa de spam!</strong>
+            <strong>Confira também a caixa de spam!</strong>
             <p>
-              {done.confirmationSent ? "Enviamos agora um e-mail de confirmação" : "Os avisos de check-in são enviados"}
-              {done.sender ? <> de <b>{done.sender}</b></> : null} para {emails.length > 1 ? "os e-mails cadastrados" : "o e-mail cadastrado"}.
+              {done.confirmationSent ? "Enviamos agora o link de confirmação" : "O link de confirmação é enviado"}
+              {done.sender ? <> de <b>{done.sender}</b></> : null} para {emails.length > 1 ? "cada e-mail cadastrado" : "o e-mail cadastrado"}.
               Se não estiver na caixa de entrada, procure em <b>Spam</b> ou <b>Lixo eletrônico</b> e marque como{" "}
               <b>&quot;Não é spam&quot;</b>. Assim os avisos de cada check-in {pastor ? "chegam ao responsável" : "do seu filho(a) chegam certinho"}.
             </p>
@@ -200,14 +207,14 @@ export function RegistrationForm({ mode, onSessionExpired }: { mode: Mode; onSes
           {field("guardianEmail", pastor ? "E-mail do responsável" : "Seu e-mail", (
             <input type="email" inputMode="email" autoComplete={pastor ? "off" : "email"} autoCapitalize="none" spellCheck={false}
               placeholder="nome@email.com" value={f.guardianEmail} onChange={(e) => set("guardianEmail", e.target.value.trim())} />
-          ), "Você recebe um e-mail com o horário e a foto a cada check-in.")}
+          ), "Você recebe um link para confirmar o cadastro e, depois, um aviso só com o horário a cada check-in.")}
 
           {showEmail2 ? (
             <div className="email2" data-field="guardianEmail2">
               {field("guardianEmail2", "Outro e-mail (opcional)", (
                 <input type="email" inputMode="email" autoComplete="off" autoCapitalize="none" spellCheck={false} autoFocus
                   placeholder="ex.: e-mail do pai ou da mãe" value={f.guardianEmail2} onChange={(e) => set("guardianEmail2", e.target.value.trim())} />
-              ), "Os dois e-mails recebem o aviso de cada check-in.")}
+              ), "Este e-mail também recebe um link e só passa a receber os avisos depois de confirmar.")}
               <button type="button" className="email2__remove" onClick={() => { set("guardianEmail2", ""); setShowEmail2(false); }}>
                 Remover
               </button>
@@ -216,15 +223,34 @@ export function RegistrationForm({ mode, onSessionExpired }: { mode: Mode; onSes
             <button type="button" className="add-email" onClick={() => setShowEmail2(true)}>+ Adicionar outro e-mail</button>
           )}
 
+          <div className="info consent-info">
+            <span aria-hidden>🔍</span>
+            <span>
+              <strong>Como funciona o reconhecimento facial:</strong> no primeiro check-in o adolescente tira uma foto do
+              rosto. O sistema guarda essa foto e uma lista de números que descreve o rosto (dado biométrico) e, nos
+              check-ins seguintes, compara a foto do culto com ela para confirmar que é a mesma pessoa. As fotos do culto
+              podem ter amigos junto: só os líderes veem, e elas são apagadas em {RETENTION.checkinPhotoDays} dias.{" "}
+              <Link href="/privacidade" target="_blank">Tudo sobre os dados</Link>
+            </span>
+          </div>
           <label className={`check ${errors.consent ? "field--error" : ""}`} data-field="consent">
             <input type="checkbox" checked={f.consent} onChange={(e) => set("consent", e.target.checked)} />
             <span>
-              Como responsável, autorizo o Ministério Flag a guardar estes dados e as fotos tiradas pelo adolescente no
-              check-in, usados só para o controle de presença nos cultos, e a me enviar avisos de check-in por e-mail
-              (LGPD, art. 14).
+              Como responsável, autorizo o Ministério Flag a guardar estes dados, as presenças e as fotos tiradas pelo
+              adolescente no check-in, usados só para o controle de presença nos cultos, e a me enviar avisos de check-in
+              por e-mail (LGPD, art. 14).
             </span>
           </label>
           {errors.consent && <small className="err">{errors.consent}</small>}
+          <label className={`check check--strong ${errors.consentBiometric ? "field--error" : ""}`} data-field="consentBiometric">
+            <input type="checkbox" checked={f.consentBiometric} onChange={(e) => set("consentBiometric", e.target.checked)} />
+            <span>
+              Autorizo, de forma específica, o <b>reconhecimento facial</b> do adolescente no check-in: criar e guardar os
+              dados do rosto a partir da foto de registro e compará-los com as fotos dos check-ins (LGPD, art. 11).
+            </span>
+          </label>
+          {errors.consentBiometric && <small className="err">{errors.consentBiometric}</small>}
+          <p className="hint">Você confirma estas autorizações de novo pelo link que vai chegar no seu e-mail.</p>
         </fieldset>
 
         {/* Bot trap: invisible to people */}

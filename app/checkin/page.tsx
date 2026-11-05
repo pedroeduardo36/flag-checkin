@@ -341,6 +341,10 @@ export default function CheckinPage() {
               luz. Ela completa seu cadastro e confirma que é você. Depois vem a foto criativa.
             </span>
           </div>
+          <p className="hint">
+            Com essa foto, o sistema guarda uma &quot;assinatura&quot; do seu rosto, que serve só para conferir que é você nos
+            próximos check-ins. Seu responsável autorizou isso. <a href="/privacidade" target="_blank">Saiba mais</a>
+          </p>
           <Camera value={photo} onChange={(p) => { setPhoto(p); if (p) setError(null); }} label="Abrir câmera" />
           {errorBox}
           {photo && (
