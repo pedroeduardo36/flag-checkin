@@ -18,11 +18,10 @@ alter table public.members
   add column if not exists consent_version             text,
   -- Deadline to confirm. Registrations older than this version (legacy consent, which didn't explain
   -- biometrics) can check in until the deadline; new ones (the app writes null) only after confirming.
-  -- The default covers anyone registering through the previous app version until this one is deployed.
+  -- The default gives existing registrations 30 days from the day this migration runs (never a fixed date:
+  -- it could already be past when this is applied), and covers anyone registering through the previous
+  -- app version until this one is deployed.
   add column if not exists verify_by                   date default (current_date + 30);
-
-update public.members set verify_by = date '2026-11-30'
- where guardian_email_verified_at is null and (verify_by is null or verify_by > date '2026-11-30');
 
 create table if not exists public.guardian_verifications (
   id         uuid primary key default gen_random_uuid(),
@@ -309,16 +308,21 @@ begin
 
   -- Registration: not confirmed by the guardian in time, or no attendance for 12 months.
   -- Removed entirely: data, reference photo, face descriptor and attendances (cascade).
+  -- A legacy registration (no consent_version) is only removed as unconfirmed after a link was issued to its
+  -- guardian: if the verification emails never went out, nobody had the chance to confirm.
   create temporary table alvo_cadastro on commit drop as
-  select m.id,
-         m.guardian_email_verified_at is null
-           and coalesce(m.verify_by, (m.created_at at time zone 'America/Sao_Paulo')::date + 7) < hoje as sem_confirmacao
-    from public.members m
-   where not exists (select 1 from public.checkins e where e.member_id = m.id and e.is_example)
-     and ((m.guardian_email_verified_at is null
-           and coalesce(m.verify_by, (m.created_at at time zone 'America/Sao_Paulo')::date + 7) < hoje)
-       or (m.created_at < now() - interval '12 months'
-           and not exists (select 1 from public.checkins c where c.member_id = m.id and c.service_date >= hoje - 365)));
+  select id, sem_confirmacao from (
+    select m.id,
+           m.guardian_email_verified_at is null
+             and coalesce(m.verify_by, (m.created_at at time zone 'America/Sao_Paulo')::date + 7) < hoje
+             and (m.consent_version is not null
+                  or exists (select 1 from public.guardian_verifications v where v.member_id = m.id)) as sem_confirmacao,
+           m.created_at < now() - interval '12 months'
+             and not exists (select 1 from public.checkins c where c.member_id = m.id and c.service_date >= hoje - 365) as inativo
+      from public.members m
+     where not exists (select 1 from public.checkins e where e.member_id = m.id and e.is_example)
+  ) x
+   where sem_confirmacao or inativo;
   select coalesce(array_agg(p), '{}') into tmp from (
     select photo_path as p from public.members where id in (select id from alvo_cadastro) and photo_path is not null
     union all

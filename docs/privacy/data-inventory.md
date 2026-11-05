@@ -24,7 +24,7 @@ The **legal basis** column is our proposed hypothesis. The legal review ([legal-
 
 **The whole registration is deleted** (data, registration photo, descriptor, attendances and check-in photos):
 
-- if the guardian doesn't confirm within **7 days**. For registrations older than this version, the deadline is **2026-11-30**;
+- if the guardian doesn't confirm within **7 days**. For registrations older than this version, the deadline is **30 days after the migration runs**, and the deletion only happens if a link was sent to the guardian;
 - when the teen has gone **12 months** without any attendance;
 - when the guardian asks, or declines through the link.
 
