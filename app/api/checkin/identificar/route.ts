@@ -53,7 +53,7 @@ export const POST = withErrors(async (req: Request) => {
   if (ranked.length > 1 && ranked[0].score === ranked[1].score) {
     log("AMBIGUO");
     return NextResponse.json(
-      { error: "Encontramos mais de um cadastro parecido. Digite seu nome completo, como está no cadastro.", code: "AMBIGUO" },
+      { error: "Encontramos mais de um cadastro parecido. Digite seu nome completo, como está no cadastro, ou procure um líder.", code: "AMBIGUO" },
       { status: 409 },
     );
   }

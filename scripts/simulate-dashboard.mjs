@@ -19,11 +19,6 @@ if (process.argv.includes("--clean")) {
   process.exit(0);
 }
 
-const cpf = () => {
-  const n = Array.from({ length: 9 }, () => Math.floor(Math.random() * 10));
-  for (const len of [9, 10]) { const s = n.reduce((a, d, i) => a + d * (len + 1 - i), 0); const r = (s * 10) % 11; n.push(r === 10 ? 0 : r); }
-  return n.join("");
-};
 const names = ["Ana Beatriz", "Bruno Lima", "Carla Mendes", "Davi Rocha", "Eduarda Alves", "Felipe Costa", "Gabriela Nunes", "Heitor Ramos", "Isabela Freitas", "João Pedro Dias"];
 // Probability of each person attending each Sunday (the first ones attend more).
 const attendanceRate = [1, 0.95, 0.9, 0.8, 0.75, 0.6, 0.5, 0.4, 0.3, 0.2];
@@ -38,7 +33,7 @@ for (let i = 7; i >= 0; i--) {
 }
 
 const { data: members, error } = await sb.from("members").insert(names.map((n) => ({
-  name: `${PREFIX} ${n}`, cpf: cpf(), birth_date: "2010-05-20", guardian_name: "Responsável Simulação",
+  name: `${PREFIX} ${n}`, birth_date: "2010-05-20", guardian_name: "Responsável Simulação",
   guardian_phone: "61988880000", guardian_email: "responsavel@example.com", guardian_consent_at: new Date().toISOString(),
 }))).select("id");
 if (error) throw error;

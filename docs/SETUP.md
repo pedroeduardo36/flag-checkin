@@ -8,7 +8,7 @@ A web app (it opens in the phone's browser, with nothing to install) for teens t
 
 ```
 Before the service ──► /cadastro (filled in by the GUARDIAN)
-   Teen's details (name, birth date, CPF, optional phone) +
+   Teen's details (name, birth date, optional phone; no CPF) +
    guardian's details (name, phone, email and an optional second email) + LGPD consent. No photo, no password.
 
 QR code / NFC tag ──► /checkin
@@ -167,7 +167,11 @@ photo, open **Storage → fotos** and the path in the `foto_checkin` or `foto_ca
 - An unknown name and a wrong date get the **same** message, so nobody can find out who is registered.
 - The token between identification and photo is signed (HMAC) and valid for 4 h (the creative photo is taken during the
   service); one check-in per person per day, and one per visitor phone per day.
-- Registration is open (no password), with a unique CPF, server-side validation and a hidden field against bots.
+- Registration is open (no password), with server-side validation and a hidden field against bots. It doesn't ask for a CPF.
+- A registration similar to an existing one (same birth date and a compatible name) is flagged as a **possible duplicate**.
+  Under **Líderes → Possíveis cadastros duplicados**, a leader picks "mesclar" (merge: attendances move to the older
+  registration and the new one is deleted) or "são pessoas diferentes" (different people). While two registrations share
+  a name, check-in asks for the full name or a leader. Both decisions go to the action log.
 - Registration requires ticking the guardian's consent (minors' data — LGPD art. 14); the date is stored.
 - **Known limits:** phone GPS can be spoofed with "fake GPS" apps — which is why there's a photo with face recognition,
   which leaders can also check in the pastor feed. The identification routes have no per-IP limit; if needed, add
@@ -190,7 +194,8 @@ app/api/checkin/confirmar         registration (first) or creative photo → sto
 app/api/cadastro                  stores a new teen
 components/Brand.tsx              Flag header (prominent) + Juventude O2
 components/Camera.tsx             live front camera with a fallback
-lib/format.ts                     CPF, phone, dates, distance (haversine)
+lib/format.ts                     phone, dates, names, distance (haversine)
+lib/duplicates.ts                 possible duplicate registration (name + birth date + guardian email)
 lib/server/*                      Supabase, variables, tokens and validation (server only)
 supabase/migrations/              tables, attendance view and bucket
 app/api/health                    Supabase connection diagnostics
