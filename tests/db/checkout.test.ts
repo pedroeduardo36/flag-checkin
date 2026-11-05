@@ -97,10 +97,10 @@ describe("participant checkout", () => {
   });
 
   it("a checkout right after arrival works when the database clock is ahead of the server's", async () => {
-    await pg.query("update public.checkins set checked_in_at = now() + interval '2 seconds' where id = $1", [teenCheckin]);
+    await pg.query("update public.checkins set checked_in_at = date_trunc('milliseconds', now() + interval '2 seconds') + interval '500 microseconds' where id = $1", [teenCheckin]);
     const r = await json(await call(checkoutRoute.POST, "POST", "/api/checkin/checkout", { body: {}, cookie: visitCookie(teen, teenCheckin) }));
     expect(r.status).toBe(200);
-    expect(r.data.checkedOutAt).toBe(r.data.checkedInAt.replace(/(\.\d{3})\d*/, "$1").replace(/\+00:00$/, "Z"));
+    expect(await one("select checked_out_at >= checked_in_at as ok from public.checkins where id = $1", [teenCheckin])).toEqual({ ok: true });
   });
 
   it("three simultaneous confirmations record one checkout and all return it", async () => {

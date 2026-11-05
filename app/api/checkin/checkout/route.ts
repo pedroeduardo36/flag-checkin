@@ -54,8 +54,9 @@ export const POST = withErrors(async (req: Request) => {
   const log = (outcome: string) => audit(req, { event: "checkout", outcome, memberId: c?.member_id ?? v?.mid ?? null, distance });
   if (!c) return log("SEM_VISITA"), NextResponse.json(NO_VISIT, { status: 401 });
 
-  // The arrival comes from the database's clock, which can be slightly ahead of this server's.
-  const at = new Date(Math.max(Date.now(), Date.parse(c.checked_in_at)));
+  // The arrival comes from the database's clock, which can be slightly ahead of this server's. +1 ms because
+  // the database stores microseconds, and parsing them here rounds down to before the arrival.
+  const at = new Date(Math.max(Date.now(), Date.parse(c.checked_in_at) + 1));
   const saved = await recordCheckout(c.id, { at, by: "participante", distance });
   if (!saved) {
     // A checkout already existed (repeated tap, another tab, or a leader recorded it): show the one that counts.
