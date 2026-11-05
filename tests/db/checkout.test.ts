@@ -96,6 +96,13 @@ describe("participant checkout", () => {
     expect(JSON.stringify(sendMail.mock.calls)).not.toMatch(/cid:|<img/);
   });
 
+  it("a checkout right after arrival works when the database clock is ahead of the server's", async () => {
+    await pg.query("update public.checkins set checked_in_at = now() + interval '2 seconds' where id = $1", [teenCheckin]);
+    const r = await json(await call(checkoutRoute.POST, "POST", "/api/checkin/checkout", { body: {}, cookie: visitCookie(teen, teenCheckin) }));
+    expect(r.status).toBe(200);
+    expect(r.data.checkedOutAt).toBe(r.data.checkedInAt.replace(/(\.\d{3})\d*/, "$1").replace(/\+00:00$/, "Z"));
+  });
+
   it("three simultaneous confirmations record one checkout and all return it", async () => {
     const cookie = visitCookie(teen, teenCheckin);
     const first = await json(await call(checkoutRoute.POST, "POST", "/api/checkin/checkout", { body: {}, cookie }));
