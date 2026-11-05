@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type Service = { date: string; registered: number; visitors: number; total: number };
+type Service = { date: string; registered: number; visitors: number; total: number; checkouts?: number };
 type Rank = {
   memberId: string;
   name: string;
@@ -99,6 +99,18 @@ export function PastorDashboard({ onUnauthorized }: { onUnauthorized: () => void
           }
         />
         <Kpi label="Adolescentes diferentes" value={fmt(kpis.uniqueMembers)} note={kpis.uniqueVisitors ? `+ ${fmt(kpis.uniqueVisitors)} visitante(s)` : undefined} />
+        {kpis.latest && (
+          <Kpi
+            wide
+            label={`Saída confirmada · ${ddmm(kpis.latest.date)}`}
+            value={`${fmt(kpis.latest.checkouts ?? 0)} de ${fmt(kpis.latest.total)}`}
+            note={
+              kpis.latest.total - (kpis.latest.checkouts ?? 0)
+                ? `${fmt(kpis.latest.total - (kpis.latest.checkouts ?? 0))} sem saída registrada (pelo adolescente ou por um líder)`
+                : "todas as saídas registradas"
+            }
+          />
+        )}
       </div>
 
       <div className="card dash__card">
@@ -140,9 +152,9 @@ export function PastorDashboard({ onUnauthorized }: { onUnauthorized: () => void
   );
 }
 
-function Kpi({ label, value, note }: { label: string; value: string; note?: string }) {
+function Kpi({ label, value, note, wide }: { label: string; value: string; note?: string; wide?: boolean }) {
   return (
-    <div className="kpi">
+    <div className={`kpi ${wide ? "kpi--wide" : ""}`}>
       <div className="kpi__label">{label}</div>
       <div className="kpi__value">{value}</div>
       {note && <div className="kpi__note">{note}</div>}
@@ -194,10 +206,10 @@ function EvolutionChart({ data }: { data: Service[] }) {
 
       {asTable ? (
         <table className="viz__table">
-          <thead><tr><th>Encontro</th><th>Cadastrados</th><th>Visitantes</th><th>Total</th></tr></thead>
+          <thead><tr><th>Encontro</th><th>Cadastrados</th><th>Visitantes</th><th>Total</th><th>Saídas</th></tr></thead>
           <tbody>
             {[...data].reverse().map((d) => (
-              <tr key={d.date}><td>{longDate(d.date)}</td><td>{d.registered}</td><td>{d.visitors}</td><td><strong>{d.total}</strong></td></tr>
+              <tr key={d.date}><td>{longDate(d.date)}</td><td>{d.registered}</td><td>{d.visitors}</td><td><strong>{d.total}</strong></td><td>{d.checkouts ?? 0}</td></tr>
             ))}
           </tbody>
         </table>
@@ -246,6 +258,7 @@ function EvolutionChart({ data }: { data: Service[] }) {
               <span><i className="legend__sw legend__sw--1" /> Cadastrados <b>{data[hover].registered}</b></span>
               {hasVisitors && <span><i className="legend__sw legend__sw--2" /> Visitantes <b>{data[hover].visitors}</b></span>}
               <span>Total <b>{data[hover].total}</b></span>
+              <span>Saída confirmada <b>{data[hover].checkouts ?? 0}</b></span>
             </div>
           )}
         </div>

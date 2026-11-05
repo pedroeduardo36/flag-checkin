@@ -26,6 +26,25 @@ describe("visit session (who can see the check-in photo and time again)", () => 
     expect(readVisitSession(`${forged}.${sig}`)).toBeNull(); // trocar o adolescente invalida a assinatura
   });
 
+  it("stores the check-in (for checkout) and also works for visitors, without granting teen access", async () => {
+    const { VISIT_COOKIE, createVisitSession, hasVisitSession, readVisitSession, visitFromRequest } = await load();
+    const ana = createVisitSession("ana", "2026-10-25", Date.now(), "ck-1");
+    expect(readVisitSession(ana.value)).toMatchObject({ mid: "ana", cid: "ck-1", date: "2026-10-25" });
+    const vis = createVisitSession(null, "2026-10-25", Date.now(), "ck-2");
+    const c = `${VISIT_COOKIE}=${encodeURIComponent(vis.value)}`;
+    expect(visitFromRequest(req(c))).toMatchObject({ mid: null, cid: "ck-2" });
+    expect(hasVisitSession(req(c), "ana", "2026-10-25")).toBe(false);
+    // Swapping the check-in in the cookie breaks the signature: you can't close someone else's visit.
+    const [, sig] = ana.value.split(".");
+    const forged = Buffer.from(JSON.stringify({ mid: "ana", cid: "ck-9", date: "2026-10-25", exp: Date.now() + 1e6 })).toString("base64url");
+    expect(readVisitSession(`${forged}.${sig}`)).toBeNull();
+  });
+
+  it("old cookie without the check-in is still valid", async () => {
+    const { createVisitSession, readVisitSession } = await load();
+    expect(readVisitSession(createVisitSession("ana", "2026-10-25").value)).toMatchObject({ mid: "ana", date: "2026-10-25" });
+  });
+
   it("expires", async () => {
     const { createVisitSession, readVisitSession } = await load();
     const now = Date.now();

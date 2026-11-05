@@ -13,7 +13,7 @@ async function allCheckins(): Promise<CheckinRow[]> {
   for (let from = 0; ; from += 1000) {
     const { data, error } = await db()
       .from("checkins")
-      .select("service_date, member_id, visitor_phone")
+      .select("service_date, member_id, visitor_phone, checked_out_at")
       .order("service_date")
       .range(from, from + 999);
     if (error) throw error;

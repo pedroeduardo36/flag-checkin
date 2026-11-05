@@ -19,7 +19,11 @@ type Step =
   | { name: "identify" }
   | { name: "explain"; pending: Pending; justRegistered: boolean }
   | { name: "photo"; pending: Pending }
-  | { name: "success"; who: string; photo: string | null; at: string | null; repeat: boolean; kind: "registro" | "criativa" | "visitante" };
+  | {
+      name: "success"; who: string; photo: string | null; at: string | null; repeat: boolean; kind: "registro" | "criativa" | "visitante";
+      /** Checkout: null = not recorded. canExit = this phone holds the visit session (it can confirm the checkout). */
+      out: string | null; outByLeader?: boolean; canExit: boolean;
+    };
 
 const PENDING_KEY = "o2_checkin_pendente";
 
@@ -63,6 +67,26 @@ export default function CheckinPage() {
 
   useEffect(() => {
     (async () => {
+      // Already checked in today on this phone: show the visit and the checkout.
+      const v = await fetch("/api/checkin/checkout", { cache: "no-store" }).then((r) => r.json()).catch(() => ({}));
+      if (v.visit)
+        return setStep({
+          name: "success", who: v.visit.name, photo: v.visit.photoUrl, at: v.visit.checkedInAt, repeat: true,
+          kind: v.visit.isVisitor ? "visitante" : "criativa", out: v.visit.checkedOutAt, outByLeader: v.visit.checkoutBy === "lider", canExit: true,
+        });
+      start();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Start of the check-in (also used for "check in someone else" on this phone). */
+  function start() {
+    setName("");
+    setBirth("");
+    setPhone("");
+    setPhoto(null);
+    setError(null);
+    (async () => {
       // Already identified at the entrance? Go straight to the photo.
       const pending = loadPending();
       if (pending) return setStep({ name: "photo", pending });
@@ -77,8 +101,7 @@ export default function CheckinPage() {
       if (p?.state === "granted") locate();
       if (p?.state === "denied") setStep({ name: "denied" });
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }
 
   function locate() {
     if (!("geolocation" in navigator)) {
@@ -123,7 +146,7 @@ export default function CheckinPage() {
       return setError({ msg: r.data.error ?? "Erro inesperado.", code: r.data.code });
     }
     if (r.data.alreadyCheckedIn)
-      return setStep({ name: "success", who: r.data.name, photo: r.data.photoUrl, at: r.data.checkedInAt, repeat: true, kind: "criativa" });
+      return setStep({ name: "success", who: r.data.name, photo: r.data.photoUrl, at: r.data.checkedInAt, repeat: true, kind: "criativa", out: r.data.checkedOutAt ?? null, canExit: true });
     const pending: Pending = { token: r.data.token, firstName: r.data.firstName, photoKind: r.data.photoKind, expiresAt: r.data.expiresAt };
     savePending(pending);
     setPhoto(null);
@@ -146,7 +169,7 @@ export default function CheckinPage() {
       if (r.data.code === "DUPLICADO") {
         // Face matched and there was already a check-in today: show the existing check-in.
         savePending(null);
-        return setStep({ name: "success", who: r.data.name, photo: r.data.photoUrl, at: r.data.checkedInAt, repeat: true, kind: "criativa" });
+        return setStep({ name: "success", who: r.data.name, photo: r.data.photoUrl, at: r.data.checkedInAt, repeat: true, kind: "criativa", out: r.data.checkedOutAt ?? null, canExit: true });
       }
       if (FACE_CODES.includes(r.data.code)) setPhoto(null);
       return setError({ msg: r.data.error ?? "Erro inesperado.", code: r.data.code });
@@ -159,7 +182,7 @@ export default function CheckinPage() {
       return setStep({ name: "explain", pending: next, justRegistered: true });
     }
     savePending(null);
-    setStep({ name: "success", who: r.data.name, photo, at: r.data.checkedInAt, repeat: false, kind: r.data.photoKind });
+    setStep({ name: "success", who: r.data.name, photo, at: r.data.checkedInAt, repeat: false, kind: r.data.photoKind, out: null, canExit: true });
   }
 
   async function visitor(e: React.FormEvent) {
@@ -174,7 +197,11 @@ export default function CheckinPage() {
       if (r.data.code === "FORA_DO_LOCAL") return locate();
       return setError({ msg: r.data.error ?? "Erro inesperado." });
     }
-    setStep({ name: "success", who: r.data.name, photo, at: r.data.checkedInAt ?? null, repeat: !!r.data.alreadyCheckedIn, kind: "visitante" });
+    // A repeat visitor (same name and phone again) doesn't get the visit session: the checkout is left to a leader.
+    setStep({
+      name: "success", who: r.data.name, photo, at: r.data.checkedInAt ?? null, repeat: !!r.data.alreadyCheckedIn, kind: "visitante",
+      out: null, canExit: !r.data.alreadyCheckedIn,
+    });
   }
 
   const errorBox = error && (
@@ -393,9 +420,38 @@ export default function CheckinPage() {
               <strong>{fmtTime(step.at)}</strong>. Bom culto! 🙌
             </p>
           )}
+          <Exit out={step.out} byLeader={!!step.outByLeader} canExit={step.canExit} />
+          {step.repeat && (
+            <button type="button" className="linklike checkin__other" onClick={start}>Fazer o check-in de outra pessoa neste celular</button>
+          )}
         </div>
       )}
     </Shell>
+  );
+}
+
+/** Checkout status on the check-in screen. Without confirmation it stays "not recorded": nothing records it automatically. */
+function Exit({ out, byLeader, canExit }: { out: string | null; byLeader: boolean; canExit: boolean }) {
+  if (out)
+    return (
+      <div className="exit">
+        <span className="tag tag--ok">Saída às {fmtTime(out)}{byLeader ? " · registrada por um líder" : ""}</span>
+      </div>
+    );
+  return (
+    <div className="exit">
+      <span className="tag tag--warn">Saída não registrada</span>
+      {canExit ? (
+        <>
+          <a className="btn btn--ghost" href="/checkout">Estou indo embora</a>
+          <p className="hint center-text">
+            Na hora de ir embora, toque aqui ou leia o QR code da saída. Fechar o navegador não registra a saída.
+          </p>
+        </>
+      ) : (
+        <p className="hint center-text">Na hora de ir embora, avise um líder para registrar a sua saída.</p>
+      )}
+    </div>
   );
 }
 

@@ -16,7 +16,7 @@ export default function PrivacidadePage() {
     ["Nome, telefone e e-mail do responsável", "Confirmar o cadastro, avisar de cada check-in e atender pedidos", "Enquanto o cadastro existir"],
     ["Foto de registro e dados do rosto (biometria)", "Conferir que quem faz o check-in é o próprio adolescente", "Enquanto o cadastro existir, ou até a autorização ser retirada"],
     ["Foto criativa de cada check-in", "Mostrar aos líderes quem chegou", `${R.checkinPhotoDays} dias`],
-    ["Dia e horário de cada presença", "Controle de presença e acompanhamento pelos líderes", "Enquanto o cadastro existir"],
+    ["Dia e horário de cada presença, e da saída quando é confirmada", "Controle de presença e acompanhamento pelos líderes", "Enquanto o cadastro existir"],
     ["Distância até a igreja no check-in", "Conferir que o check-in foi feito no local", "Enquanto o cadastro existir"],
     ["Registro técnico das tentativas (com o endereço de internet embaralhado)", "Investigar abusos", `${R.auditDays} dias`],
     ["Visitante: nome, telefone e foto opcional", "Registrar a visita", `${R.visitorDays} dias`],

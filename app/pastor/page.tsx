@@ -6,6 +6,7 @@ import { RegistrationForm } from "@/components/RegistrationForm";
 import { PastorDashboard } from "@/components/PastorDashboard";
 import { LeaderAuth, type AuthStep } from "@/components/LeaderAuth";
 import { LeadersAdmin } from "@/components/LeadersAdmin";
+import { checkoutLabel, type CheckoutBy } from "@/lib/checkout";
 
 type Item = {
   id: string;
@@ -20,6 +21,9 @@ type Item = {
   avatarUrl: string | null;
   faceDistance: number | null;
   guardianEmailStatus: string | null;
+  checkedOutAt?: string | null;
+  checkoutBy?: CheckoutBy | null;
+  checkoutEmailStatus?: string | null;
 };
 
 type Auth = "checking" | "in" | AuthStep;
@@ -118,11 +122,14 @@ function Feed({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [items, setItems] = useState<Item[]>([]);
   const [examples, setExamples] = useState<Item[]>([]);
   const [total, setTotal] = useState(0);
+  const [checkedOut, setCheckedOut] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [online, setOnline] = useState(true);
   const [fresh, setFresh] = useState<Set<string>>(new Set());
   const [now, setNow] = useState(() => Date.now());
   const latest = useRef<string | null>(null);
+  const itemsRef = useRef<Item[]>([]);
+  itemsRef.current = items;
   const lastFull = useRef(0);
   const loading = useRef(false);
 
@@ -135,24 +142,26 @@ function Feed({ onUnauthorized }: { onUnauthorized: () => void }) {
       const r = await fetch(`/api/pastor/feed${qs}`, { cache: "no-store" });
       if (r.status === 401) return onUnauthorized();
       if (!r.ok) throw new Error(String(r.status));
-      const d: { total: number; items: Item[]; examples?: Item[] } = await r.json();
+      const d: { total: number; checkedOut?: number; cursor?: string; items: Item[]; examples?: Item[] } = await r.json();
       setOnline(true);
       setTotal(d.total);
+      setCheckedOut(d.checkedOut ?? 0);
       if (full) {
         lastFull.current = Date.now();
         setItems(d.items);
         setExamples(d.examples ?? []);
       } else if (d.items.length) {
-        setItems((prev) => {
-          const known = new Set(prev.map((i) => i.id));
-          return [...d.items.filter((i) => !known.has(i.id)), ...prev];
-        });
-        setFresh((s) => new Set([...s, ...d.items.map((i) => i.id)]));
-        setTimeout(() => setFresh((s) => new Set([...s].filter((id) => !d.items.some((i) => i.id === id)))), 6000);
+        // New arrivals go on top; recorded or undone checkouts update the item already on screen.
+        const known = new Set(itemsRef.current.map((i) => i.id));
+        const arrivals = d.items.filter((i) => !known.has(i.id));
+        const changed = new Map(d.items.filter((i) => known.has(i.id)).map((i) => [i.id, i]));
+        setItems((prev) => [...arrivals, ...prev.map((i) => changed.get(i.id) ?? i)]);
+        if (arrivals.length) {
+          setFresh((s) => new Set([...s, ...arrivals.map((i) => i.id)]));
+          setTimeout(() => setFresh((s) => new Set([...s].filter((id) => !arrivals.some((i) => i.id === id)))), 6000);
+        }
       }
-      const newest = d.items[0];
-      if (newest) latest.current = newest.checkedInAt;
-      else if (full) latest.current = new Date(0).toISOString();
+      latest.current = d.cursor ?? d.items[0]?.checkedInAt ?? latest.current ?? new Date(0).toISOString();
     } catch {
       setOnline(false);
     } finally {
@@ -183,6 +192,11 @@ function Feed({ onUnauthorized }: { onUnauthorized: () => void }) {
         <div>
           <div className="feed-stats__n">{total}</div>
           <div className="feed-stats__l">{total === 1 ? "adolescente presente" : "adolescentes presentes"}</div>
+          {total > 0 && (
+            <div className="feed-stats__out">
+              {checkedOut} com saída confirmada · {total - checkedOut} sem saída registrada
+            </div>
+          )}
         </div>
         <div className="feed-stats__r">
           <span className={`live ${online ? "" : "live--off"}`}><span className="live-dot" aria-hidden /> {online ? "Ao vivo" : "Reconectando…"}</span>
@@ -203,7 +217,15 @@ function Feed({ onUnauthorized }: { onUnauthorized: () => void }) {
       <ol className="feed" aria-live="polite">
         {items.map((it) => (
           <Post key={it.id} it={it} now={now} isNew={fresh.has(it.id)}
-            onRemoved={() => { setItems((p) => p.filter((x) => x.id !== it.id)); setTotal((t) => Math.max(0, t - 1)); }}
+            onRemoved={() => {
+              setItems((p) => p.filter((x) => x.id !== it.id));
+              setTotal((t) => Math.max(0, t - 1));
+              if (it.checkedOutAt) setCheckedOut((n) => Math.max(0, n - 1));
+            }}
+            onCheckout={(out) => {
+              setItems((p) => p.map((x) => (x.id === it.id ? { ...x, ...out } : x)));
+              setCheckedOut((n) => Math.max(0, n + (out.checkedOutAt ? 1 : -1)));
+            }}
             onUnauthorized={onUnauthorized} />
         ))}
       </ol>
@@ -225,9 +247,13 @@ function Feed({ onUnauthorized }: { onUnauthorized: () => void }) {
 const fmtDay = (d: string) =>
   new Date(`${d}T12:00:00Z`).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", timeZone: "UTC" });
 
-type PostProps = { it: Item; now: number; isNew?: boolean; example?: boolean; onRemoved?: () => void; onUnauthorized?: () => void };
+type CheckoutState = { checkedOutAt: string | null; checkoutBy: CheckoutBy | null };
+type PostProps = {
+  it: Item; now: number; isNew?: boolean; example?: boolean;
+  onRemoved?: () => void; onCheckout?: (out: CheckoutState) => void; onUnauthorized?: () => void;
+};
 
-function Post({ it, now, isNew = false, example = false, onRemoved, onUnauthorized }: PostProps) {
+function Post({ it, now, isNew = false, example = false, onRemoved, onCheckout, onUnauthorized }: PostProps) {
   return (
           <li className={`post ${isNew ? "post--new" : ""} ${example ? "post--example" : ""}`}>
             <header className="post__head">
@@ -259,51 +285,95 @@ function Post({ it, now, isNew = false, example = false, onRemoved, onUnauthoriz
               {it.faceDistance != null && <span className="tag">🙂 Rosto confere</span>}
               {it.guardianEmailStatus === "enviado" && <span className="tag">✉️ Responsável avisado</span>}
               {it.guardianEmailStatus === "falhou" && <span className="tag tag--warn">✉️ E-mail falhou</span>}
+              {!example && (
+                <span className={`tag ${it.checkedOutAt ? "tag--out" : "tag--warn"}`}>🚪 {checkoutLabel(it.checkedOutAt ?? null, it.checkoutBy ?? null)}</span>
+              )}
+              {it.checkoutEmailStatus === "enviado" && <span className="tag">✉️ Avisado da saída</span>}
             </footer>
-            {onRemoved && <Correction it={it} onRemoved={onRemoved} onUnauthorized={onUnauthorized!} />}
+            {onRemoved && onCheckout && <Correction it={it} onRemoved={onRemoved} onCheckout={onCheckout} onUnauthorized={onUnauthorized!} />}
           </li>
   );
 }
 
-/** Attendance correction: removes a check-in made by mistake, with a reason (it goes to the action log). */
-function Correction({ it, onRemoved, onUnauthorized }: { it: Item; onRemoved: () => void; onUnauthorized: () => void }) {
-  const [open, setOpen] = useState(false);
+const nowHHMM = () =>
+  new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Sao_Paulo" });
+
+type Fix = "remover" | "registrar_saida" | "desfazer_saida";
+
+/**
+ * Leader corrections, always with a reason (they go to the action log):
+ * remove a check-in made by mistake, record the checkout of someone who forgot to confirm
+ * (with the time), or undo a checkout confirmed by mistake. The attendance never changes with the checkout.
+ */
+function Correction({ it, onRemoved, onCheckout, onUnauthorized }: {
+  it: Item; onRemoved: () => void; onCheckout: (out: CheckoutState) => void; onUnauthorized: () => void;
+}) {
+  const [open, setOpen] = useState<Fix | null>(null);
   const [reason, setReason] = useState("");
+  const [time, setTime] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function remove(e: React.FormEvent) {
+  const close = () => { setOpen(null); setReason(""); setError(null); };
+
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (reason.trim().length < 5) return setError("Escreva o motivo (ex.: check-in feito por outra pessoa).");
+    if (reason.trim().length < 5)
+      return setError(open === "remover" ? "Escreva o motivo (ex.: check-in feito por outra pessoa)." : "Escreva o motivo (ex.: esqueceu de confirmar a saída).");
     setBusy(true);
     setError(null);
     const r = await fetch("/api/pastor/checkins", {
-      method: "DELETE",
+      method: open === "remover" ? "DELETE" : "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: it.id, reason }),
+      body: JSON.stringify(open === "remover" ? { id: it.id, reason } : { id: it.id, action: open, reason, time }),
     }).catch(() => null);
     setBusy(false);
     if (r?.status === 401) return onUnauthorized();
-    if (r?.ok) return onRemoved();
-    setError((await r?.json().catch(() => null))?.error ?? "Não foi possível remover.");
+    const d = await r?.json().catch(() => null);
+    if (r?.ok) {
+      if (open === "remover") return onRemoved();
+      onCheckout({ checkedOutAt: d.checkedOutAt, checkoutBy: d.checkoutBy });
+      return close();
+    }
+    setError(d?.error ?? "Não foi possível salvar a correção.");
   }
 
   if (!open)
     return (
       <div className="post__fix">
-        <button className="linklike" onClick={() => setOpen(true)}>Corrigir presença</button>
+        {it.checkedOutAt ? (
+          <button className="linklike" onClick={() => setOpen("desfazer_saida")}>Desfazer saída</button>
+        ) : (
+          <button className="linklike" onClick={() => { setTime(nowHHMM()); setOpen("registrar_saida"); }}>Registrar saída</button>
+        )}
+        <span aria-hidden> · </span>
+        <button className="linklike" onClick={() => setOpen("remover")}>Corrigir presença</button>
       </div>
     );
   return (
-    <form className="post__fix post__fix--open" onSubmit={remove} noValidate>
+    <form className="post__fix post__fix--open" onSubmit={submit} noValidate>
+      {open === "registrar_saida" && (
+        <label className="field">
+          <span>Horário em que {it.firstName} saiu</span>
+          <input type="time" required value={time} onChange={(e) => setTime(e.target.value)} />
+        </label>
+      )}
       <label className="field">
-        <span>Remover o check-in de {it.firstName}. Motivo:</span>
-        <input autoFocus value={reason} maxLength={200} placeholder="Ex.: feito por outra pessoa" onChange={(e) => setReason(e.target.value)} />
+        <span>
+          {open === "remover" && `Remover o check-in de ${it.firstName}. Motivo:`}
+          {open === "registrar_saida" && "Motivo:"}
+          {open === "desfazer_saida" && `Desfazer a saída de ${it.firstName} (a presença continua). Motivo:`}
+        </span>
+        <input autoFocus value={reason} maxLength={200}
+          placeholder={open === "remover" ? "Ex.: feito por outra pessoa" : open === "registrar_saida" ? "Ex.: esqueceu de confirmar a saída" : "Ex.: confirmou sem querer, ainda está no culto"}
+          onChange={(e) => setReason(e.target.value)} />
       </label>
       {error && <div className="alert" role="alert">{error}</div>}
       <div className="post__fix-actions">
-        <button className="chip chip--danger" disabled={busy}>{busy ? "Removendo…" : "Remover presença"}</button>
-        <button type="button" className="chip" onClick={() => { setOpen(false); setError(null); }}>Cancelar</button>
+        <button className={`chip ${open === "remover" ? "chip--danger" : ""}`} disabled={busy}>
+          {busy ? "Salvando…" : open === "remover" ? "Remover presença" : open === "registrar_saida" ? "Registrar saída" : "Desfazer saída"}
+        </button>
+        <button type="button" className="chip" onClick={close}>Cancelar</button>
       </div>
     </form>
   );

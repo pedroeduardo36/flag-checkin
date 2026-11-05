@@ -50,3 +50,14 @@ describe("pastor dashboard", () => {
     expect(empty.ranking).toEqual([]);
   });
 });
+
+describe("checkouts on the dashboard", () => {
+  it("counts attendances with a confirmed checkout per service", () => {
+    const d = buildDashboard([
+      { ...m("ana", "2026-10-25"), checked_out_at: "2026-10-26T00:15:00Z" },
+      m("bia", "2026-10-25"),
+      { ...v("61911111111", "2026-10-25"), checked_out_at: "2026-10-26T00:20:00Z" },
+    ]);
+    expect(d.kpis.latest).toMatchObject({ total: 3, checkouts: 2 });
+  });
+});

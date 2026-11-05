@@ -39,13 +39,16 @@ The **legal basis** column is our proposed hypothesis. The legal review ([legal-
 | `face_distance` | Auditing the face match (just a number, not biometric data) | While the registration exists |
 | `user_agent` | Investigating abuse | 30 days |
 | `guardian_email_status`, `guardian_email_at` | Knowing whether the notice was delivered | While the registration exists |
+| `checked_out_at`, `checkout_by`, `checkout_leader_id`, `checkout_recorded_at` | Leaving the service (checkout): time, whether the teen or a leader recorded it, and when | While the registration exists |
+| `checkout_distance_m` | Distance to the church at checkout, only if the phone had already granted location permission. Never blocks the checkout | While the registration exists |
+| `checkout_email_status` | Knowing whether the checkout notice was delivered | While the registration exists |
 | Visitor: `visitor_name`, `visitor_phone`, optional photo | Recording the visit | **180 days** |
 
 ## Technical logs
 
 | Table | Contents | Retention |
 | --- | --- | --- |
-| `audit_events` | Check-in attempts: outcome, registration, IP as an HMAC, browser and **distance** (no coordinates anymore) | **90 days** |
+| `audit_events` | Check-in and checkout attempts: outcome, registration, IP as an HMAC, browser and **distance** (no coordinates anymore) | **90 days** |
 | `admin_audit` | Leader actions, consents, exports and deletions. Stores no teen name, password, code or biometrics | **2 years** |
 | `guardian_verifications` | Confirmation link hash, email, expiry | 30 days after being used or expiring |
 | `auth_rate_limits` | Attempt counters (key with the leader's email or the IP as an HMAC) | 1 day |

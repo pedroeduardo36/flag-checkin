@@ -17,7 +17,7 @@ export function ipHash(req: Request): string | null {
  */
 export function audit(
   req: Request,
-  e: { event: "identificar" | "confirmar"; outcome: string; memberId?: string | null; distance?: number | null },
+  e: { event: "identificar" | "confirmar" | "checkout"; outcome: string; memberId?: string | null; distance?: number | null },
 ) {
   const row = {
     event: e.event,

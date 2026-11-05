@@ -2,7 +2,8 @@
 
 > **Current flow:** the guardian registers the teen at `/cadastro`, with no photo or password. At church, the teen checks
 > in with their full name and birth date. The first check-in takes the registration photo, which must contain a single
-> face; later ones take the creative photo during the service. Visitors only give a name and phone number.
+> face; later ones take the creative photo during the service. Visitors only give a name and phone number. On the way
+> out, the teen confirms the checkout with one tap.
 
 A web app (it opens in the phone's browser, with nothing to install) for teens to check in when they arrive at the service.
 
@@ -19,6 +20,8 @@ QR code / NFC tag ──► /checkin
       Later ones: explanation → CREATIVE photo during the service (friends are fine; one face must be the teen's)
    4. Success screen + text-only email to the guardian with the time
 
+"Estou indo embora" button, exit QR code or NFC ──► /checkout
+   5. One tap confirms the checkout (visit session stored by the check-in; nothing to type)
 ```
 
 ## Stack
@@ -69,6 +72,7 @@ Copy `.env.example` to `.env.local` and fill it in:
 | `CHECKIN_SECRET` | generate with `openssl rand -hex 32`. It also encrypts the leaders' authenticator secret: **changing it forces every leader to re-enroll their authenticator** (access reset) |
 | `PUBLIC_APP_URL` | the app's final address (used by the QR code and email links) |
 | `CRON_SECRET` | protects the daily retention cron (`/api/cron/retencao`) |
+| `CHECKOUT_NOTICE` | `false` turns off the checkout email to the guardian (the time is still stored) |
 | `PRIVACY_EMAIL` | contact for privacy requests shown on `/privacidade` (defaults to the `EMAIL_FROM` sender) |
 
 ### 3. Run it locally
@@ -79,7 +83,7 @@ npm run dev
 Open <http://localhost:3000>. Check the integration:
 
 - <http://localhost:3000/api/health> should return `"ok": true` (variables, tables, view and bucket).
-- `npm run test:e2e` runs a test registration and check-in against the real database and deletes everything at the end.
+- `npm run test:e2e` runs a test registration, check-in and checkout against the real database and deletes everything at the end.
 
 To test on a phone, use the Vercel HTTPS address (camera and GPS don't work over `http://` outside localhost).
 
@@ -93,7 +97,9 @@ To test on a phone, use the Vercel HTTPS address (camera and GPS don't work over
 **QR codes**
 
 The app generates them: open **https://flag-checkin.vercel.app/qrcode** to print or download PNG/SVG
-(direct images: `/api/qrcode` · `/api/qrcode?format=svg`). To generate it locally:
+(direct images: `/api/qrcode` · `/api/qrcode?format=svg`). The **Saída** tab
+(`/qrcode?tipo=saida`, image `/api/qrcode?destino=saida`) is the exit QR code for the door, pointing to `/checkout`.
+To generate the entrance code locally:
 ```bash
 npm run qrcode -- https://YOUR-APP.vercel.app
 ```
@@ -101,13 +107,13 @@ It creates `qrcode-checkin.png` (print) and `qrcode-checkin.svg` (print shop/ban
 
 **NFC tags** (buy NTAG213 or NTAG215 — stickers or key fobs, a few cents each)
 1. Install the free **NFC Tools** app (Android or iPhone).
-2. *Write → Add a record → URL/URI* → `https://YOUR-APP.vercel.app/checkin`.
+2. *Write → Add a record → URL/URI* → `https://YOUR-APP.vercel.app/checkin` (or `/checkout` for the exit tag).
 3. *Write* and hold the tag to the phone. Optional: *Other → Lock tag* so nobody can rewrite it.
 4. The teen holds their phone to the tag (on iPhone, the top of the device) and the link opens on its own.
 
 ## Guardian email
 
-The guardian gets a **confirmation link** at registration and, at every check-in, a **text-only** email with
+The guardian gets a **confirmation link** at registration and, at every check-in and checkout, a **text-only** email with
 the time (no photo). Pick **one** free SMTP provider:
 
 | Provider | Free limit | Needs your own domain? | Settings |
@@ -150,8 +156,9 @@ uses **Redefinir acesso** on the Líderes tab: a new activation code is issued a
 
 - **Leaders:** create accounts, deactivate (that person's sessions end immediately), reactivate, reset access, end
   sessions, issue new recovery codes and the **action log** (read-only). Also possible duplicates and family privacy requests.
-- **Live:** who checked in today, newest first, refreshing on its own every 4 s.
-- **Dashboard:** services, average per service, latest service vs. the previous one, the attendance
+- **Live:** who checked in today, newest first, refreshing every 4 s. Each item shows the checkout status; leaders can
+  record a forgotten checkout (with the time) or undo one, always with a reason.
+- **Dashboard:** services, average per service, latest service vs. the previous one, confirmed checkouts, the attendance
   chart per service (registered teens and visitors) and the top-10 ranking. "↻ Atualizar" reloads the numbers.
 - **Register:** the guardian's registration form, for registering several teens in a row.
 
@@ -162,7 +169,7 @@ To see the feed working with nobody at church: `npm run simulate` (and `node scr
 to delete the simulated registrations afterwards).
 
 ## Viewing attendance
-In Supabase: **Table Editor → `presencas`** (list per service, with time, guardian and distance). To see a
+In Supabase: **Table Editor → `presencas`** (list per service, with time, checkout, guardian and distance). To see a
 photo, open **Storage → fotos** and the path in the `foto_checkin` or `foto_cadastro` column. The dashboard can export CSV.
 
 ## Security and LGPD
@@ -190,10 +197,12 @@ The retention periods ([inventory](privacy/data-inventory.md)) are applied daily
 ## Structure
 ```
 app/checkin/page.tsx              check-in flow (location → name and birth date or visitor → photo → success)
+app/checkout/page.tsx             one-tap checkout
 app/cadastro/page.tsx             registration by the guardian (no photo, no password)
 app/api/checkin/local             checks the location
 app/api/checkin/identificar       checks name + birth date, issues the token
 app/api/checkin/confirmar         registration (first) or creative photo → stores the check-in
+app/api/checkin/checkout          confirms the checkout (visit session)
 app/api/cadastro                  stores a new teen
 components/Brand.tsx              Flag header (prominent) + Juventude O2
 components/Camera.tsx             live front camera with a fallback
