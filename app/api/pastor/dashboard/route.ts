@@ -4,6 +4,7 @@ import { db } from "@/lib/server/supabase";
 import { PHOTO_BUCKET } from "@/lib/server/env";
 import { requireLeader, unauthorized } from "@/lib/server/leader";
 import { buildDashboard, type CheckinRow } from "@/lib/stats";
+import { upcomingServices } from "@/lib/server/schedule";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ async function allCheckins(): Promise<CheckinRow[]> {
 export const GET = withErrors(async (req: Request) => {
   if (!(await requireLeader(req))) return unauthorized();
 
-  const dash = buildDashboard(await allCheckins());
+  const [dash, upcoming] = await Promise.all([allCheckins().then((rows) => buildDashboard(rows)), upcomingServices()]);
 
   // Registration name and photo only for people in the ranking.
   const ids = dash.ranking.map((r) => r.memberId);
@@ -40,6 +41,7 @@ export const GET = withErrors(async (req: Request) => {
 
   return NextResponse.json({
     ...dash,
+    upcoming,
     ranking: dash.ranking.map((r) => {
       const m = info.get(r.memberId);
       return { ...r, name: m?.name ?? "—", avatarUrl: m?.photo_path ? urlOf.get(m.photo_path) ?? null : null };

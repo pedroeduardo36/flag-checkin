@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { shortServiceDate } from "@/lib/schedule";
 
 type Service = { date: string; registered: number; visitors: number; total: number };
 type Rank = {
@@ -24,6 +25,7 @@ type Dash = {
   };
   trend: Service[];
   ranking: Rank[];
+  upcoming: string[];
 };
 
 const ddmm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
@@ -69,7 +71,10 @@ export function PastorDashboard({ onUnauthorized }: { onUnauthorized: () => void
       </div>
     );
 
-  const { kpis, trend, ranking } = data;
+  const { kpis, trend, ranking, upcoming } = data;
+  const next = upcoming.length > 0 && (
+    <p className="hint dash__next">Próximos encontros: {upcoming.map(shortServiceDate).join(" · ")}</p>
+  );
   const delta = kpis.latest && kpis.previous ? kpis.latest.total - kpis.previous.total : null;
 
   if (!kpis.services)
@@ -78,6 +83,7 @@ export function PastorDashboard({ onUnauthorized }: { onUnauthorized: () => void
         <div className="empty__icon" aria-hidden>📊</div>
         <h2>Ainda não há encontros</h2>
         <p className="hint">Os números aparecem aqui depois do primeiro culto com check-ins.</p>
+        {next}
       </div>
     );
 
@@ -87,6 +93,7 @@ export function PastorDashboard({ onUnauthorized }: { onUnauthorized: () => void
         <h2>Visão geral</h2>
         <button className="dash__refresh" onClick={load} disabled={loading}>{loading ? "Atualizando…" : "↻ Atualizar"}</button>
       </div>
+      {next}
 
       <div className="kpis">
         <Kpi label="Encontros" value={fmt(kpis.services)} />
