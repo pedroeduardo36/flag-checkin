@@ -92,6 +92,10 @@ export default function CheckinPage() {
       if (pending) return setStep({ name: "photo", pending });
 
       const cfg = await fetch("/api/checkin/local").then((r) => r.json()).catch(() => ({}));
+      if (cfg.closed) {
+        setStep({ name: "intro" });
+        return setError({ msg: cfg.closed, code: "SEM_ENCONTRO" });
+      }
       if (cfg.disabled) {
         setTestMode(true);
         return setStep({ name: "identify" });

@@ -44,6 +44,7 @@ const one = async <T = Record<string, unknown>>(sql: string, params: unknown[] =
 beforeEach(async () => {
   pg = await freshDatabase();
   current.client = pgClient(pg);
+  await pg.query("insert into public.encontros (service_date) values ($1) on conflict do nothing", [serviceDate()]); // check-in opens on service days only
   sendMail.mockClear();
   pending.length = 0;
   delete process.env.CHECKOUT_NOTICE;

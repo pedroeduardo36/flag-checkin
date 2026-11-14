@@ -6,6 +6,7 @@ import { checkGeofence, createCheckinToken, parseCoords, serviceDate } from "@/l
 import { hasVisitSession } from "@/lib/server/visit";
 import { audit } from "@/lib/server/audit";
 import { checkinAllowed } from "@/lib/server/guardian";
+import { closedToday } from "@/lib/server/schedule";
 import { firstName, isValidBirthDate, nameMatchScore, nameTokens } from "@/lib/format";
 
 /** Identification stays valid until the creative photo, which is taken once the service has started. */
@@ -24,6 +25,8 @@ export const POST = withErrors(async (req: Request) => {
     return NextResponse.json({ error: "Localização ausente. Volte e ative a localização." }, { status: 400 });
   if (nameTokens(name).length < 2 || !isValidBirthDate(birthDate))
     return NextResponse.json({ error: "Informe nome e sobrenome e a data de nascimento." }, { status: 400 });
+  const closed = await closedToday();
+  if (closed) return log("SEM_ENCONTRO"), closed;
   if (!geo.inside) {
     log("FORA_DO_LOCAL");
     return NextResponse.json({ error: "Você precisa estar no local do culto para fazer o check-in.", code: "FORA_DO_LOCAL" }, { status: 403 });

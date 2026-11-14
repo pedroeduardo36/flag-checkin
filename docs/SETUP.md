@@ -189,6 +189,14 @@ photo, open **Storage → fotos** and the path in the `foto_checkin` or `foto_ca
   which leaders can also check in the pastor feed. The identification routes have no per-IP limit; if needed, add
   Upstash Ratelimit (free) to `/api/checkin/identificar` and `/api/cadastro`.
 
+## Service schedule
+Check-in only opens on the days listed in the `encontros` table (São Paulo date). On any other day the
+check-in page says it's closed and shows the next service, and the dashboard lists the upcoming ones.
+To add a service: Table Editor → `encontros` → Insert row, or in the SQL Editor:
+```sql
+insert into public.encontros (service_date) values ('2026-12-05');
+```
+
 ## Maintenance
 The retention periods ([inventory](privacy/data-inventory.md)) are applied daily at 03:00 by Vercel Cron
 (`/api/cron/retencao`, requires `CRON_SECRET` on Vercel). To check or run it by hand:

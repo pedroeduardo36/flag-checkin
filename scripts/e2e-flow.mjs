@@ -101,10 +101,22 @@ const waitForNotice = async (memberId) => {
   return null;
 };
 
+// Check-in only opens on a scheduled service day: schedule today for the test (and remove it afterwards).
+const { data: scheduled } = await sb.from("encontros").select("service_date").eq("service_date", today).maybeSingle();
+
 try {
   const h = await fetch(`${BASE}/api/health`).then((r) => r.json());
   check("health: variables, tables, bucket and face recognition", h.ok, h.checks);
   if (!h.ok) throw new Error("Fix /api/health before continuing.");
+
+  // ---------- Service schedule ----------
+  if (!scheduled) {
+    const closed = await post("/api/checkin/identificar", { ...inside, name: "Teste Automatico Flag", birthDate: "2010-01-01" });
+    check("no service scheduled today: check-in is closed (403)", closed.status === 403 && closed.data.code === "SEM_ENCONTRO", closed.data);
+    await sb.from("encontros").insert({ service_date: today });
+  }
+  const opened = await fetch(`${BASE}/api/checkin/local`).then((r) => r.json());
+  check("service scheduled today: check-in is open", opened.closed === null, opened);
 
   // ---------- Registration by the guardian: no photo, no password ----------
   let r = await post("/api/cadastro", { ...reg, guardianEmail2: "invalido" });
@@ -612,6 +624,7 @@ try {
     await sb.storage.from("fotos").remove(visitorCks.map((c) => c.photo_path).filter(Boolean));
     await sb.from("checkins").delete().in("id", visitorCks.map((c) => c.id));
   }
+  if (!scheduled) await sb.from("encontros").delete().eq("service_date", today);
   // Test leaders (sessions and codes cascade). The audit trail stays: it is immutable.
   await sb.from("leaders").delete().in("email", leaderEmails);
   await sb.from("auth_rate_limits").delete().like("key", "%e2e.lider.%");

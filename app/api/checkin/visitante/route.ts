@@ -6,6 +6,7 @@ import { PHOTO_BUCKET } from "@/lib/server/env";
 import { checkGeofence, decodePhoto, parseCoords, serviceDate } from "@/lib/server/security";
 import { isValidPhone, nameTokens, onlyDigits } from "@/lib/format";
 import { VISIT_COOKIE, createVisitSession, visitCookieOptions } from "@/lib/server/visit";
+import { closedToday } from "@/lib/server/schedule";
 
 // Visitor check-in: only name and phone; the creative photo is optional.
 export const POST = withErrors(async (req: Request) => {
@@ -23,6 +24,8 @@ export const POST = withErrors(async (req: Request) => {
   const photo = body?.photo ? decodePhoto(body.photo) : null;
   if (body?.photo && !photo) errors.photo = "Foto inválida. Tire outra ou continue sem foto.";
   if (Object.keys(errors).length) return NextResponse.json({ error: "Confira os dados.", errors }, { status: 400 });
+  const closed = await closedToday();
+  if (closed) return closed;
   if (!geo.inside)
     return NextResponse.json({ error: "Você precisa estar no local do culto para fazer o check-in.", code: "FORA_DO_LOCAL" }, { status: 403 });
 

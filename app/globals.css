@@ -410,3 +410,4 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 .qr__tabs { display: flex; gap: 8px; margin-bottom: 14px; }
 .qr__tabs a { text-decoration: none; }
 .qr__tabs .on { background: var(--flag-soft); border-color: var(--flag); }
+.dash__next { margin: -4px 0 12px; }
