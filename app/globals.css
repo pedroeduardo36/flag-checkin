@@ -366,3 +366,4 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 /* 4 tabs fit on a 360 px phone */
 .tabs { gap: 4px; }
 .tabs button { padding: 0 4px; font-size: 13px; gap: 5px; }
+.dash__next { margin: -4px 0 12px; }
