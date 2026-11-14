@@ -370,4 +370,8 @@ legend { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-sp
 /* 4 tabs fit on a 360 px phone */
 .tabs { gap: 4px; }
 .tabs button { padding: 0 4px; font-size: 13px; gap: 5px; }
-.dash__next { margin: -4px 0 12px; }
+.agenda { list-style: none; margin: 10px 0 14px; padding: 0; }
+.agenda__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); font-weight: 600; }
+.agenda__add .field { margin-bottom: 10px; }
+.agenda__add input { width: 100%; }
+.dash__card .alert { margin-top: 12px; }
