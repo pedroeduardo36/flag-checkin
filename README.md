@@ -136,6 +136,8 @@ flowchart LR
 
 ## Check-in flow
 
+Check-in only opens on a scheduled service day (`encontros` table, see [SETUP](docs/SETUP.md#service-schedule)).
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -238,7 +240,7 @@ the next step would be Upstash Ratelimit there.
 ## Tests
 
 ```bash
-npm test             # 78 unit tests (Vitest): dashboard, name search, masks, dates, haversine, HMAC, geofence, upload, faces, email, TOTP (RFC 6238 vectors), passwords, sessions
+npm test             # 80 unit tests (Vitest): dashboard, name search, masks, dates, haversine, HMAC, geofence, upload, faces, email, TOTP (RFC 6238 vectors), passwords, sessions
 npm run typecheck    # TypeScript in strict mode
 npm run test:e2e     # 87 end-to-end checks (including the P0 and P1 regressions) against the real Supabase project, cleaning up the data at the end
 npm run simulate     # two synthetic teens check in 8 s apart (to watch the live feed)

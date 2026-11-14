@@ -173,6 +173,14 @@ photo, open **Storage → fotos** and the path in the `foto_checkin` or `foto_ca
   which leaders can also check in the pastor feed. The identification routes have no per-IP limit; if needed, add
   Upstash Ratelimit (free) to `/api/checkin/identificar` and `/api/cadastro`.
 
+## Service schedule
+Check-in only opens on the days listed in the `encontros` table (São Paulo date). On any other day the
+check-in page says it's closed and shows the next service, and the dashboard lists the upcoming ones.
+To add a service: Table Editor → `encontros` → Insert row, or in the SQL Editor:
+```sql
+insert into public.encontros (service_date) values ('2026-12-05');
+```
+
 ## Maintenance
 Delete check-in selfies older than 6 months (SQL Editor):
 ```sql
