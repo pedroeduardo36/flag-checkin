@@ -118,7 +118,8 @@ export type AdminAction =
   | "conta_criada" | "conta_ativada" | "conta_desativada" | "conta_reativada"
   | "acesso_redefinido" | "sessoes_revogadas"
   | "totp_cadastrado" | "recuperacao_usada" | "codigos_recuperacao_gerados"
-  | "presenca_removida";
+  | "presenca_removida"
+  | "encontro_criado" | "encontro_removido";
 
 /**
  * Logs an admin or authentication action (insert-only table: the database refuses updates and
@@ -130,7 +131,7 @@ export async function adminAudit(
     actor?: Leader | null;
     action: AdminAction;
     outcome: "ok" | "negado" | "bloqueado";
-    targetType?: "lider" | "checkin" | "sessao";
+    targetType?: "lider" | "checkin" | "sessao" | "encontro";
     targetId?: string | null;
     targetLabel?: string | null;
     details?: Record<string, string | number | boolean | null>;
