@@ -191,8 +191,10 @@ photo, open **Storage → fotos** and the path in the `foto_checkin` or `foto_ca
 
 ## Service schedule
 Check-in only opens on the days listed in the `encontros` table (São Paulo date). On any other day the
-check-in page says it's closed and shows the next service, and the dashboard lists the upcoming ones.
-To add a service: Table Editor → `encontros` → Insert row, or in the SQL Editor:
+check-in page says it's closed and shows the next service.
+To add an extra service (today or a future date) or remove one that has no check-ins yet: `/pastor` → Dashboard →
+**Agenda de encontros**. Each change goes to the leaders' action log. Without the app: Table Editor → `encontros`
+→ Insert row, or in the SQL Editor:
 ```sql
 insert into public.encontros (service_date) values ('2026-12-05');
 ```

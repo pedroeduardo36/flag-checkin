@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { shortServiceDate } from "@/lib/schedule";
+import { ScheduleCard } from "./ScheduleCard";
 
 type Service = { date: string; registered: number; visitors: number; total: number; checkouts?: number };
 type Rank = {
@@ -72,19 +72,19 @@ export function PastorDashboard({ onUnauthorized }: { onUnauthorized: () => void
     );
 
   const { kpis, trend, ranking, upcoming } = data;
-  const next = upcoming.length > 0 && (
-    <p className="hint dash__next">Próximos encontros: {upcoming.map(shortServiceDate).join(" · ")}</p>
-  );
+  const schedule = <ScheduleCard upcoming={upcoming} onChange={load} onUnauthorized={onUnauthorized} />;
   const delta = kpis.latest && kpis.previous ? kpis.latest.total - kpis.previous.total : null;
 
   if (!kpis.services)
     return (
+      <>
       <div className="card center empty">
         <div className="empty__icon" aria-hidden>📊</div>
         <h2>Ainda não há encontros</h2>
         <p className="hint">Os números aparecem aqui depois do primeiro culto com check-ins.</p>
-        {next}
       </div>
+      {schedule}
+      </>
     );
 
   return (
@@ -93,7 +93,6 @@ export function PastorDashboard({ onUnauthorized }: { onUnauthorized: () => void
         <h2>Visão geral</h2>
         <button className="dash__refresh" onClick={load} disabled={loading}>{loading ? "Atualizando…" : "↻ Atualizar"}</button>
       </div>
-      {next}
 
       <div className="kpis">
         <Kpi label="Encontros" value={fmt(kpis.services)} />
@@ -125,6 +124,8 @@ export function PastorDashboard({ onUnauthorized }: { onUnauthorized: () => void
         <p className="hint dash__sub">Presentes em cada culto{trend.length < kpis.services ? ` · últimos ${trend.length}` : ""}</p>
         <EvolutionChart data={trend} />
       </div>
+
+      {schedule}
 
       <div className="card dash__card">
         <h3>Ranking de frequência</h3>
