@@ -22,6 +22,8 @@ type AuditRow = {
   outcome: "ok" | "negado" | "bloqueado";
   details: Record<string, unknown> | null;
 };
+type DupMember = { id: string; name: string; birthDate: string; guardianName: string; createdAt: string; checkins: number; hasPhoto: boolean };
+type DupPair = { duplicate: DupMember; original: DupMember; sameGuardian: boolean };
 type Issued = { name: string; email: string; code: string; expiresAt: string; reason: string };
 
 const ACTION_LABEL: Record<string, string> = {
@@ -38,6 +40,8 @@ const ACTION_LABEL: Record<string, string> = {
   recuperacao_usada: "Usou código de recuperação",
   codigos_recuperacao_gerados: "Gerou códigos de recuperação",
   presenca_removida: "Removeu presença",
+  duplicado_descartado: "Marcou como pessoas diferentes",
+  cadastro_mesclado: "Mesclou cadastros duplicados",
 };
 
 const fmtWhen = (iso: string) =>
@@ -104,6 +108,8 @@ export function LeadersAdmin({ onUnauthorized }: { onUnauthorized: () => void })
       {error && <div className="alert" role="alert">{error}</div>}
       {notice && <div className="info" role="status">{notice}</div>}
       {issued && <IssuedCode issued={issued} onClose={() => setIssued(null)} />}
+
+      <Duplicates onUnauthorized={onUnauthorized} onDone={load} />
 
       <div className="card dash__card">
         <h3>Líderes</h3>
@@ -173,6 +179,78 @@ export function LeadersAdmin({ onUnauthorized }: { onUnauthorized: () => void })
     </section>
   );
 }
+
+/** Similar registrations (same birth date and a compatible name) waiting for a leader's decision. */
+function Duplicates({ onUnauthorized, onDone }: { onUnauthorized: () => void; onDone: () => void }) {
+  const [pairs, setPairs] = useState<DupPair[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const r = await send("GET", "/api/lider/duplicados");
+    if (r.status === 401) return onUnauthorized();
+    if (r.status !== 200) return setError(r.data.error ?? "Não foi possível carregar os possíveis duplicados.");
+    setPairs(r.data.pairs);
+  }, [onUnauthorized]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function act(p: DupPair, action: "pessoas_diferentes" | "mesclar") {
+    const ask =
+      action === "mesclar"
+        ? `Mesclar os cadastros? As presenças de "${p.duplicate.name}" passam para o cadastro de ${fmtDay(p.original.createdAt)} e o cadastro mais novo é apagado.`
+        : `Manter os dois cadastros? "${p.duplicate.name}" e "${p.original.name}" ficam como pessoas diferentes.`;
+    if (!window.confirm(ask)) return;
+    setBusy(p.duplicate.id);
+    setError(null);
+    const r = await send("PATCH", "/api/lider/duplicados", { id: p.duplicate.id, action });
+    setBusy(null);
+    if (r.status === 401) return onUnauthorized();
+    if (r.status !== 200) return setError(r.data.error ?? "Não foi possível concluir.");
+    load();
+    onDone();
+  }
+
+  if (!pairs) return error ? <div className="alert" role="alert">{error}</div> : null;
+  return (
+    <div className="card dash__card">
+      <h3>Possíveis cadastros duplicados</h3>
+      <p className="hint dash__sub">Mesmo nascimento e nome parecido. Enquanto houver dois cadastros iguais, o check-in pede o nome completo ou um líder.</p>
+      {error && <div className="alert" role="alert">{error}</div>}
+      {!pairs.length && <p className="hint">Nenhum cadastro para revisar.</p>}
+      <ul className="leader-list">
+        {pairs.map((p) => (
+          <li key={p.duplicate.id} className="leader dup">
+            {[["Novo", p.duplicate], ["Existente", p.original]].map(([label, m]) => {
+              const x = m as DupMember;
+              return (
+                <div key={x.id} className="dup__side">
+                  <span className="tag">{label as string}</span>
+                  <strong>{x.name}</strong>
+                  <span className="hint">
+                    Nasc. {x.birthDate.split("-").reverse().join("/")} · resp. {x.guardianName} · cadastrado em {fmtDay(x.createdAt)}
+                    {" · "}{x.checkins} presença(s){x.hasPhoto ? " · com foto" : ""}
+                  </span>
+                </div>
+              );
+            })}
+            <div className="leader__tags">
+              <span className={`tag ${p.sameGuardian ? "tag--warn" : ""}`}>{p.sameGuardian ? "Mesmo contato do responsável" : "Contatos do responsável diferentes"}</span>
+            </div>
+            <div className="leader__actions">
+              <button className="chip" disabled={!!busy} onClick={() => act(p, "mesclar")}>É a mesma pessoa: mesclar</button>
+              <button className="chip" disabled={!!busy} onClick={() => act(p, "pessoas_diferentes")}>São pessoas diferentes</button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const fmtDay = (iso: string) => new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
 function IssuedCode({ issued, onClose }: { issued: Issued; onClose: () => void }) {
   return (
