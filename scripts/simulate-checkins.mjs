@@ -39,9 +39,12 @@ const people = [
 for (const [i, p] of people.entries()) {
   const c = await post("/api/cadastro", {
     name: p.name, phone: "61999990000", birthDate: "2010-05-20", guardianName: "Responsável Simulação",
-    guardianPhone: "61988880000", guardianEmail: env.SMTP_USER || "responsavel@example.com", consent: true,
+    guardianPhone: "61988880000", guardianEmail: env.SMTP_USER || "responsavel@example.com", consent: true, consentBiometric: true,
   });
   console.log(`registration (no photo): ${p.name} → ${c.status}`);
+  // Simulation: the "guardian" confirms straight in the database (in the real app, through the email link).
+  const now = new Date().toISOString();
+  await sb.from("members").update({ guardian_email_verified_at: now, biometric_consent_at: now }).eq("name", p.name);
   const id = await post("/api/checkin/identificar", { ...local, name: p.name, birthDate: "2010-05-20" });
   const ok = await post("/api/checkin/confirmar", { token: id.data.token, photo: photo(p.registration) });
   console.log(`first check-in (${id.data.photoKind} photo): ${p.name} → ${ok.status}`);

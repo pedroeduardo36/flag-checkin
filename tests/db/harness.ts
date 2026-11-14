@@ -14,11 +14,13 @@ const SUPABASE_PRELUDE = `
 /**
  * A fresh Postgres (PGlite, in-process) with every migration applied in order, as `supabase db push` would.
  * Runs as a superuser, like the migrations themselves; tests switch to service_role where it matters.
+ * `seed` runs right before the migration `before`, to test a migration against data that already exists.
  */
-export async function freshDatabase() {
+export async function freshDatabase(seed?: { before: string; run: (db: PGlite) => Promise<unknown> }) {
   const db = await PGlite.create();
   await db.exec(SUPABASE_PRELUDE);
   for (const file of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
+    if (seed && file.startsWith(seed.before)) await seed.run(db);
     try {
       // gen_random_uuid() is built into Postgres 13+; PGlite doesn't ship pgcrypto, which Supabase preinstalls.
       const sql = readFileSync(new URL(file, MIGRATIONS), "utf8").replace(/create extension if not exists pgcrypto;/i, "");

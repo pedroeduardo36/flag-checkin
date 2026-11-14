@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { withErrors } from "@/lib/server/http";
 import { db } from "@/lib/server/supabase";
-import { PHOTO_BUCKET } from "@/lib/server/env";
+import { flushPhotoDeletions } from "@/lib/server/photo-deletions";
 import { adminAudit, requireLeader, unauthorized } from "@/lib/server/leader";
 
 export const dynamic = "force-dynamic";
@@ -79,8 +79,9 @@ export const PATCH = withErrors(async (req: Request) => {
 
   const { data: leftovers, error: mError } = await db().rpc("mesclar_cadastro", { p_duplicado: d.id, p_original: d.possible_duplicate_of });
   if (mError) throw mError;
+  // mesclar_cadastro() queued the unused photos; delete them now (a failure stays queued for the next run).
   const paths = (leftovers as string[] | null) ?? [];
-  if (paths.length) await db().storage.from(PHOTO_BUCKET).remove(paths);
+  await flushPhotoDeletions();
   await adminAudit(req, {
     actor: s.leader, action: "cadastro_mesclado", outcome: "ok", targetType: "cadastro", targetId: d.possible_duplicate_of, targetLabel: label,
     details: { cadastro_apagado: d.id, fotos_apagadas: paths.length },

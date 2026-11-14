@@ -20,7 +20,7 @@ export function Shell({ children, compact }: { children: React.ReactNode; compac
     <main className="shell">
       <Brand compact={compact} />
       <section className="card">{children}</section>
-      <footer className="foot">Ministério Flag · Juventude O2</footer>
+      <footer className="foot">Ministério Flag · Juventude O2 · <a href="/privacidade">Privacidade</a></footer>
     </main>
   );
 }
