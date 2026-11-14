@@ -5,19 +5,21 @@ export const dynamic = "force-dynamic";
 
 /**
  * QR code pointing to the check-in page, generated on the fly by the server.
- * GET /api/qrcode            → PNG (1024 px)
- * GET /api/qrcode?format=svg → SVG (for print shops / banners)
+ * GET /api/qrcode               → PNG (1024 px)
+ * GET /api/qrcode?format=svg    → SVG (for print shops / banners)
+ * GET /api/qrcode?destino=saida → CHECKOUT QR (/checkout page), for the door
  */
 export const GET = withErrors(async (req: Request) => {
   const url = new URL(req.url);
   const base = (process.env.PUBLIC_APP_URL || url.origin).replace(/\/$/, "");
-  const target = `${base}/checkin`;
+  const exit = url.searchParams.get("destino") === "saida";
+  const target = `${base}${exit ? "/checkout" : "/checkin"}`;
   const opts = { errorCorrectionLevel: "H" as const, margin: 2, color: { dark: "#0d2230", light: "#ffffff" } };
   const download = url.searchParams.has("download");
   const headers = (type: string, ext: string) => ({
     "Content-Type": type,
     "Cache-Control": "public, max-age=3600, s-maxage=86400",
-    ...(download ? { "Content-Disposition": `attachment; filename="qrcode-checkin-flag.${ext}"` } : {}),
+    ...(download ? { "Content-Disposition": `attachment; filename="qrcode-${exit ? "saida" : "checkin"}-flag.${ext}"` } : {}),
   });
 
   if (url.searchParams.get("format") === "svg") {

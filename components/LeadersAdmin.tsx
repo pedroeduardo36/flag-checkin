@@ -44,6 +44,8 @@ const ACTION_LABEL: Record<string, string> = {
   recuperacao_usada: "Usou código de recuperação",
   codigos_recuperacao_gerados: "Gerou códigos de recuperação",
   presenca_removida: "Removeu presença",
+  saida_registrada: "Registrou saída",
+  saida_desfeita: "Desfez saída",
   duplicado_descartado: "Marcou como pessoas diferentes",
   cadastro_mesclado: "Mesclou cadastros duplicados",
   consentimento_registrado: "Responsável confirmou o cadastro",

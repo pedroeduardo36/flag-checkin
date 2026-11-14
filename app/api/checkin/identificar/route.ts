@@ -83,7 +83,7 @@ export const POST = withErrors(async (req: Request) => {
   if (hasVisitSession(req, member.id, today)) {
     const { data: existing } = await db()
       .from("checkins")
-      .select("checked_in_at, photo_path")
+      .select("checked_in_at, checked_out_at, photo_path")
       .eq("member_id", member.id)
       .eq("service_date", today)
       .maybeSingle();
@@ -96,6 +96,7 @@ export const POST = withErrors(async (req: Request) => {
         alreadyCheckedIn: true,
         name: member.name,
         checkedInAt: existing.checked_in_at,
+        checkedOutAt: existing.checked_out_at,
         photoUrl: signed?.signedUrl ?? null,
       });
     }

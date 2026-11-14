@@ -95,15 +95,18 @@ export const POST = withErrors(async (req: Request) => {
     // to be the teen, so they can see their own check-in (and this device gets the visit session).
     const { data: existing } = await db()
       .from("checkins")
-      .select("checked_in_at, photo_path")
+      .select("id, checked_in_at, checked_out_at, photo_path")
       .eq("member_id", m.id)
       .eq("service_date", date)
       .single();
     const signed = existing?.photo_path ? (await db().storage.from(PHOTO_BUCKET).createSignedUrl(existing.photo_path, 300)).data : null;
     log("DUPLICADO");
-    const visit = createVisitSession(m.id, date);
+    const visit = createVisitSession(m.id, date, Date.now(), existing?.id);
     const dup = NextResponse.json(
-      { error: "Você já fez check-in hoje.", code: "DUPLICADO", name: m.name, checkedInAt: existing?.checked_in_at ?? null, photoUrl: signed?.signedUrl ?? null },
+      {
+        error: "Você já fez check-in hoje.", code: "DUPLICADO", name: m.name, checkedInAt: existing?.checked_in_at ?? null,
+        checkedOutAt: existing?.checked_out_at ?? null, photoUrl: signed?.signedUrl ?? null,
+      },
       { status: 409 },
     );
     dup.cookies.set(VISIT_COOKIE, visit.value, visitCookieOptions(visit.maxAge));
@@ -122,8 +125,9 @@ export const POST = withErrors(async (req: Request) => {
   });
 
   log("ok");
-  // This device proved to be the teen (face matched): only it can see the photo and time again today.
-  const visit = createVisitSession(m.id, date);
+  // This device proved to be the teen (face matched): only it can see the photo and time again
+  // today, and confirm the checkout with one tap.
+  const visit = createVisitSession(m.id, date, Date.now(), data.id);
   const res = NextResponse.json({ ok: true, name: m.name, checkedInAt: data.checked_in_at, photoKind, isFirst: !previousCheckins });
   res.cookies.set(VISIT_COOKIE, visit.value, visitCookieOptions(visit.maxAge));
   return res;
