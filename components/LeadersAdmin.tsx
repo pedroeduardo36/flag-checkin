@@ -84,10 +84,13 @@ export function LeadersAdmin({ onUnauthorized }: { onUnauthorized: () => void })
       revogar_sessoes: self ? "Encerrar a sua sessão nos outros aparelhos? Este continua conectado." : `Encerrar todas as sessões abertas de ${l.name}?`,
     };
     if (!window.confirm(ask[action])) return;
+    // Everything but ending sessions can hand out access: the server asks for the current authenticator code.
+    const code = action === "revogar_sessoes" ? undefined : window.prompt("Para confirmar, digite o código de 6 dígitos do seu app autenticador.")?.replace(/\D/g, "");
+    if (code === "") return;
     setBusy(`${l.id}:${action}`);
     setError(null);
     setNotice(null);
-    const r = await send("PATCH", "/api/lider/contas", { id: l.id, action });
+    const r = await send("PATCH", "/api/lider/contas", { id: l.id, action, code });
     setBusy(null);
     if (r.status === 401) return onUnauthorized();
     if (r.status !== 200) return setError(r.data.error ?? "Não foi possível concluir.");
@@ -193,6 +196,7 @@ function NewLeader({ onCreated, onUnauthorized }: { onCreated: (i: Issued) => vo
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -200,7 +204,8 @@ function NewLeader({ onCreated, onUnauthorized }: { onCreated: (i: Issued) => vo
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const r = await send("POST", "/api/lider/contas", { name, email });
+    const r = await send("POST", "/api/lider/contas", { name, email, code });
+    setCode("");
     setBusy(false);
     if (r.status === 401) return onUnauthorized();
     if (r.status !== 200) return setError(r.data.errors ? Object.values(r.data.errors).join(" ") : r.data.error ?? "Não foi possível criar.");
@@ -224,8 +229,13 @@ function NewLeader({ onCreated, onUnauthorized }: { onCreated: (i: Issued) => vo
         <span>E-mail (usado para entrar)</span>
         <input type="email" inputMode="email" autoCapitalize="none" spellCheck={false} autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} />
       </label>
+      <label className="field">
+        <span>Código do seu app autenticador</span>
+        <input className="otp" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+      </label>
       {error && <div className="alert" role="alert">{error}</div>}
-      <button className="btn" disabled={busy}>{busy ? "Criando…" : "Criar conta"}</button>
+      <button className="btn" disabled={busy || code.length !== 6}>{busy ? "Criando…" : "Criar conta"}</button>
       <button type="button" className="btn btn--ghost leaders__cancel" onClick={() => setOpen(false)}>Cancelar</button>
     </form>
   );

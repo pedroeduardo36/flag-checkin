@@ -18,7 +18,13 @@ export const POST = withErrors(async (req: Request) => {
 
   // Count the attempt BEFORE checking: per account and per network.
   const ip = ipHash(req) ?? "sem-ip";
-  if ((await tooManyAttempts(`entrar:ip:${ip}`, WINDOW, 30)) || (await tooManyAttempts(`entrar:email:${email}`, WINDOW, 8))) {
+  // Per account AND network: wrong passwords from elsewhere don't lock the leader out of their own phone.
+  // The per-account cap from any network stays, higher, against distributed guessing.
+  if (
+    (await tooManyAttempts(`entrar:ip:${ip}`, WINDOW, 30)) ||
+    (await tooManyAttempts(`entrar:email:${email}:${ip}`, WINDOW, 8)) ||
+    (await tooManyAttempts(`entrar:email:${email}`, WINDOW, 40))
+  ) {
     await adminAudit(req, { action: "login", outcome: "bloqueado", targetType: "lider", targetLabel: email, details: { etapa: "senha" } });
     return tooMany();
   }
@@ -46,6 +52,6 @@ export const POST = withErrors(async (req: Request) => {
     );
   }
 
-  await clearAttempts(`entrar:email:${email}`);
+  await clearAttempts(`entrar:email:${email}:${ip}`);
   return startSession(req, l.id, "senha", { name: l.name });
 });

@@ -2,7 +2,8 @@ import { withErrors } from "@/lib/server/http";
 import { NextResponse, after } from "next/server";
 import { db } from "@/lib/server/supabase";
 import { emailConfigured, sendRegistrationEmail, senderAddress } from "@/lib/server/email";
-import { isValidBirthDate, isValidCpf, isValidEmail, isValidPhone, nameTokens, onlyDigits } from "@/lib/format";
+import { isValidBirthDate, isValidCpf, isValidEmail, isValidPhone, nameMatchScore, nameTokens, onlyDigits } from "@/lib/format";
+import { limited, slowDown } from "@/lib/server/rate-limit";
 
 const clean = (v: unknown, max = 120) => String(v ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
@@ -40,6 +41,26 @@ export const POST = withErrors(async (req: Request) => {
   if (b.consent !== true) errors.consent = "É preciso autorizar o uso dos dados.";
   if (Object.keys(errors).length)
     return NextResponse.json({ error: "Corrija os campos destacados.", errors }, { status: 400 });
+
+  // Every registration emails the address typed in: limited per network and per email.
+  if (await limited(req, "cadastro", 3600, 20, { key: `email:${data.guardian_email}`, max: 5 })) return slowDown();
+
+  // Check-in finds a teen by name + birth date. A second registration with the same name and date by another
+  // family would make the real teen's check-in ambiguous, or send their check-in notices to someone else.
+  const { data: sameDay, error: findError } = await db()
+    .from("members")
+    .select("name, guardian_email, guardian_email2")
+    .eq("birth_date", data.birth_date);
+  if (findError) throw findError;
+  const similar = (sameDay ?? []).filter((m) => nameMatchScore(data.name, m.name) > 0 || nameMatchScore(m.name, data.name) > 0);
+  const emails = [data.guardian_email, data.guardian_email2].filter(Boolean);
+  if (similar.some((m) => emails.includes(m.guardian_email) || (m.guardian_email2 && emails.includes(m.guardian_email2))))
+    return NextResponse.json({ ok: true, confirmationSent: false, sender: senderAddress() }); // the same family sending again
+  if (similar.length)
+    return NextResponse.json(
+      { error: "Já existe um cadastro com esse nome e data de nascimento. Procure um líder da O2 para conferir.", code: "CADASTRO_PARECIDO" },
+      { status: 409 },
+    );
 
   const { error } = await db().from("members").insert({ ...data, guardian_consent_at: new Date().toISOString() });
   if (error) {

@@ -7,6 +7,10 @@ import { analyzeFace, matchCreativePhoto, parseDescriptor } from "@/lib/server/f
 import { sendCheckinEmail } from "@/lib/server/email";
 import { audit } from "@/lib/server/audit";
 import { VISIT_COOKIE, createVisitSession, visitCookieOptions } from "@/lib/server/visit";
+import { limited, slowDown } from "@/lib/server/rate-limit";
+import { serviceCodeMatches } from "@/lib/server/service-code";
+import { tooManyAttempts } from "@/lib/server/leader";
+import { ipHash } from "@/lib/server/audit";
 
 export const maxDuration = 30;
 
@@ -29,6 +33,8 @@ export const POST = withErrors(async (req: Request) => {
   const t = readCheckinToken(body?.token);
   const log = (outcome: string) => audit(req, { event: "confirmar", outcome, memberId: t?.mid, lat: t?.lat, lng: t?.lng });
   if (!t) return log("TOKEN"), NextResponse.json({ error: "Sua identificação expirou. Comece o check-in de novo.", code: "TOKEN" }, { status: 401 });
+  // Each attempt runs face recognition: limited per network and per registration.
+  if (await limited(req, "confirmar", 10 * 60, 120, { key: t.mid, max: 15 })) return log("MUITAS_TENTATIVAS"), slowDown();
 
   const photo = decodePhoto(body?.photo);
   if (!photo) return NextResponse.json({ error: "Foto inválida. Tire a foto novamente." }, { status: 400 });
@@ -43,6 +49,14 @@ export const POST = withErrors(async (req: Request) => {
   const reference = await referenceDescriptor(m);
 
   if (!reference) {
+    // REGISTRATION PHOTO: it becomes the reference face for every future check-in, so it needs the code of
+    // the day that a leader gives in person (lib/server/service-code.ts).
+    if (await tooManyAttempts(`codigo-culto:ip:${ipHash(req) ?? "sem-ip"}`, 15 * 60, 10)) return log("MUITAS_TENTATIVAS"), slowDown();
+    if (!serviceCodeMatches(serviceDate(), body?.serviceCode))
+      return log("CODIGO_LIDER"), NextResponse.json(
+        { error: "No primeiro check-in, peça a um líder o código do dia e digite abaixo.", code: "CODIGO_LIDER" },
+        { status: 403 },
+      );
     // REGISTRATION PHOTO: a single face, close up. It becomes the registration photo; the check-in comes with the creative one.
     const face = await analyzeFace(photo.buffer);
     if (!face.ok) return log(face.code), NextResponse.json({ error: face.message, code: face.code }, { status: 422 });

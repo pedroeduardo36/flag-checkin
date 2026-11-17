@@ -92,6 +92,9 @@ const waitForNotice = async (memberCpf) => {
   return null;
 };
 
+// Code of the day for a first check-in (same derivation as lib/server/service-code.ts).
+const serviceCode = (date) => String(createHmac("sha256", env.CHECKIN_SECRET).update(`codigo-culto:${date}`).digest().readUInt32BE(0) % 1_000_000).padStart(6, "0");
+
 // Check-in only opens on a scheduled service day: schedule today for the test (and remove it afterwards).
 const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
 const { data: scheduled } = await sb.from("encontros").select("service_date").eq("service_date", today).maybeSingle();
@@ -149,11 +152,13 @@ try {
   let token = r.data.token;
 
   // ---------- First check-in: registration photo ----------
-  let f = await post("/api/checkin/confirmar", { token, photo: photo("no-face") });
+  let f = await post("/api/checkin/confirmar", { token, photo: photo("no-face"), serviceCode: serviceCode(today) });
   check("registration photo with no face is rejected (422 SEM_ROSTO)", f.status === 422 && f.data.code === "SEM_ROSTO", f.data);
-  f = await post("/api/checkin/confirmar", { token, photo: photo("two-people") });
+  f = await post("/api/checkin/confirmar", { token, photo: photo("two-people"), serviceCode: serviceCode(today) });
   check("registration photo with two people is rejected (422 VARIOS_ROSTOS)", f.status === 422 && f.data.code === "VARIOS_ROSTOS", f.data);
   f = await post("/api/checkin/confirmar", { token, photo: photo("person-a-registration") });
+  check("first check-in without the leader's code of the day is refused (403)", f.status === 403 && f.data.code === "CODIGO_LIDER", f.data);
+  f = await post("/api/checkin/confirmar", { token, photo: photo("person-a-registration"), serviceCode: serviceCode(today) });
   check("registration photo with one face completes the registration and asks for the creative photo", f.status === 200 && f.data.registered === true && f.data.next === "criativa", f.data);
   const { data: withPhoto } = await sb.from("members").select("id, photo_path, face_descriptor").eq("cpf", cpf).single();
   check("registration photo becomes the registration's photo (with descriptor)", !!withPhoto.photo_path && withPhoto.face_descriptor?.length === 128, !!withPhoto.photo_path);
