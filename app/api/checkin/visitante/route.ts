@@ -5,6 +5,7 @@ import { PHOTO_BUCKET } from "@/lib/server/env";
 import { checkGeofence, decodePhoto, parseCoords, serviceDate } from "@/lib/server/security";
 import { isValidPhone, nameTokens, onlyDigits } from "@/lib/format";
 import { closedToday } from "@/lib/server/schedule";
+import { limited, slowDown } from "@/lib/server/rate-limit";
 
 // Visitor check-in: only name and phone; the creative photo is optional.
 export const POST = withErrors(async (req: Request) => {
@@ -24,6 +25,7 @@ export const POST = withErrors(async (req: Request) => {
   if (Object.keys(errors).length) return NextResponse.json({ error: "Confira os dados.", errors }, { status: 400 });
   const closed = await closedToday();
   if (closed) return closed;
+  if (await limited(req, "visitante", 10 * 60, 60, { key: `fone:${phone}`, max: 5 })) return slowDown();
   if (!geo.inside)
     return NextResponse.json({ error: "Você precisa estar no local do culto para fazer o check-in.", code: "FORA_DO_LOCAL" }, { status: 403 });
 
@@ -35,7 +37,8 @@ export const POST = withErrors(async (req: Request) => {
     .eq("visitor_phone", phone)
     .eq("service_date", date)
     .maybeSingle();
-  if (existing) return NextResponse.json({ ok: true, alreadyCheckedIn: true, name, checkedInAt: existing.checked_in_at });
+  // Knowing someone's phone number doesn't reveal when they arrived.
+  if (existing) return NextResponse.json({ ok: true, alreadyCheckedIn: true, name });
 
   let path: string | null = null;
   if (photo) {

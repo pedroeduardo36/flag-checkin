@@ -210,12 +210,14 @@ for different people.
 
 | Threat | Mitigation |
 | --- | --- |
-| Checking in from home | Geofence validated **on the server**, twice. The photo stays as evidence for audits. |
+| Checking in from home | Geofence validated **on the server**, twice. The phone reports its own location, so the **first** check-in (which saves the reference face) also needs the **code of the day** a leader gives in person (shown on `/pastor`). The photo stays as evidence for audits. |
+| Taking over a registration (2026-11 review) | Same name and birth date by another family is refused (`CADASTRO_PARECIDO`); the same family sending again stores nothing. Without this, a second registration made the real teen's check-in ambiguous or sent their notices elsewhere. |
+| Abuse of the public routes | Database-backed limits per network and per person on identification (per name), photo confirmation (per registration), visitor check-in (per phone) and registration (per guardian email). |
 | "Check in for me" | The creative photo is compared with the registration photo (403 if nobody in it is the teen). The distance is stored for audits. |
 | HTML injection in emails | Teen and guardian names come from the registration and are escaped before going into the HTML (a test covers `<b>`). |
 | Access to the feed and dashboard (**P1 fixed**, [report](docs/security/P1-leader-accounts.md)) | **One account per leader**: password (scrypt) **and** an authenticator app code (TOTP), required before any private data. No SMS or email fallback. Sessions live in the database and can be revoked instantly. The page isn't indexed (`robots: noindex`). |
 | Lost leader phone | 10 single-use **recovery codes** (only their hash is stored); using one ends the other sessions and requires enrolling a new authenticator. Without codes, **another leader** resets access and hands over a 24 h activation code in person. |
-| Brute force and parallel guessing | Database-backed limits, counted before checking: 8 passwords per account and 30 per network every 15 min; 5 codes per account every 15 min and 20 per day. Holds under simultaneous requests and multiple instances. |
+| Brute force and parallel guessing | Database-backed limits, counted before checking: 8 passwords per account on each network, 40 per account from anywhere and 30 per network every 15 min (wrong passwords from elsewhere don't lock a leader out); 5 codes per account every 15 min and 20 per day. Holds under simultaneous requests and multiple instances. |
 | Tracing leader actions | `admin_audit` table: login, creation, deactivation, ended sessions, authenticator enrollment, recovery, reset and **attendance corrections** (who, target, when, outcome, reason). A Postgres trigger refuses updates and deletes, even with the server key. Passwords, codes and biometric data never go in. |
 | Registration photo of anything | The first check-in photo must contain exactly one face, close up, verified on the server. |
 | Seeing another teen's photo or time (**P0 fixed**, [report](docs/security/P0-attendance-photos.md)) | Name, birth date and coordinates do **not** authorize reading private data. Photo and time only go back to the device holding the **visit session** (an `httpOnly` HMAC cookie tied to the teen and the day, issued after the face matched) or to signed-in leaders. The public response is identical whether or not the teen has checked in. |
@@ -223,13 +225,15 @@ for different people.
 | Discovering who is registered | An unknown name and a wrong date get **the same** response (no user enumeration). |
 | Skipping the identification step | The photo is only accepted with a valid HMAC-SHA256 token (4 h), compared in constant time. |
 | Open registration (no password) | Unique CPF (Brazilian tax ID), full server-side validation and a honeypot against bots. Even a fake registration can't check in without being at church and showing a real face in the registration photo. |
-| Leaked public key | RLS without policies: the `anon` key can't read or write anything (tested: `[]` and `401`). |
+| Leaked public key | RLS without policies, and no table grants for `anon`/`authenticated` (`20261117000000_permissoes.sql`): the `anon` key can't read, write or truncate anything. |
+| Session left open on a borrowed phone | Creating, deactivating, reactivating or resetting a leader account asks for the current authenticator code again. |
 | Exposed photos | **Private** bucket, 2 MB limit, image MIME types only. Access through 10-minute signed URLs. |
 | Malicious upload | `decodePhoto` only accepts `data:image/jpeg;base64` between 2 KB and 2 MB, decoded by a pure-JavaScript JPEG reader. |
 | Secrets on the client | `import "server-only"` in `lib/server/*`: the build fails if server code is imported in the browser. |
 | LGPD (art. 14, minors) | Mandatory guardian consent, stored with a timestamp (`guardian_consent_at`), and minimal data collection. |
 
-The `Permissions-Policy` (camera and GPS on the app's own origin only), `X-Content-Type-Options` and `Referrer-Policy`
+`X-Frame-Options: DENY` and a `frame-ancestors 'none'` CSP block clickjacking. `/api/health` only answers `ok` to the public;
+the details and the face recognition check need a leader session. The `Permissions-Policy` (camera and GPS on the app's own origin only), `X-Content-Type-Options` and `Referrer-Policy`
 headers are also set.
 
 **Known limitations:** GPS spoofing apps exist, which is why the photo is the second layer. Face recognition has no
@@ -240,7 +244,7 @@ the next step would be Upstash Ratelimit there.
 ## Tests
 
 ```bash
-npm test             # 86 unit tests (Vitest): dashboard, name search, masks, dates, haversine, HMAC, geofence, upload, faces, email, TOTP (RFC 6238 vectors), passwords, sessions
+npm test             # 90 unit tests (Vitest): dashboard, name search, masks, dates, haversine, HMAC, geofence, upload, faces, email, TOTP (RFC 6238 vectors), passwords, sessions
 npm run typecheck    # TypeScript in strict mode
 npm run test:e2e     # 87 end-to-end checks (including the P0 and P1 regressions) against the real Supabase project, cleaning up the data at the end
 npm run simulate     # two synthetic teens check in 8 s apart (to watch the live feed)

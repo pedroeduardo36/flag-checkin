@@ -58,6 +58,7 @@ export default function CheckinPage() {
   const [birth, setBirth] = useState("");
   const [phone, setPhone] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
+  const [serviceCode, setServiceCode] = useState(""); // code of the day, given by a leader on the first check-in
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ msg: string; code?: string } | null>(null);
 
@@ -139,7 +140,7 @@ export default function CheckinPage() {
     if (!photo) return;
     setBusy(true);
     setError(null);
-    const r = await post("/api/checkin/confirmar", { token: pending.token, photo });
+    const r = await post("/api/checkin/confirmar", { token: pending.token, photo, ...(pending.photoKind === "registro" ? { serviceCode } : {}) });
     setBusy(false);
     if (!r.ok) {
       if (r.data.code === "TOKEN") {
@@ -346,9 +347,14 @@ export default function CheckinPage() {
             </span>
           </div>
           <Camera value={photo} onChange={(p) => { setPhoto(p); if (p) setError(null); }} label="Abrir câmera" />
+          <label className="field">
+            <span>Código do dia (peça a um líder)</span>
+            <input className="otp" inputMode="numeric" autoComplete="off" maxLength={6} value={serviceCode}
+              onChange={(e) => setServiceCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+          </label>
           {errorBox}
           {photo && (
-            <button className="btn" onClick={() => confirm(step.pending)} disabled={busy}>
+            <button className="btn" onClick={() => confirm(step.pending)} disabled={busy || serviceCode.length !== 6}>
               {busy ? "Verificando rosto…" : "Salvar foto de registro"}
             </button>
           )}

@@ -6,6 +6,7 @@ import { checkGeofence, createCheckinToken, parseCoords, serviceDate } from "@/l
 import { hasVisitSession } from "@/lib/server/visit";
 import { audit } from "@/lib/server/audit";
 import { closedToday } from "@/lib/server/schedule";
+import { limited, slowDown } from "@/lib/server/rate-limit";
 import { firstName, isValidBirthDate, nameMatchScore, nameTokens } from "@/lib/format";
 
 /** Identification stays valid until the creative photo, which is taken once the service has started. */
@@ -26,6 +27,9 @@ export const POST = withErrors(async (req: Request) => {
     return NextResponse.json({ error: "Informe nome e sobrenome e a data de nascimento." }, { status: 400 });
   const closed = await closedToday();
   if (closed) return log("SEM_ENCONTRO"), closed;
+  // Name + birth date is enough to find a registration: guessing birth dates for a name is limited.
+  if (await limited(req, "identificar", 10 * 60, 150, { key: `nome:${nameTokens(name).join(" ")}`, max: 15 }))
+    return log("MUITAS_TENTATIVAS"), slowDown();
   if (!geo.inside) {
     log("FORA_DO_LOCAL");
     return NextResponse.json({ error: "Você precisa estar no local do culto para fazer o check-in.", code: "FORA_DO_LOCAL" }, { status: 403 });

@@ -2,7 +2,15 @@ import { NextResponse } from "next/server";
 import { withErrors } from "@/lib/server/http";
 import { db } from "@/lib/server/supabase";
 import { isValidEmail, nameTokens } from "@/lib/format";
-import { adminAudit, normalizeEmail, requireLeader, resetAccess, revokeSessions, unauthorized } from "@/lib/server/leader";
+import { adminAudit, normalizeEmail, requireLeader, resetAccess, revokeSessions, tooMany, unauthorized } from "@/lib/server/leader";
+import { confirmLeaderCode } from "@/lib/server/step-up";
+
+const codeProblem = async (leaderId: string, code: unknown) => {
+  const r = await confirmLeaderCode(leaderId, code);
+  if (r === "bloqueado") return tooMany();
+  if (r === "invalido") return NextResponse.json({ error: "Confirme com o código atual do seu app autenticador.", code: "CODIGO_AUTENTICADOR" }, { status: 403 });
+  return null;
+};
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +64,8 @@ export const POST = withErrors(async (req: Request) => {
   if (nameTokens(name).length < 2) errors.name = "Informe nome e sobrenome.";
   if (!isValidEmail(email)) errors.email = "E-mail inválido.";
   if (Object.keys(errors).length) return NextResponse.json({ error: "Corrija os campos destacados.", errors }, { status: 400 });
+  const denied = await codeProblem(s.leader.id, body?.code);
+  if (denied) return denied;
 
   const { data, error } = await db().from("leaders").insert({ name, email, created_by: s.leader.id }).select("id").single();
   if (error) {
@@ -81,6 +91,11 @@ export const PATCH = withErrors(async (req: Request) => {
   const { data: t, error } = await db().from("leaders").select("id, name, email, status").eq("id", body.id).maybeSingle();
   if (error) throw error;
   if (!t) return NextResponse.json({ error: "Líder não encontrado." }, { status: 404 });
+  // Ending sessions only protects; every other action can hand out access, so it needs the authenticator code.
+  if (action !== "revogar_sessoes") {
+    const denied = await codeProblem(s.leader.id, body?.code);
+    if (denied) return denied;
+  }
   const self = t.id === s.leader.id;
   const target = { targetType: "lider" as const, targetId: t.id, targetLabel: t.email };
 

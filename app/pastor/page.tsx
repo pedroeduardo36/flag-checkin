@@ -118,6 +118,7 @@ function Feed({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [items, setItems] = useState<Item[]>([]);
   const [examples, setExamples] = useState<Item[]>([]);
   const [total, setTotal] = useState(0);
+  const [serviceCode, setServiceCode] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [online, setOnline] = useState(true);
   const [fresh, setFresh] = useState<Set<string>>(new Set());
@@ -135,9 +136,10 @@ function Feed({ onUnauthorized }: { onUnauthorized: () => void }) {
       const r = await fetch(`/api/pastor/feed${qs}`, { cache: "no-store" });
       if (r.status === 401) return onUnauthorized();
       if (!r.ok) throw new Error(String(r.status));
-      const d: { total: number; items: Item[]; examples?: Item[] } = await r.json();
+      const d: { total: number; items: Item[]; examples?: Item[]; serviceCode?: string } = await r.json();
       setOnline(true);
       setTotal(d.total);
+      if (d.serviceCode) setServiceCode(d.serviceCode);
       if (full) {
         lastFull.current = Date.now();
         setItems(d.items);
@@ -189,6 +191,13 @@ function Feed({ onUnauthorized }: { onUnauthorized: () => void }) {
           <span className="feed-stats__d">{today}</span>
         </div>
       </div>
+
+      {serviceCode && (
+        <p className="hint service-code">
+          Código do dia para o <strong>primeiro check-in</strong> de um adolescente: <strong className="service-code__n">{serviceCode.slice(0, 3)} {serviceCode.slice(3)}</strong>.
+          Passe só pessoalmente.
+        </p>
+      )}
 
       {!loaded && <div className="card center"><div className="spinner" aria-hidden /></div>}
 

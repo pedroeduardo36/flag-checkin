@@ -5,6 +5,7 @@ import { PHOTO_BUCKET } from "@/lib/server/env";
 import { serviceDate } from "@/lib/server/security";
 import { requireLeader, unauthorized } from "@/lib/server/leader";
 import { firstName } from "@/lib/format";
+import { serviceCode } from "@/lib/server/service-code";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +89,7 @@ export const GET = withErrors(async (req: Request) => {
     date,
     total: total.count ?? rows.length,
     serverTime: new Date().toISOString(),
+    serviceCode: serviceCode(serviceDate()),
     items: rows.map(toItem),
     examples: exampleRows.map(toItem),
   });

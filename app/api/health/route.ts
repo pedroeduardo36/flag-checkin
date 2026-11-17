@@ -4,19 +4,22 @@ import { PHOTO_BUCKET } from "@/lib/server/env";
 import { analyzeFace } from "@/lib/server/face";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { requireLeader } from "@/lib/server/leader";
 
 export const maxDuration = 30;
 
 export const dynamic = "force-dynamic";
 
-// Integration diagnostics: checks variables, tables and the bucket. Exposes no data.
-export async function GET() {
+// Integration diagnostics: checks variables, tables and the bucket. The public answer is only "ok": the details
+// and the face recognition check (heavy: it loads the models) are for signed-in leaders.
+export async function GET(req: Request) {
+  const leader = await requireLeader(req).catch(() => null);
   const checks: Record<string, boolean | string> = {};
   let activeLeaders: number | null = null;
   const envs = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "CHURCH_LAT", "CHURCH_LNG", "CHECKIN_SECRET"];
   const missing = envs.filter((k) => !process.env[k]);
   checks.env = missing.length ? `faltando: ${missing.join(", ")}` : true;
-  if (missing.length) return NextResponse.json({ ok: false, checks }, { status: 500 });
+  if (missing.length) return NextResponse.json({ ok: false }, { status: 500 });
 
   try {
     const members = await db().from("members").select("id", { count: "exact", head: true });
@@ -31,14 +34,17 @@ export async function GET() {
     const bucket = await db().storage.getBucket(PHOTO_BUCKET);
     checks.bucket = bucket.error ? bucket.error.message : bucket.data.public ? "bucket está PÚBLICO — deixe privado" : true;
     // Loads the face recognition models and checks that a logo (no face) is rejected.
-    const logo = readFileSync(path.join(process.cwd(), "public/brand/flag-logo.jpg"));
-    const face = await analyzeFace(logo);
-    checks.face_recognition = !face.ok && face.code === "SEM_ROSTO" ? true : `unexpected result: ${JSON.stringify(face).slice(0, 80)}`;
+    if (leader) {
+      const logo = readFileSync(path.join(process.cwd(), "public/brand/flag-logo.jpg"));
+      const face = await analyzeFace(logo);
+      checks.face_recognition = !face.ok && face.code === "SEM_ROSTO" ? true : `unexpected result: ${JSON.stringify(face).slice(0, 80)}`;
+    }
   } catch (err) {
     checks.conexao = err instanceof Error ? err.message : String(err);
   }
 
   const ok = Object.values(checks).every((v) => v === true);
   const geofence = process.env.GEOFENCE_DISABLED === "true" ? "OFF (test mode)" : "on";
-  return NextResponse.json({ ok, geofence, activeLeaders, checks }, { status: ok ? 200 : 500 });
+  if (!leader) return NextResponse.json({ ok }, { status: ok ? 200 : 500, headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ ok, geofence, activeLeaders, checks }, { status: ok ? 200 : 500, headers: { "Cache-Control": "no-store" } });
 }
